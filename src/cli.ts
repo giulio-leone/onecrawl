@@ -109,7 +109,11 @@ EXAMPLES:
 `);
 }
 
-async function runScrape(url: string, useBrowser: boolean, output: string): Promise<void> {
+async function runScrape(
+  url: string,
+  useBrowser: boolean,
+  output: string,
+): Promise<void> {
   const crawler = createOneCrawl();
 
   console.error(`Scraping: ${url}...`);
@@ -142,7 +146,7 @@ async function runSearch(
   query: string,
   engine: "google" | "bing" | "duckduckgo",
   maxResults: number,
-  output: string
+  output: string,
 ): Promise<void> {
   const crawler = createOneCrawl();
 
@@ -197,7 +201,7 @@ async function main(): Promise<void> {
           args.query,
           args.engine ?? "duckduckgo",
           args.maxResults ?? 10,
-          args.output ?? "text"
+          args.output ?? "text",
         );
         break;
 
@@ -205,7 +209,10 @@ async function main(): Promise<void> {
         printHelp();
     }
   } catch (error) {
-    console.error("Error:", error instanceof Error ? error.message : String(error));
+    console.error(
+      "Error:",
+      error instanceof Error ? error.message : String(error),
+    );
     process.exit(1);
   }
 }

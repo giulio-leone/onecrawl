@@ -5,12 +5,14 @@ Native TypeScript web crawler and scraper. Zero Python dependencies.
 ## Features
 
 - **Pure TypeScript** - No Python runtime required
+- **HTTP/2 Support** - Fast connection pooling with undici
 - **Playwright Integration** - Full JavaScript rendering support
 - **Fetch Adapter** - Lightweight scraping for simple cases
 - **Search Engine Support** - Google, Bing, DuckDuckGo parsers
 - **Stealth Mode** - Anti-detection built-in
 - **Hexagonal Architecture** - Easy to extend with custom adapters
 - **Streaming Support** - Progress callbacks for real-time updates
+- **CLI Interface** - Use from command line
 
 ## Installation
 
@@ -32,7 +34,7 @@ npx playwright install chromium
 ```typescript
 import { createOneCrawl } from 'onecrawl';
 
-// Create instance (no browser for simple cases)
+// Create instance (uses HTTP/2 by default)
 const crawler = createOneCrawl();
 
 // Scrape a page
@@ -42,6 +44,27 @@ console.log(result.result.content);
 // Search the web
 const searchResults = await crawler.search('TypeScript tutorial');
 console.log(searchResults.results);
+
+// Batch scraping (HTTP/2 connection pooling)
+const results = await crawler.scrapeMany([
+  'https://example.com/page1',
+  'https://example.com/page2',
+  'https://example.com/page3',
+]);
+```
+
+## CLI Usage
+
+```bash
+# Scrape a URL
+onecrawl scrape https://example.com
+
+# Search the web
+onecrawl search "TypeScript tutorial"
+
+# With options
+onecrawl scrape https://example.com --browser -o markdown
+onecrawl search "query" -e google -n 20
 ```
 
 ## With Playwright (for JS-heavy sites)

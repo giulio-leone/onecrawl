@@ -11,12 +11,18 @@ import type {
 } from "../domain/schemas.js";
 import { PlaywrightScraperAdapter } from "../adapters/playwright/scraper.adapter.js";
 import { FetchScraperAdapter } from "../adapters/fetch/scraper.adapter.js";
+import { UndiciScraperAdapter } from "../adapters/undici/scraper.adapter.js";
 
 export interface ScrapeUseCaseOptions extends Partial<ScrapeOptions> {
   /**
    * Prefer Playwright for JS-heavy sites
    */
   preferBrowser?: boolean;
+
+  /**
+   * Use HTTP/2 with undici (faster for batch requests)
+   */
+  useHttp2?: boolean;
 
   /**
    * Fallback to fetch if browser unavailable
@@ -40,10 +46,12 @@ export interface ScrapeUseCaseOptions extends Partial<ScrapeOptions> {
 export class ScrapeUseCase {
   private playwrightScraper: ScraperPort;
   private fetchScraper: ScraperPort;
+  private undiciScraper: ScraperPort;
 
   constructor() {
     this.playwrightScraper = new PlaywrightScraperAdapter();
     this.fetchScraper = new FetchScraperAdapter();
+    this.undiciScraper = new UndiciScraperAdapter();
   }
 
   /**
@@ -55,6 +63,7 @@ export class ScrapeUseCase {
   ): Promise<ScrapeResponse> {
     const {
       preferBrowser = false,
+      useHttp2 = true,
       fallbackToFetch = true,
       waitFor,
       ...scrapeOptions
@@ -73,12 +82,13 @@ export class ScrapeUseCase {
         }
       } catch (error) {
         if (!fallbackToFetch) throw error;
-        // Fall through to fetch
+        // Fall through to HTTP scraper
       }
     }
 
-    // Use fetch (fast path)
-    return this.fetchScraper.scrape(url, scrapeOptions);
+    // Use undici for HTTP/2 (faster), fallback to fetch
+    const httpScraper = useHttp2 ? this.undiciScraper : this.fetchScraper;
+    return httpScraper.scrape(url, scrapeOptions);
   }
 
   /**
@@ -90,13 +100,22 @@ export class ScrapeUseCase {
   ): Promise<Map<string, ScrapeResult>> {
     const {
       preferBrowser,
-      concurrency = 5,
+      useHttp2 = true,
+      concurrency = 10,
       onProgress,
       signal,
       ...rest
     } = options;
 
-    const scraper = preferBrowser ? this.playwrightScraper : this.fetchScraper;
+    // For batch scraping, prefer undici (HTTP/2 connection pooling)
+    let scraper: ScraperPort;
+    if (preferBrowser) {
+      scraper = this.playwrightScraper;
+    } else if (useHttp2) {
+      scraper = this.undiciScraper;
+    } else {
+      scraper = this.fetchScraper;
+    }
 
     const result = await scraper.scrapeMany(urls, {
       concurrency,
@@ -111,7 +130,7 @@ export class ScrapeUseCase {
    * Get available scrapers
    */
   async getAvailableScrapers(): Promise<string[]> {
-    const available: string[] = ["fetch"];
+    const available: string[] = ["fetch", "undici"];
 
     if (await this.playwrightScraper.isAvailable()) {
       available.push("playwright");
