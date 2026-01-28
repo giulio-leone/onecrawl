@@ -2,7 +2,13 @@
  * OneCrawl - Native TypeScript Web Crawler
  *
  * A lightweight, efficient web crawler with hexagonal architecture.
- * Zero Python dependencies, pure TypeScript/Playwright.
+ * Zero Python dependencies, pure TypeScript.
+ *
+ * Features:
+ * - HTTP/2 with undici (fast connection pooling)
+ * - CDP Direct (Playwright-free browser automation)
+ * - Agent Swarm (AI-powered distributed crawling)
+ * - Cookie/Proxy support (auth and anti-bot)
  *
  * @packageDocumentation
  */
@@ -18,6 +24,9 @@ export * from "./adapters/index.js";
 
 // Use Cases - High-level API
 export * from "./use-cases/index.js";
+
+// Auth - Cookies and proxies
+export * from "./auth/index.js";
 
 // Utils - Helpers
 export { buildSearchUrl } from "./utils/url-builder.js";

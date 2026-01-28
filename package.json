@@ -1,6 +1,6 @@
 {
   "name": "onecrawl",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Native TypeScript web crawler and scraper. Zero Python dependencies.",
   "type": "module",
   "main": "dist/index.js",
@@ -21,6 +21,14 @@
       "import": "./dist/ports/index.js",
       "types": "./dist/ports/index.d.ts"
     },
+    "./swarm": {
+      "import": "./dist/swarm/index.js",
+      "types": "./dist/swarm/index.d.ts"
+    },
+    "./auth": {
+      "import": "./dist/auth/index.js",
+      "types": "./dist/auth/index.d.ts"
+    },
     "./cli": {
       "import": "./dist/cli.js"
     }
@@ -37,14 +45,25 @@
   "dependencies": {
     "playwright": "^1.50.0",
     "undici": "^7.19.1",
+    "ws": "^8.19.0",
     "zod": "^3.24.1"
   },
   "optionalDependencies": {
     "turndown": "^7.2.0"
   },
+  "peerDependencies": {
+    "ai": "^6.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ai": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/turndown": "^5.0.5",
+    "@types/ws": "^8.18.1",
+    "ai": "^6.0.0",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"
   },
@@ -59,7 +78,12 @@
     "typescript",
     "search",
     "browser",
-    "cli"
+    "cli",
+    "http2",
+    "cdp",
+    "agent",
+    "swarm",
+    "ai"
   ],
   "author": "OneGenUI",
   "license": "MIT",

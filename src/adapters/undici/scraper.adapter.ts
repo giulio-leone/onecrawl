@@ -380,8 +380,9 @@ export class UndiciScraperAdapter implements ScraperPort {
 }
 
 /** Create an undici-based scraper adapter */
-export function createUndiciScraperAdapter(
-  options?: { cacheTTL?: number; maxCacheSize?: number },
-): ScraperPort {
+export function createUndiciScraperAdapter(options?: {
+  cacheTTL?: number;
+  maxCacheSize?: number;
+}): ScraperPort {
   return new UndiciScraperAdapter(options);
 }
