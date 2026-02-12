@@ -81,7 +81,7 @@ export class CDPScraperAdapter implements ScraperPort {
     if (this.pagePool.length < this.maxPoolSize) {
       const client = await this.ensureClient();
       const pageInfo = await client.newPage();
-      const page = new CDPPage(pageInfo as any, client);
+      const page = new CDPPage(pageInfo, client);
       await page.connect();
 
       // Apply stealth

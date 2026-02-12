@@ -22,7 +22,7 @@ interface CDPEvent {
 }
 
 /** Page info from CDP */
-interface CDPPageInfo {
+export interface CDPPageInfo {
   id: string;
   type: string;
   url: string;
@@ -44,7 +44,7 @@ export interface CDPClientOptions {
 }
 
 /** Find Chrome executable */
-function findChrome(): string {
+async function findChrome(): Promise<string> {
   const paths = [
     // macOS
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -58,13 +58,13 @@ function findChrome(): string {
     "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
   ];
 
-  for (const p of paths) {
-    try {
-      const fs = require("fs");
-      if (fs.existsSync(p)) return p;
-    } catch {
-      continue;
+  try {
+    const { existsSync } = await import("fs");
+    for (const p of paths) {
+      if (existsSync(p)) return p;
     }
+  } catch {
+    // fs not available (React Native)
   }
 
   throw new Error(
@@ -96,7 +96,7 @@ export class CDPClient {
 
   /** Launch Chrome and connect */
   async launch(): Promise<void> {
-    const executablePath = this.options.executablePath ?? findChrome();
+    const executablePath = this.options.executablePath ?? await findChrome();
     const args = [
       `--remote-debugging-port=${this.port}`,
       "--no-first-run",

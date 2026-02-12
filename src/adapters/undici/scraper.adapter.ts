@@ -29,34 +29,9 @@ interface CacheEntry {
   lastModified?: string;
 }
 
-/** Connection pool per origin */
-const pools = new Map<string, Pool>();
-
-/** Get or create connection pool for origin */
-function getPool(origin: string): Pool {
-  let pool = pools.get(origin);
-  if (!pool) {
-    pool = new Pool(origin, {
-      connections: 10,
-      pipelining: 6,
-      keepAliveTimeout: 30000,
-      keepAliveMaxTimeout: 60000,
-    });
-    pools.set(origin, pool);
-  }
-  return pool;
-}
-
-/**
- * UndiciScraperAdapter - HTTP/2 with connection pooling
- *
- * Benefits over fetch:
- * - HTTP/2 multiplexing (multiple requests on single connection)
- * - Connection pooling (reuse connections)
- * - Request pipelining (send before previous completes)
- * - ETag/If-Modified-Since caching
- */
+/** Connection pool per origin — instance-scoped */
 export class UndiciScraperAdapter implements ScraperPort {
+  private pools = new Map<string, Pool>();
   private cache = new Map<string, CacheEntry>();
   private cacheTTL: number;
   private maxCacheSize: number;
@@ -65,6 +40,20 @@ export class UndiciScraperAdapter implements ScraperPort {
   constructor(options: { cacheTTL?: number; maxCacheSize?: number } = {}) {
     this.cacheTTL = options.cacheTTL ?? 30 * 60 * 1000;
     this.maxCacheSize = options.maxCacheSize ?? 500;
+  }
+
+  private getPool(origin: string): Pool {
+    let pool = this.pools.get(origin);
+    if (!pool) {
+      pool = new Pool(origin, {
+        connections: 10,
+        pipelining: 6,
+        keepAliveTimeout: 30000,
+        keepAliveMaxTimeout: 60000,
+      });
+      this.pools.set(origin, pool);
+    }
+    return pool;
   }
 
   async scrape(
@@ -166,7 +155,7 @@ export class UndiciScraperAdapter implements ScraperPort {
       headers["If-Modified-Since"] = cached.lastModified;
     }
 
-    const pool = getPool(origin);
+    const pool = this.getPool(origin);
     const response = await pool.request({
       path: parsedUrl.pathname + parsedUrl.search,
       method: "GET",
@@ -373,9 +362,9 @@ export class UndiciScraperAdapter implements ScraperPort {
 
   /** Close all connection pools */
   async close(): Promise<void> {
-    const closePromises = [...pools.values()].map((pool) => pool.close());
+    const closePromises = [...this.pools.values()].map((pool) => pool.close());
     await Promise.all(closePromises);
-    pools.clear();
+    this.pools.clear();
   }
 }
 
