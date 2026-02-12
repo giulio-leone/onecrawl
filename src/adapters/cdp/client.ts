@@ -67,7 +67,9 @@ function findChrome(): string {
     }
   }
 
-  throw new Error("Chrome not found. Install Chrome or provide executablePath.");
+  throw new Error(
+    "Chrome not found. Install Chrome or provide executablePath.",
+  );
 }
 
 /**
@@ -77,10 +79,13 @@ export class CDPClient {
   private ws: WebSocket | null = null;
   private browserProcess: ChildProcess | null = null;
   private messageId = 0;
-  private pendingCommands = new Map<number, {
-    resolve: (value: unknown) => void;
-    reject: (error: Error) => void;
-  }>();
+  private pendingCommands = new Map<
+    number,
+    {
+      resolve: (value: unknown) => void;
+      reject: (error: Error) => void;
+    }
+  >();
   private eventHandlers = new Map<string, ((params: unknown) => void)[]>();
   private wsUrl: string | null = null;
   private port: number;
@@ -108,7 +113,9 @@ export class CDPClient {
       "--metrics-recording-only",
       "--safebrowsing-disable-auto-update",
       ...(this.options.headless !== false ? ["--headless=new"] : []),
-      ...(this.options.userDataDir ? [`--user-data-dir=${this.options.userDataDir}`] : []),
+      ...(this.options.userDataDir
+        ? [`--user-data-dir=${this.options.userDataDir}`]
+        : []),
       ...(this.options.args ?? []),
     ];
 
@@ -126,8 +133,10 @@ export class CDPClient {
       this.wsUrl = wsUrl;
     } else {
       // Get WebSocket URL from browser
-      const response = await fetch(`http://localhost:${this.port}/json/version`);
-      const data = await response.json() as { webSocketDebuggerUrl: string };
+      const response = await fetch(
+        `http://localhost:${this.port}/json/version`,
+      );
+      const data = (await response.json()) as { webSocketDebuggerUrl: string };
       this.wsUrl = data.webSocketDebuggerUrl;
     }
 
@@ -138,9 +147,13 @@ export class CDPClient {
     const maxAttempts = 30;
     for (let i = 0; i < maxAttempts; i++) {
       try {
-        const response = await fetch(`http://localhost:${this.port}/json/version`);
+        const response = await fetch(
+          `http://localhost:${this.port}/json/version`,
+        );
         if (response.ok) {
-          const data = await response.json() as { webSocketDebuggerUrl: string };
+          const data = (await response.json()) as {
+            webSocketDebuggerUrl: string;
+          };
           this.wsUrl = data.webSocketDebuggerUrl;
           await this.connectWebSocket();
           return;
@@ -244,10 +257,13 @@ export class CDPClient {
 export class CDPPage {
   private ws: WebSocket | null = null;
   private messageId = 0;
-  private pendingCommands = new Map<number, {
-    resolve: (value: unknown) => void;
-    reject: (error: Error) => void;
-  }>();
+  private pendingCommands = new Map<
+    number,
+    {
+      resolve: (value: unknown) => void;
+      reject: (error: Error) => void;
+    }
+  >();
   private loadPromise: Promise<void> | null = null;
 
   constructor(
@@ -369,12 +385,14 @@ export class CDPPage {
   }
 
   /** Set cookies */
-  async setCookies(cookies: Array<{
-    name: string;
-    value: string;
-    domain: string;
-    path?: string;
-  }>): Promise<void> {
+  async setCookies(
+    cookies: Array<{
+      name: string;
+      value: string;
+      domain: string;
+      path?: string;
+    }>,
+  ): Promise<void> {
     await this.send("Network.setCookies", { cookies });
   }
 

@@ -3,4 +3,7 @@
  */
 
 export { CDPClient, CDPPage, type CDPClientOptions } from "./client.js";
-export { CDPScraperAdapter, createCDPScraperAdapter } from "./scraper.adapter.js";
+export {
+  CDPScraperAdapter,
+  createCDPScraperAdapter,
+} from "./scraper.adapter.js";

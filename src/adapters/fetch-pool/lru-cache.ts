@@ -1,6 +1,6 @@
 /**
  * LRU cache with TTL and conditional request support (ETag/Last-Modified).
- * Evicts oldest 10% of entries when capacity is reached.
+ * Uses watermark eviction: triggers at 90% capacity, evicts to 70%.
  */
 
 /** Cached scrape result with validation headers. */
@@ -9,11 +9,20 @@ export interface CacheEntry<T> {
   timestamp: number;
   etag?: string;
   lastModified?: string;
+  /** Per-entry TTL override in milliseconds (from Cache-Control max-age). */
+  ttlOverride?: number;
+}
+
+/** Result of a consolidated cache lookup. */
+export interface CacheLookup<T> {
+  fresh: CacheEntry<T> | null;
+  stale: CacheEntry<T> | null;
 }
 
 /**
- * Simple LRU cache backed by a Map (insertion order).
- * Uses the same eviction strategy as UndiciScraperAdapter.
+ * LRU cache backed by a Map (insertion order = access order).
+ * On get(), entries are moved to the end to reflect recent access.
+ * Eviction uses Map iteration order (oldest-first) — O(k) where k = entries removed.
  */
 export class LruCache<T> {
   private entries = new Map<string, CacheEntry<T>>();
@@ -25,14 +34,18 @@ export class LruCache<T> {
     this.ttl = ttl;
   }
 
-  /** Get a non-expired entry, or undefined. */
+  /** Get a non-expired entry, or undefined. Bumps entry to most-recent. */
   get(key: string): CacheEntry<T> | undefined {
     const entry = this.entries.get(key);
     if (!entry) return undefined;
-    if (Date.now() - entry.timestamp > this.ttl) {
+    const effectiveTtl = entry.ttlOverride ?? this.ttl;
+    if (Date.now() - entry.timestamp > effectiveTtl) {
       this.entries.delete(key);
       return undefined;
     }
+    // Re-insert to move to end (most-recently used)
+    this.entries.delete(key);
+    this.entries.set(key, entry);
     return entry;
   }
 
@@ -41,9 +54,25 @@ export class LruCache<T> {
     return this.entries.get(key);
   }
 
-  /** Store an entry, evicting oldest 10% if at capacity. */
+  /** Consolidated lookup: returns fresh and stale in one call. Bumps fresh entry. */
+  lookup(key: string): CacheLookup<T> {
+    const entry = this.entries.get(key);
+    if (!entry) return { fresh: null, stale: null };
+    const effectiveTtl = entry.ttlOverride ?? this.ttl;
+    if (Date.now() - entry.timestamp > effectiveTtl) {
+      return { fresh: null, stale: entry };
+    }
+    // Bump to most-recent on fresh hit
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+    return { fresh: entry, stale: null };
+  }
+
+  /** Store an entry, evicting via watermark if at capacity. */
   set(key: string, entry: CacheEntry<T>): void {
-    if (this.entries.size >= this.maxSize) {
+    // Delete first so re-setting an existing key doesn't inflate size
+    this.entries.delete(key);
+    if (this.entries.size >= Math.ceil(this.maxSize * 0.9)) {
       this.evict();
     }
     this.entries.set(key, entry);
@@ -54,14 +83,14 @@ export class LruCache<T> {
     this.entries.clear();
   }
 
-  /** Evict oldest 10% by timestamp. */
+  /** Evict oldest entries (by Map insertion order) until at 70% capacity. */
   private evict(): void {
-    const sorted = [...this.entries.entries()].sort(
-      (a, b) => a[1].timestamp - b[1].timestamp,
-    );
-    const count = Math.max(1, Math.floor(this.maxSize * 0.1));
-    for (let i = 0; i < count; i++) {
-      this.entries.delete(sorted[i]![0]);
+    const target = Math.floor(this.maxSize * 0.7);
+    const iter = this.entries.keys();
+    while (this.entries.size > target) {
+      const { value, done } = iter.next();
+      if (done) break;
+      this.entries.delete(value);
     }
   }
 }

@@ -17,12 +17,13 @@ import type { CacheEntry } from "./lru-cache.js";
 /** Build request headers, including conditional ones from stale cache. */
 export function buildHeaders(
   stale?: CacheEntry<ScrapeResult>,
+  userAgent?: string,
 ): Record<string, string> {
   const headers: Record<string, string> = {
-    "User-Agent": getRandomUserAgent(),
-    Accept:
-      "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "User-Agent": userAgent ?? getRandomUserAgent(),
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
   };
   if (stale?.etag) headers["If-None-Match"] = stale.etag;
   if (stale?.lastModified) headers["If-Modified-Since"] = stale.lastModified;

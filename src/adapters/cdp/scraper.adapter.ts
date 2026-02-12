@@ -18,7 +18,11 @@ import {
   extractMedia,
   extractMetadata,
 } from "../../utils/content-parser.js";
-import { getRandomUserAgent, getRandomViewport, sleep } from "../../utils/stealth.js";
+import {
+  getRandomUserAgent,
+  getRandomViewport,
+  sleep,
+} from "../../utils/stealth.js";
 import { CDPClient, CDPPage } from "./client.js";
 
 /** Page pool for reusing warm tabs */
@@ -44,11 +48,13 @@ export class CDPScraperAdapter implements ScraperPort {
   private cache = new Map<string, { data: ScrapeResult; timestamp: number }>();
   private cacheTTL: number;
 
-  constructor(options: {
-    maxPoolSize?: number;
-    cacheTTL?: number;
-    cdpOptions?: ConstructorParameters<typeof CDPClient>[0];
-  } = {}) {
+  constructor(
+    options: {
+      maxPoolSize?: number;
+      cacheTTL?: number;
+      cdpOptions?: ConstructorParameters<typeof CDPClient>[0];
+    } = {},
+  ) {
     this.maxPoolSize = options.maxPoolSize ?? 5;
     this.cacheTTL = options.cacheTTL ?? 30 * 60 * 1000;
   }
@@ -153,7 +159,11 @@ export class CDPScraperAdapter implements ScraperPort {
     try {
       await page.goto(url, { timeout });
 
-      onProgress?.({ phase: "extracting", message: "Extracting content...", url });
+      onProgress?.({
+        phase: "extracting",
+        message: "Extracting content...",
+        url,
+      });
 
       const [html, title] = await Promise.all([
         page.getHTML(),
@@ -244,11 +254,15 @@ export class CDPScraperAdapter implements ScraperPort {
 
         for (let attempt = 0; attempt <= retries; attempt++) {
           try {
-            const response = await this.scrape(url, { ...scrapeOptions, signal });
+            const response = await this.scrape(url, {
+              ...scrapeOptions,
+              signal,
+            });
             results.set(url, response.result);
             return;
           } catch (error) {
-            lastError = error instanceof Error ? error : new Error(String(error));
+            lastError =
+              error instanceof Error ? error : new Error(String(error));
             if (attempt < retries) {
               await sleep(retryDelay * (attempt + 1));
             }

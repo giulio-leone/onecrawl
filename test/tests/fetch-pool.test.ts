@@ -92,13 +92,11 @@ describe("FetchPoolScraperAdapter", () => {
   });
 
   it("should handle HTTP errors", async () => {
-    mockFetch.mockResolvedValueOnce(
-      new Response("Not Found", { status: 404 }),
-    );
+    mockFetch.mockResolvedValueOnce(new Response("Not Found", { status: 404 }));
 
-    await expect(
-      adapter.scrape("https://example.com/missing"),
-    ).rejects.toThrow("HTTP 404");
+    await expect(adapter.scrape("https://example.com/missing")).rejects.toThrow(
+      "HTTP 404",
+    );
   });
 
   it("should respect abort signal", async () => {

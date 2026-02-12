@@ -109,8 +109,7 @@ export class StaticProxyPool implements ProxyProvider {
     return this.proxies.map((p) => ({
       host: p.proxy.host,
       port: p.proxy.port,
-      successRate:
-        p.successCount / (p.successCount + p.failureCount + 1),
+      successRate: p.successCount / (p.successCount + p.failureCount + 1),
       avgLatency: p.avgLatency,
     }));
   }

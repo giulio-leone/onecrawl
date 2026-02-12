@@ -13,10 +13,16 @@ import type {
   BatchOptions,
   ProgressCallback,
 } from "../../domain/schemas.js";
-import { sleep } from "../../utils/stealth.js";
+import { sleep, getRandomUserAgent } from "../../utils/stealth.js";
 import { OriginQueue } from "./origin-queue.js";
 import { LruCache, type CacheEntry } from "./lru-cache.js";
-import { buildHeaders, fetchWithTimeout, parseResponse } from "./request-helpers.js";
+import {
+  buildHeaders,
+  fetchWithTimeout,
+  parseResponse,
+} from "./request-helpers.js";
+
+const STALE_PENDING_THRESHOLD_MS = 30_000;
 
 /** Configuration for the fetch-pool adapter. */
 export interface FetchPoolOptions {
@@ -39,14 +45,21 @@ export interface FetchPoolOptions {
  */
 export class FetchPoolScraperAdapter implements ScraperPort {
   private cache: LruCache<ScrapeResult>;
-  private pendingRequests = new Map<string, Promise<ScrapeResponse>>();
+  private pendingRequests = new Map<
+    string,
+    { promise: Promise<ScrapeResponse>; startedAt: number }
+  >();
   private originQueue: OriginQueue;
+  private userAgent: string;
+  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(options: FetchPoolOptions = {}) {
     const ttl = options.cacheTTL ?? 30 * 60 * 1000;
     const maxSize = options.maxCacheSize ?? 500;
     this.cache = new LruCache<ScrapeResult>(maxSize, ttl);
     this.originQueue = new OriginQueue(options.maxConcurrencyPerOrigin ?? 6);
+    this.userAgent = getRandomUserAgent();
+    this.startCleanupTimer();
   }
 
   /** Scrape a single URL with deduplication and caching. */
@@ -61,22 +74,25 @@ export class FetchPoolScraperAdapter implements ScraperPort {
     const { cache: useCache = true, onProgress, signal } = options;
 
     const pending = this.pendingRequests.get(url);
-    if (pending) return pending;
+    if (pending) return pending.promise;
 
-    const cached = useCache ? this.cache.get(url) : undefined;
-    if (cached) {
-      onProgress?.({ phase: "complete", message: "From cache", url });
-      return this.cachedResponse(cached.data, startTime);
+    if (useCache) {
+      const { fresh } = this.cache.lookup(url);
+      if (fresh) {
+        onProgress?.({ phase: "complete", message: "From cache", url });
+        return this.cachedResponse(fresh.data, startTime);
+      }
     }
 
     if (signal?.aborted) throw new Error("Scrape aborted");
 
-    const stale = useCache ? this.cache.getStale(url) : undefined;
+    const stale = useCache ? this.cache.lookup(url).stale : undefined;
+    const staleEntry = stale ?? undefined;
     const origin = new URL(url).origin;
     const promise = this.originQueue.enqueue(origin, () =>
-      this.executeFetch(url, options, startTime, stale),
+      this.executeFetch(url, options, startTime, staleEntry),
     );
-    this.pendingRequests.set(url, promise);
+    this.pendingRequests.set(url, { promise, startedAt: Date.now() });
 
     try {
       return await promise;
@@ -93,14 +109,26 @@ export class FetchPoolScraperAdapter implements ScraperPort {
       signal?: AbortSignal;
     } = {},
   ): Promise<BatchScrapeResult> {
-    const { retries = 2, retryDelay = 1000, onProgress, signal, ...rest } = options;
+    const {
+      retries = 2,
+      retryDelay = 1000,
+      onProgress,
+      signal,
+      ...rest
+    } = options;
     const startTime = Date.now();
     const results = new Map<string, ScrapeResult>();
     const failed = new Map<string, Error>();
 
-    await Promise.all(
+    await Promise.allSettled(
       urls.map((url) =>
-        this.scrapeWithRetry(url, rest, { retries, retryDelay, signal, results, failed }),
+        this.scrapeWithRetry(url, rest, {
+          retries,
+          retryDelay,
+          signal,
+          results,
+          failed,
+        }),
       ),
     );
 
@@ -123,6 +151,14 @@ export class FetchPoolScraperAdapter implements ScraperPort {
 
   clearCache(): void {
     this.cache.clear();
+  }
+
+  /** Stop the periodic stale-pending cleanup timer. */
+  destroy(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -151,7 +187,7 @@ export class FetchPoolScraperAdapter implements ScraperPort {
 
     onProgress?.({ phase: "starting", message: `Fetching ${url}...`, url });
 
-    const headers = buildHeaders(stale);
+    const headers = buildHeaders(stale, this.userAgent);
     const response = await fetchWithTimeout(url, headers, timeout, signal);
 
     if (response.status === 304 && stale) {
@@ -161,25 +197,52 @@ export class FetchPoolScraperAdapter implements ScraperPort {
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-    onProgress?.({ phase: "extracting", message: "Extracting content...", url });
+    onProgress?.({
+      phase: "extracting",
+      message: "Extracting content...",
+      url,
+    });
 
-    const result = await parseResponse(response, url, startTime, { doMedia, doLinks, doMeta });
+    const result = await parseResponse(response, url, startTime, {
+      doMedia,
+      doLinks,
+      doMeta,
+    });
 
     if (useCache) {
+      const ttlOverride = parseCacheControlMaxAge(response);
       this.cache.set(url, {
         data: result,
         timestamp: Date.now(),
         etag: response.headers.get("etag") ?? undefined,
         lastModified: response.headers.get("last-modified") ?? undefined,
+        ttlOverride,
       });
     }
 
-    onProgress?.({ phase: "complete", message: `Fetched ${result.content.length} chars`, url });
-    return { result, cached: false, duration: Date.now() - startTime, source: this.getName() };
+    onProgress?.({
+      phase: "complete",
+      message: `Fetched ${result.content.length} chars`,
+      url,
+    });
+    return {
+      result,
+      cached: false,
+      duration: Date.now() - startTime,
+      source: this.getName(),
+    };
   }
 
-  private cachedResponse(data: ScrapeResult, startTime: number): ScrapeResponse {
-    return { result: data, cached: true, duration: Date.now() - startTime, source: this.getName() };
+  private cachedResponse(
+    data: ScrapeResult,
+    startTime: number,
+  ): ScrapeResponse {
+    return {
+      result: data,
+      cached: true,
+      duration: Date.now() - startTime,
+      source: this.getName(),
+    };
   }
 
   /** Scrape a single URL with retry and exponential backoff. */
@@ -199,20 +262,52 @@ export class FetchPoolScraperAdapter implements ScraperPort {
     for (let attempt = 0; attempt <= ctx.retries; attempt++) {
       if (ctx.signal?.aborted) break;
       try {
-        const response = await this.scrape(url, { ...scrapeOptions, signal: ctx.signal });
+        const response = await this.scrape(url, {
+          ...scrapeOptions,
+          signal: ctx.signal,
+        });
         ctx.results.set(url, response.result);
         return;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
-        if (attempt < ctx.retries) await sleep(ctx.retryDelay * (attempt + 1));
+        if (attempt < ctx.retries)
+          await sleep(ctx.retryDelay * (attempt + 1) + Math.random() * 100);
       }
     }
 
     if (lastError) ctx.failed.set(url, lastError);
   }
+
+  /** Periodically remove stale entries from pendingRequests. */
+  private startCleanupTimer(): void {
+    this.cleanupTimer = setInterval(() => {
+      const now = Date.now();
+      for (const [url, entry] of this.pendingRequests) {
+        if (now - entry.startedAt > STALE_PENDING_THRESHOLD_MS) {
+          this.pendingRequests.delete(url);
+        }
+      }
+    }, STALE_PENDING_THRESHOLD_MS);
+    // Allow the process to exit even if the timer is active
+    if (typeof this.cleanupTimer === "object" && "unref" in this.cleanupTimer) {
+      this.cleanupTimer.unref();
+    }
+  }
+}
+
+/** Parse Cache-Control max-age into milliseconds, or undefined. */
+function parseCacheControlMaxAge(response: Response): number | undefined {
+  const cc = response.headers.get("cache-control");
+  if (!cc) return undefined;
+  const match = cc.match(/max-age=(\d+)/);
+  if (!match) return undefined;
+  const seconds = parseInt(match[1]!, 10);
+  return seconds > 0 ? seconds * 1000 : undefined;
 }
 
 /** Create a fetch-pool scraper adapter. */
-export function createFetchPoolScraperAdapter(options?: FetchPoolOptions): ScraperPort {
+export function createFetchPoolScraperAdapter(
+  options?: FetchPoolOptions,
+): ScraperPort {
   return new FetchPoolScraperAdapter(options);
 }

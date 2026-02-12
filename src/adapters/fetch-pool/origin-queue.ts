@@ -77,11 +77,20 @@ export class OriginQueue {
 
     next
       .execute()
-      .then(next.resolve)
-      .catch(next.reject)
-      .finally(() => {
-        state.active--;
-        this.dequeue(origin, state);
+      .then(next.resolve, next.reject)
+      .then(
+        () => {
+          state.active--;
+          queueMicrotask(() => this.dequeue(origin, state));
+        },
+        (err: unknown) => {
+          state.active--;
+          queueMicrotask(() => this.dequeue(origin, state));
+          throw err;
+        },
+      )
+      .catch(() => {
+        /* error boundary: dequeue errors must not propagate */
       });
   }
 }

@@ -165,9 +165,7 @@ describe("LRU Cache – edge cases", () => {
 
     const headers = buildHeaders(staleEntry);
     expect(headers["If-None-Match"]).toBe('"abc123"');
-    expect(headers["If-Modified-Since"]).toBe(
-      "Wed, 01 Jan 2025 00:00:00 GMT",
-    );
+    expect(headers["If-Modified-Since"]).toBe("Wed, 01 Jan 2025 00:00:00 GMT");
   });
 
   it("buildHeaders omits conditional headers when no stale entry", () => {
@@ -179,9 +177,7 @@ describe("LRU Cache – edge cases", () => {
   it("custom maxCacheSize limits stored entries in adapter", async () => {
     const adapter = new FetchPoolScraperAdapter({ maxCacheSize: 2 });
 
-    mockFetch.mockImplementation(() =>
-      Promise.resolve(htmlResponse()),
-    );
+    mockFetch.mockImplementation(() => Promise.resolve(htmlResponse()));
 
     await adapter.scrape("https://c.com/1");
     await adapter.scrape("https://c.com/2");
@@ -209,9 +205,7 @@ describe("Request deduplication – edge cases", () => {
   it("three concurrent identical requests result in a single fetch", async () => {
     mockFetch.mockImplementation(
       () =>
-        new Promise((resolve) =>
-          setTimeout(() => resolve(htmlResponse()), 40),
-        ),
+        new Promise((resolve) => setTimeout(() => resolve(htmlResponse()), 40)),
     );
 
     const adapter = new FetchPoolScraperAdapter();
@@ -228,9 +222,7 @@ describe("Request deduplication – edge cases", () => {
   it("different URLs are NOT deduplicated", async () => {
     mockFetch.mockImplementation(
       () =>
-        new Promise((resolve) =>
-          setTimeout(() => resolve(htmlResponse()), 20),
-        ),
+        new Promise((resolve) => setTimeout(() => resolve(htmlResponse()), 20)),
     );
 
     const adapter = new FetchPoolScraperAdapter();
@@ -243,9 +235,7 @@ describe("Request deduplication – edge cases", () => {
   });
 
   it("after dedup promise resolves, a new request fires a new fetch", async () => {
-    mockFetch.mockImplementation(() =>
-      Promise.resolve(htmlResponse()),
-    );
+    mockFetch.mockImplementation(() => Promise.resolve(htmlResponse()));
 
     const adapter = new FetchPoolScraperAdapter();
     adapter.clearCache(); // prevent cache hit
@@ -282,7 +272,9 @@ describe("Error handling – edge cases", () => {
           if (init?.signal) {
             init.signal.addEventListener("abort", () => {
               clearTimeout(timer);
-              reject(new DOMException("The operation was aborted.", "AbortError"));
+              reject(
+                new DOMException("The operation was aborted.", "AbortError"),
+              );
             });
           }
         });
@@ -363,9 +355,7 @@ describe("Configuration – edge cases", () => {
   beforeEach(() => mockFetch.mockReset());
 
   it("cache: false bypasses cache entirely", async () => {
-    mockFetch.mockImplementation(() =>
-      Promise.resolve(htmlResponse()),
-    );
+    mockFetch.mockImplementation(() => Promise.resolve(htmlResponse()));
 
     const adapter = new FetchPoolScraperAdapter();
 
@@ -408,9 +398,7 @@ describe("Configuration – edge cases", () => {
   });
 
   it("clearCache makes the next request fetch from network", async () => {
-    mockFetch.mockImplementation(() =>
-      Promise.resolve(htmlResponse()),
-    );
+    mockFetch.mockImplementation(() => Promise.resolve(htmlResponse()));
 
     const adapter = new FetchPoolScraperAdapter();
     await adapter.scrape("https://cfg.com/clear");

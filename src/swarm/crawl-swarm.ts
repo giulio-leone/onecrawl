@@ -142,11 +142,13 @@ export class CrawlSwarm {
       }),
       execute: async ({ query, maxResults }) => {
         const result = await this.searchUseCase.execute(query, { maxResults });
-        return result.results?.map((r) => ({
-          url: r.url,
-          title: r.title,
-          snippet: r.snippet,
-        })) ?? [];
+        return (
+          result.results?.map((r) => ({
+            url: r.url,
+            title: r.title,
+            snippet: r.snippet,
+          })) ?? []
+        );
       },
     });
 
@@ -163,7 +165,8 @@ export class CrawlSwarm {
         const response = await this.scrapeUseCase.execute(url);
         this.state.visited.add(url);
 
-        const links = response.result.links?.slice(0, 20).map((l) => l.href) ?? [];
+        const links =
+          response.result.links?.slice(0, 20).map((l) => l.href) ?? [];
         const crawlResult: CrawlResult = {
           url,
           title: response.result.title,
@@ -185,11 +188,13 @@ export class CrawlSwarm {
     const addToQueue = tool({
       description: "Add URLs to crawl queue with priority",
       inputSchema: z.object({
-        urls: z.array(z.object({
-          url: z.string(),
-          priority: z.number().min(0).max(10),
-          reason: z.string().optional(),
-        })),
+        urls: z.array(
+          z.object({
+            url: z.string(),
+            priority: z.number().min(0).max(10),
+            reason: z.string().optional(),
+          }),
+        ),
       }),
       execute: async ({ urls }) => {
         let added = 0;
@@ -265,15 +270,18 @@ Always explain your reasoning briefly before taking action.`,
         onProgress?.({
           visited: this.state.visited.size,
           queued: this.state.queue.length,
-          step: stepResult.toolCalls?.map((tc) => tc.toolName).join(", ") ?? "thinking",
+          step:
+            stepResult.toolCalls?.map((tc) => tc.toolName).join(", ") ??
+            "thinking",
         });
       },
     });
 
     // Run the agent
-    const prompt = seedUrls.length > 0
-      ? `Goal: ${goal}\n\nSeed URLs: ${seedUrls.join(", ")}\n\nCrawl these URLs and find relevant content.`
-      : `Goal: ${goal}\n\nSearch the web and crawl relevant pages to gather information.`;
+    const prompt =
+      seedUrls.length > 0
+        ? `Goal: ${goal}\n\nSeed URLs: ${seedUrls.join(", ")}\n\nCrawl these URLs and find relevant content.`
+        : `Goal: ${goal}\n\nSearch the web and crawl relevant pages to gather information.`;
 
     const result = await orchestrator.generate({ prompt });
 
