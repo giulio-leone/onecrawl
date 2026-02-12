@@ -26,57 +26,19 @@ import {
   getRandomDelay,
   sleep,
 } from "../../utils/stealth.js";
-
-/**
- * LRU Cache for scrape results
- */
-class LRUCache<T> {
-  private cache = new Map<string, { data: T; timestamp: number }>();
-  private maxSize: number;
-  private ttl: number;
-
-  constructor(maxSize = 200, ttlMs = 30 * 60 * 1000) {
-    this.maxSize = maxSize;
-    this.ttl = ttlMs;
-  }
-
-  get(key: string): T | undefined {
-    const entry = this.cache.get(key);
-    if (!entry) return undefined;
-
-    if (Date.now() - entry.timestamp > this.ttl) {
-      this.cache.delete(key);
-      return undefined;
-    }
-
-    this.cache.delete(key);
-    this.cache.set(key, entry);
-    return entry.data;
-  }
-
-  set(key: string, data: T): void {
-    if (this.cache.size >= this.maxSize) {
-      const firstKey = this.cache.keys().next().value;
-      if (firstKey) this.cache.delete(firstKey);
-    }
-    this.cache.set(key, { data, timestamp: Date.now() });
-  }
-
-  clear(): void {
-    this.cache.clear();
-  }
-}
+import { batchScrape } from "../shared/batch-scrape.js";
+import { LruCache } from "../fetch-pool/lru-cache.js";
 
 /**
  * PlaywrightScraperAdapter - ScraperPort implementation using Playwright
  */
 export class PlaywrightScraperAdapter implements ScraperPort {
   private browser: Browser | null = null;
-  private cache: LRUCache<ScrapeResult>;
+  private cache: LruCache<ScrapeResult>;
   private available: boolean | null = null;
 
   constructor(cacheSize = 200, cacheTTL = 30 * 60 * 1000) {
-    this.cache = new LRUCache(cacheSize, cacheTTL);
+    this.cache = new LruCache(cacheSize, cacheTTL);
   }
 
   private async getBrowser(): Promise<Browser> {
@@ -142,7 +104,7 @@ export class PlaywrightScraperAdapter implements ScraperPort {
       if (cached) {
         onProgress?.({ phase: "complete", message: "From cache", url });
         return {
-          result: cached,
+          result: cached.data,
           cached: true,
           duration: Date.now() - startTime,
           source: this.getName(),
@@ -222,7 +184,7 @@ export class PlaywrightScraperAdapter implements ScraperPort {
 
       // Cache result
       if (useCache) {
-        this.cache.set(cacheKey, result);
+        this.cache.set(cacheKey, { data: result, timestamp: Date.now() });
       }
 
       onProgress?.({
@@ -263,46 +225,22 @@ export class PlaywrightScraperAdapter implements ScraperPort {
     const results = new Map<string, ScrapeResult>();
     const failed = new Map<string, Error>();
 
-    // Process URLs in batches
+    // Process in batches with random delay between them
     for (let i = 0; i < urls.length; i += concurrency) {
       if (signal?.aborted) break;
 
       const batch = urls.slice(i, i + concurrency);
-
-      onProgress?.({
-        phase: "extracting",
-        message: `Processing batch ${Math.floor(i / concurrency) + 1}...`,
-        url: batch[0]!,
-        progress: i,
-        total: urls.length,
+      const batchResult = await batchScrape(batch, this.scrape.bind(this), {
+        concurrency,
+        retries,
+        retryDelay,
+        onProgress,
+        signal,
+        scrapeOptions,
       });
 
-      const promises = batch.map(async (url) => {
-        let lastError: Error | null = null;
-
-        for (let attempt = 0; attempt <= retries; attempt++) {
-          try {
-            const response = await this.scrape(url, {
-              ...scrapeOptions,
-              signal,
-            });
-            results.set(url, response.result);
-            return;
-          } catch (error) {
-            lastError =
-              error instanceof Error ? error : new Error(String(error));
-            if (attempt < retries) {
-              await sleep(retryDelay * (attempt + 1));
-            }
-          }
-        }
-
-        if (lastError) {
-          failed.set(url, lastError);
-        }
-      });
-
-      await Promise.all(promises);
+      for (const [url, result] of batchResult.results) results.set(url, result);
+      for (const [url, error] of batchResult.failed) failed.set(url, error);
 
       // Random delay between batches
       if (i + concurrency < urls.length) {
@@ -316,11 +254,7 @@ export class PlaywrightScraperAdapter implements ScraperPort {
       url: urls[0]!,
     });
 
-    return {
-      results,
-      failed,
-      totalDuration: Date.now() - startTime,
-    };
+    return { results, failed, totalDuration: Date.now() - startTime };
   }
 
   async isAvailable(): Promise<boolean> {

@@ -18,7 +18,8 @@ import {
   extractMedia,
   extractMetadata,
 } from "../../utils/content-parser.js";
-import { getRandomUserAgent, sleep } from "../../utils/stealth.js";
+import { getRandomUserAgent } from "../../utils/stealth.js";
+import { batchScrape } from "../shared/batch-scrape.js";
 
 /**
  * FetchScraperAdapter - Lightweight scraper for simple cases
@@ -175,63 +176,14 @@ export class FetchScraperAdapter implements ScraperPort {
       ...scrapeOptions
     } = options;
 
-    const startTime = Date.now();
-    const results = new Map<string, ScrapeResult>();
-    const failed = new Map<string, Error>();
-
-    // Process URLs in batches
-    for (let i = 0; i < urls.length; i += concurrency) {
-      if (signal?.aborted) break;
-
-      const batch = urls.slice(i, i + concurrency);
-
-      onProgress?.({
-        phase: "extracting",
-        message: `Fetching batch ${Math.floor(i / concurrency) + 1}...`,
-        url: batch[0]!,
-        progress: i,
-        total: urls.length,
-      });
-
-      const promises = batch.map(async (url) => {
-        let lastError: Error | null = null;
-
-        for (let attempt = 0; attempt <= retries; attempt++) {
-          try {
-            const response = await this.scrape(url, {
-              ...scrapeOptions,
-              signal,
-            });
-            results.set(url, response.result);
-            return;
-          } catch (error) {
-            lastError =
-              error instanceof Error ? error : new Error(String(error));
-            if (attempt < retries) {
-              await sleep(retryDelay * (attempt + 1));
-            }
-          }
-        }
-
-        if (lastError) {
-          failed.set(url, lastError);
-        }
-      });
-
-      await Promise.all(promises);
-    }
-
-    onProgress?.({
-      phase: "complete",
-      message: `Completed: ${results.size} success, ${failed.size} failed`,
-      url: urls[0]!,
+    return batchScrape(urls, this.scrape.bind(this), {
+      concurrency,
+      retries,
+      retryDelay,
+      onProgress,
+      signal,
+      scrapeOptions,
     });
-
-    return {
-      results,
-      failed,
-      totalDuration: Date.now() - startTime,
-    };
   }
 
   async isAvailable(): Promise<boolean> {
