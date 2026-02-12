@@ -82,5 +82,10 @@ export function htmlToMarkdown(html: string): string {
 }
 
 // Re-export from split modules for backward compatibility
-export { extractLinks, extractImages, extractVideos, extractMedia } from "./link-extractor.js";
+export {
+  extractLinks,
+  extractImages,
+  extractVideos,
+  extractMedia,
+} from "./link-extractor.js";
 export { extractMetadata } from "./meta-parser.js";

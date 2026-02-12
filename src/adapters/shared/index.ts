@@ -1,1 +1,5 @@
-export { batchScrape, type ScrapeFn, type BatchScrapeOptions } from "./batch-scrape.js";
+export {
+  batchScrape,
+  type ScrapeFn,
+  type BatchScrapeOptions,
+} from "./batch-scrape.js";

@@ -81,9 +81,7 @@ export async function batchScrape(
     });
 
     await Promise.all(
-      batch.map((url) =>
-        scrapeWithRetry(url, scrapeFn, opts, results, failed),
-      ),
+      batch.map((url) => scrapeWithRetry(url, scrapeFn, opts, results, failed)),
     );
   }
 

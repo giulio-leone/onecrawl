@@ -16,7 +16,11 @@ import type {
 import { getRandomUserAgent } from "../../utils/stealth.js";
 import { OriginQueue } from "./origin-queue.js";
 import { LruCache, type CacheEntry } from "./lru-cache.js";
-import { buildHeaders, fetchWithTimeout, parseResponse } from "./request-helpers.js";
+import {
+  buildHeaders,
+  fetchWithTimeout,
+  parseResponse,
+} from "./request-helpers.js";
 import {
   scrapeWithRetry,
   startStalePendingCleanup,
@@ -52,7 +56,8 @@ export class FetchPoolScraperAdapter implements ScraperPort {
   async scrape(
     url: string,
     options: Partial<ScrapeOptions> & {
-      onProgress?: ProgressCallback; signal?: AbortSignal;
+      onProgress?: ProgressCallback;
+      signal?: AbortSignal;
     } = {},
   ): Promise<ScrapeResponse> {
     const startTime = Date.now();
@@ -79,16 +84,27 @@ export class FetchPoolScraperAdapter implements ScraperPort {
     );
     this.pendingRequests.set(url, { promise, startedAt: Date.now() });
 
-    try { return await promise; } finally { this.pendingRequests.delete(url); }
+    try {
+      return await promise;
+    } finally {
+      this.pendingRequests.delete(url);
+    }
   }
 
   async scrapeMany(
     urls: string[],
     options: Partial<ScrapeOptions & BatchOptions> & {
-      onProgress?: ProgressCallback; signal?: AbortSignal;
+      onProgress?: ProgressCallback;
+      signal?: AbortSignal;
     } = {},
   ): Promise<BatchScrapeResult> {
-    const { retries = 2, retryDelay = 1000, onProgress, signal, ...rest } = options;
+    const {
+      retries = 2,
+      retryDelay = 1000,
+      onProgress,
+      signal,
+      ...rest
+    } = options;
     const startTime = Date.now();
     const results = new Map<string, ScrapeResult>();
     const failed = new Map<string, Error>();
@@ -96,7 +112,11 @@ export class FetchPoolScraperAdapter implements ScraperPort {
     await Promise.allSettled(
       urls.map((url) =>
         scrapeWithRetry(url, this.scrape.bind(this), rest, {
-          retries, retryDelay, signal, results, failed,
+          retries,
+          retryDelay,
+          signal,
+          results,
+          failed,
         }),
       ),
     );
@@ -109,18 +129,28 @@ export class FetchPoolScraperAdapter implements ScraperPort {
     return { results, failed, totalDuration: Date.now() - startTime };
   }
 
-  async isAvailable(): Promise<boolean> { return typeof fetch === "function"; }
-  getName(): string { return "fetch-pool"; }
-  clearCache(): void { this.cache.clear(); }
+  async isAvailable(): Promise<boolean> {
+    return typeof fetch === "function";
+  }
+  getName(): string {
+    return "fetch-pool";
+  }
+  clearCache(): void {
+    this.cache.clear();
+  }
 
   destroy(): void {
-    if (this.cleanupTimer) { clearInterval(this.cleanupTimer); this.cleanupTimer = null; }
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
   }
 
   private async executeFetch(
     url: string,
     options: Partial<ScrapeOptions> & {
-      onProgress?: ProgressCallback; signal?: AbortSignal;
+      onProgress?: ProgressCallback;
+      signal?: AbortSignal;
     },
     startTime: number,
     stale?: CacheEntry<ScrapeResult>,
@@ -131,7 +161,8 @@ export class FetchPoolScraperAdapter implements ScraperPort {
       extractLinks: doLinks = true,
       extractMetadata: doMeta = true,
       cache: useCache = true,
-      onProgress, signal,
+      onProgress,
+      signal,
     } = options;
 
     onProgress?.({ phase: "starting", message: `Fetching ${url}...`, url });
@@ -145,29 +176,57 @@ export class FetchPoolScraperAdapter implements ScraperPort {
     }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-    onProgress?.({ phase: "extracting", message: "Extracting content...", url });
-    const result = await parseResponse(response, url, startTime, { doMedia, doLinks, doMeta });
+    onProgress?.({
+      phase: "extracting",
+      message: "Extracting content...",
+      url,
+    });
+    const result = await parseResponse(response, url, startTime, {
+      doMedia,
+      doLinks,
+      doMeta,
+    });
 
     if (useCache) {
       const ttlOverride = parseCacheControlMaxAge(response);
       this.cache.set(url, {
-        data: result, timestamp: Date.now(),
+        data: result,
+        timestamp: Date.now(),
         etag: response.headers.get("etag") ?? undefined,
         lastModified: response.headers.get("last-modified") ?? undefined,
         ttlOverride,
       });
     }
 
-    onProgress?.({ phase: "complete", message: `Fetched ${result.content.length} chars`, url });
-    return { result, cached: false, duration: Date.now() - startTime, source: this.getName() };
+    onProgress?.({
+      phase: "complete",
+      message: `Fetched ${result.content.length} chars`,
+      url,
+    });
+    return {
+      result,
+      cached: false,
+      duration: Date.now() - startTime,
+      source: this.getName(),
+    };
   }
 
-  private cachedResponse(data: ScrapeResult, startTime: number): ScrapeResponse {
-    return { result: data, cached: true, duration: Date.now() - startTime, source: this.getName() };
+  private cachedResponse(
+    data: ScrapeResult,
+    startTime: number,
+  ): ScrapeResponse {
+    return {
+      result: data,
+      cached: true,
+      duration: Date.now() - startTime,
+      source: this.getName(),
+    };
   }
 }
 
 /** Create a fetch-pool scraper adapter. */
-export function createFetchPoolScraperAdapter(options?: FetchPoolOptions): ScraperPort {
+export function createFetchPoolScraperAdapter(
+  options?: FetchPoolOptions,
+): ScraperPort {
   return new FetchPoolScraperAdapter(options);
 }

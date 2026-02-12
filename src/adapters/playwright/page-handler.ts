@@ -75,7 +75,7 @@ export async function scrapePage(
 
   const response = await page.goto(url, {
     waitUntil:
-      opts.waitFor === "networkidle" ? "networkidle" : opts.waitFor as "load",
+      opts.waitFor === "networkidle" ? "networkidle" : (opts.waitFor as "load"),
     timeout: opts.timeout,
   });
 
@@ -88,7 +88,11 @@ export async function scrapePage(
     await sleep(500);
   }
 
-  opts.onProgress?.({ phase: "extracting", message: "Extracting content...", url });
+  opts.onProgress?.({
+    phase: "extracting",
+    message: "Extracting content...",
+    url,
+  });
 
   const html = await page.content();
   const title = await page.title();

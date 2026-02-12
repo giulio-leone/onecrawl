@@ -1,7 +1,7 @@
-export {
-  FsStorageAdapter,
-  createFsStorageAdapter,
-} from "./fs-storage.adapter.js";
+/**
+ * Storage Adapters - React Native Compatible
+ * Excludes FsStorageAdapter (requires Node.js fs/path/os)
+ */
 
 export {
   MemoryStorageAdapter,

@@ -82,10 +82,18 @@
     "turndown": "^7.2.0"
   },
   "peerDependencies": {
-    "ai": "^6.0.68"
+    "ai": "^6.0.68",
+    "@react-native-async-storage/async-storage": ">=1.0.0",
+    "react-native-mmkv": ">=2.0.0"
   },
   "peerDependenciesMeta": {
     "ai": {
+      "optional": true
+    },
+    "@react-native-async-storage/async-storage": {
+      "optional": true
+    },
+    "react-native-mmkv": {
       "optional": true
     }
   },

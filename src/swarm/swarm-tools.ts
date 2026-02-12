@@ -15,7 +15,10 @@ interface ScrapeExecutor {
 
 /** Minimal interface for the search use case. */
 interface SearchExecutor {
-  execute(query: string, options?: { maxResults?: number }): Promise<SearchResults>;
+  execute(
+    query: string,
+    options?: { maxResults?: number },
+  ): Promise<SearchResults>;
 }
 
 /** Create AI tools bound to the swarm's state and use cases. */
@@ -138,5 +141,12 @@ export function createSwarmTools(
     execute: async ({ summary }) => ({ finished: true, summary }),
   });
 
-  return { searchWeb, scrapeUrl, addToQueue, getQueueStatus, getResults, finishCrawl };
+  return {
+    searchWeb,
+    scrapeUrl,
+    addToQueue,
+    getQueueStatus,
+    getResults,
+    finishCrawl,
+  };
 }

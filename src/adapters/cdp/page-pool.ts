@@ -3,10 +3,7 @@
  * Manages a pool of warm CDP pages for reuse across scrape calls.
  */
 
-import {
-  getRandomUserAgent,
-  getRandomViewport,
-} from "../../utils/stealth.js";
+import { getRandomUserAgent, getRandomViewport } from "../../utils/stealth.js";
 import { CDPClient, CDPPage } from "./client.js";
 
 /** A pooled page with usage tracking. */

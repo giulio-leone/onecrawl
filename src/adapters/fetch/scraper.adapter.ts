@@ -178,11 +178,17 @@ export class FetchScraperAdapter implements ScraperPort {
     });
   }
 
-  async isAvailable(): Promise<boolean> { return true; }
+  async isAvailable(): Promise<boolean> {
+    return true;
+  }
 
-  getName(): string { return "fetch"; }
+  getName(): string {
+    return "fetch";
+  }
 
-  clearCache(): void { this.cache.clear(); }
+  clearCache(): void {
+    this.cache.clear();
+  }
 }
 
 /** Create a fetch-based scraper adapter */

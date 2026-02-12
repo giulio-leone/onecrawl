@@ -7,8 +7,15 @@ import { WebSocket } from "ws";
 import { spawn, type ChildProcess } from "child_process";
 import { findChrome } from "./chrome-finder.js";
 
-interface CDPResponse { id: number; result?: unknown; error?: { code: number; message: string } }
-interface CDPEvent { method: string; params: unknown }
+interface CDPResponse {
+  id: number;
+  result?: unknown;
+  error?: { code: number; message: string };
+}
+interface CDPEvent {
+  method: string;
+  params: unknown;
+}
 
 /** Page info from CDP */
 export interface CDPPageInfo {
@@ -28,11 +35,18 @@ export interface CDPClientOptions {
 }
 
 const CHROME_FLAGS = [
-  "--no-first-run", "--no-default-browser-check",
-  "--disable-background-networking", "--disable-client-side-phishing-detection",
-  "--disable-default-apps", "--disable-extensions", "--disable-hang-monitor",
-  "--disable-popup-blocking", "--disable-prompt-on-repost", "--disable-sync",
-  "--disable-translate", "--metrics-recording-only",
+  "--no-first-run",
+  "--no-default-browser-check",
+  "--disable-background-networking",
+  "--disable-client-side-phishing-detection",
+  "--disable-default-apps",
+  "--disable-extensions",
+  "--disable-hang-monitor",
+  "--disable-popup-blocking",
+  "--disable-prompt-on-repost",
+  "--disable-sync",
+  "--disable-translate",
+  "--metrics-recording-only",
   "--safebrowsing-disable-auto-update",
 ];
 
@@ -54,12 +68,14 @@ export class CDPClient {
   }
 
   async launch(): Promise<void> {
-    const executablePath = this.options.executablePath ?? await findChrome();
+    const executablePath = this.options.executablePath ?? (await findChrome());
     const args = [
       `--remote-debugging-port=${this.port}`,
       ...CHROME_FLAGS,
       ...(this.options.headless !== false ? ["--headless=new"] : []),
-      ...(this.options.userDataDir ? [`--user-data-dir=${this.options.userDataDir}`] : []),
+      ...(this.options.userDataDir
+        ? [`--user-data-dir=${this.options.userDataDir}`]
+        : []),
       ...(this.options.args ?? []),
     ];
 
@@ -73,7 +89,9 @@ export class CDPClient {
     if (wsUrl) {
       this.wsUrl = wsUrl;
     } else {
-      const response = await fetch(`http://localhost:${this.port}/json/version`);
+      const response = await fetch(
+        `http://localhost:${this.port}/json/version`,
+      );
       const data = (await response.json()) as { webSocketDebuggerUrl: string };
       this.wsUrl = data.webSocketDebuggerUrl;
     }
@@ -83,9 +101,13 @@ export class CDPClient {
   private async waitForBrowser(): Promise<void> {
     for (let i = 0; i < 30; i++) {
       try {
-        const response = await fetch(`http://localhost:${this.port}/json/version`);
+        const response = await fetch(
+          `http://localhost:${this.port}/json/version`,
+        );
         if (response.ok) {
-          const data = (await response.json()) as { webSocketDebuggerUrl: string };
+          const data = (await response.json()) as {
+            webSocketDebuggerUrl: string;
+          };
           this.wsUrl = data.webSocketDebuggerUrl;
           await this.connectWebSocket();
           return;
@@ -153,8 +175,14 @@ export class CDPClient {
   }
 
   async close(): Promise<void> {
-    if (this.ws) { this.ws.close(); this.ws = null; }
-    if (this.browserProcess) { this.browserProcess.kill(); this.browserProcess = null; }
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+    if (this.browserProcess) {
+      this.browserProcess.kill();
+      this.browserProcess = null;
+    }
   }
 
   get isConnected(): boolean {

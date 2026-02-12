@@ -60,7 +60,12 @@ export class CDPScraperAdapter implements ScraperPort {
       const cached = this.cache.get(url);
       if (cached && Date.now() - cached.timestamp < this.cacheTTL) {
         onProgress?.({ phase: "complete", message: "From cache", url });
-        return { result: cached.data, cached: true, duration: Date.now() - startTime, source: this.getName() };
+        return {
+          result: cached.data,
+          cached: true,
+          duration: Date.now() - startTime,
+          source: this.getName(),
+        };
       }
     }
 
@@ -69,15 +74,25 @@ export class CDPScraperAdapter implements ScraperPort {
 
     try {
       await page.goto(url, { timeout });
-      onProgress?.({ phase: "extracting", message: "Extracting content...", url });
+      onProgress?.({
+        phase: "extracting",
+        message: "Extracting content...",
+        url,
+      });
 
-      const [html, title] = await Promise.all([page.getHTML(), page.getTitle()]);
+      const [html, title] = await Promise.all([
+        page.getHTML(),
+        page.getTitle(),
+      ]);
 
       const result: ScrapeResult = {
-        url, title,
+        url,
+        title,
         content: htmlToText(html),
         markdown: htmlToMarkdown(html),
-        html, statusCode: 200, contentType: "text/html",
+        html,
+        statusCode: 200,
+        contentType: "text/html",
         loadTime: Date.now() - startTime,
       };
 
@@ -85,10 +100,20 @@ export class CDPScraperAdapter implements ScraperPort {
       if (shouldExtractMedia) result.media = extractMedia(html, url);
       if (shouldExtractMetadata) result.metadata = extractMetadata(html);
 
-      if (useCache) this.cache.set(url, { data: result, timestamp: Date.now() });
+      if (useCache)
+        this.cache.set(url, { data: result, timestamp: Date.now() });
 
-      onProgress?.({ phase: "complete", message: `Loaded ${result.content.length} chars`, url });
-      return { result, cached: false, duration: Date.now() - startTime, source: this.getName() };
+      onProgress?.({
+        phase: "complete",
+        message: `Loaded ${result.content.length} chars`,
+        url,
+      });
+      return {
+        result,
+        cached: false,
+        duration: Date.now() - startTime,
+        source: this.getName(),
+      };
     } finally {
       this.pagePool.release(page);
     }
@@ -97,21 +122,43 @@ export class CDPScraperAdapter implements ScraperPort {
   async scrapeMany(
     urls: string[],
     options: Partial<ScrapeOptions & BatchOptions> & {
-      onProgress?: ProgressCallback; signal?: AbortSignal;
+      onProgress?: ProgressCallback;
+      signal?: AbortSignal;
     } = {},
   ): Promise<BatchScrapeResult> {
-    const { concurrency = 5, retries = 2, retryDelay = 1000, onProgress, signal, ...scrapeOptions } = options;
+    const {
+      concurrency = 5,
+      retries = 2,
+      retryDelay = 1000,
+      onProgress,
+      signal,
+      ...scrapeOptions
+    } = options;
     return batchScrape(urls, this.scrape.bind(this), {
-      concurrency, retries, retryDelay, onProgress, signal, scrapeOptions,
+      concurrency,
+      retries,
+      retryDelay,
+      onProgress,
+      signal,
+      scrapeOptions,
     });
   }
 
   async isAvailable(): Promise<boolean> {
-    try { await this.pagePool.ensureClient(); return true; } catch { return false; }
+    try {
+      await this.pagePool.ensureClient();
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  getName(): string { return "cdp"; }
-  clearCache(): void { this.cache.clear(); }
+  getName(): string {
+    return "cdp";
+  }
+  clearCache(): void {
+    this.cache.clear();
+  }
 
   async close(): Promise<void> {
     await this.pagePool.closeAll();
