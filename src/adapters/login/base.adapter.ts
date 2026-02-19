@@ -20,13 +20,13 @@ import {
   getStealthScript,
   getRandomDelay,
 } from "../../utils/stealth.js";
+import { existsSync } from "node:fs";
 
 /**
  * Known system Chrome paths per platform.
  */
 function findChromePath(): string | undefined {
   const { platform } = process;
-  const { existsSync } = require("node:fs") as typeof import("node:fs");
   const paths =
     platform === "darwin"
       ? [

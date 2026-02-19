@@ -28,6 +28,7 @@ import {
 import type { Fingerprint } from "../../utils/stealth.js";
 import { batchScrape } from "../shared/batch-scrape.js";
 import { LruCache } from "../fetch-pool/lru-cache.js";
+import { existsSync } from "node:fs";
 import {
   htmlToText,
   htmlToMarkdown,
@@ -171,7 +172,6 @@ export class BrowserScraperAdapter implements ScraperPort {
               "/usr/bin/chromium",
               "/usr/bin/chromium-browser",
             ];
-    const { existsSync } = require("node:fs") as typeof import("node:fs");
     return paths.find((p) => existsSync(p));
   }
 
