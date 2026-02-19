@@ -1,6 +1,6 @@
 {
   "name": "@giulio-leone/onecrawl",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Native TypeScript web crawler and scraper. Zero Python dependencies.",
   "type": "module",
   "main": "dist/index.js",
@@ -11,56 +11,56 @@
   "exports": {
     ".": {
       "react-native": {
+        "types": "./dist/index.native.d.ts",
         "import": "./dist/index.native.js",
-        "types": "./dist/index.native.d.ts"
+        "default": "./dist/index.native.js"
       },
       "node": {
+        "types": "./dist/index.d.ts",
         "import": "./dist/index.js",
-        "types": "./dist/index.d.ts"
+        "default": "./dist/index.js"
       },
-      "default": {
-        "import": "./dist/index.js",
-        "types": "./dist/index.d.ts"
-      }
+      "default": "./dist/index.js"
     },
     "./adapters": {
       "react-native": {
+        "types": "./dist/adapters/index.native.d.ts",
         "import": "./dist/adapters/index.native.js",
-        "types": "./dist/adapters/index.native.d.ts"
+        "default": "./dist/adapters/index.native.js"
       },
       "node": {
+        "types": "./dist/adapters/index.d.ts",
         "import": "./dist/adapters/index.js",
-        "types": "./dist/adapters/index.d.ts"
+        "default": "./dist/adapters/index.js"
       },
-      "default": {
-        "import": "./dist/adapters/index.js",
-        "types": "./dist/adapters/index.d.ts"
-      }
+      "default": "./dist/adapters/index.js"
     },
     "./ports": {
+      "types": "./dist/ports/index.d.ts",
       "import": "./dist/ports/index.js",
-      "types": "./dist/ports/index.d.ts"
+      "default": "./dist/ports/index.js"
     },
     "./auth": {
       "react-native": {
+        "types": "./dist/auth/index.native.d.ts",
         "import": "./dist/auth/index.native.js",
-        "types": "./dist/auth/index.native.d.ts"
+        "default": "./dist/auth/index.native.js"
       },
       "node": {
+        "types": "./dist/auth/index.d.ts",
         "import": "./dist/auth/index.js",
-        "types": "./dist/auth/index.d.ts"
+        "default": "./dist/auth/index.js"
       },
-      "default": {
-        "import": "./dist/auth/index.js",
-        "types": "./dist/auth/index.d.ts"
-      }
+      "default": "./dist/auth/index.js"
     },
     "./swarm": {
+      "types": "./dist/swarm/index.d.ts",
       "import": "./dist/swarm/index.js",
-      "types": "./dist/swarm/index.d.ts"
+      "default": "./dist/swarm/index.js"
     },
     "./cli": {
-      "import": "./dist/cli.js"
+      "import": "./dist/cli.js",
+      "default": "./dist/cli.js"
     }
   },
   "scripts": {
