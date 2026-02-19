@@ -40,11 +40,10 @@ export class PasskeyLoginAdapter extends BaseLoginAdapter {
   ): Promise<LoginResult> {
     const start = Date.now();
     const headless = options?.headless ?? profile.headless;
-    let browser = null;
+    let context = null;
 
     try {
-      browser = await this.launchBrowser(profile, headless);
-      const context = await this.createStealthContext(browser);
+      context = await this.launchPersistentContext(profile, headless);
       const page = await context.newPage();
 
       // Set up virtual authenticator via CDP
@@ -77,7 +76,6 @@ export class PasskeyLoginAdapter extends BaseLoginAdapter {
       );
 
       await page.close();
-      await context.close();
 
       return {
         success: loggedIn,
@@ -93,7 +91,8 @@ export class PasskeyLoginAdapter extends BaseLoginAdapter {
         durationMs: Date.now() - start,
       };
     } finally {
-      await browser?.close().catch(() => {});
+      await context?.close().catch(() => {});
+      this.context = null;
     }
   }
 

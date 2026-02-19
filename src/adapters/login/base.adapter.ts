@@ -59,30 +59,43 @@ export abstract class BaseLoginAdapter implements LoginPort {
     options?: LoginOptions,
   ): Promise<LoginResult>;
 
-  protected browser: Browser | null = null;
+  protected context: BrowserContext | null = null;
 
-  /** Launch Chrome with the profile's user-data-dir. */
-  protected async launchBrowser(
+  /**
+   * Launch Chrome with a persistent profile via launchPersistentContext.
+   * Returns BrowserContext directly (not Browser) — cookies persist in userDataDir.
+   */
+  protected async launchPersistentContext(
     profile: BrowserProfile,
     headless: boolean,
-  ): Promise<Browser> {
+  ): Promise<BrowserContext> {
     const { chromium } = await import("playwright-core");
     const executablePath = findChromePath();
-    return chromium.launch({
+    const fp = generateFingerprint();
+
+    const context = await chromium.launchPersistentContext(profile.userDataDir, {
       executablePath,
       headless,
       args: [
-        `--user-data-dir=${profile.userDataDir}`,
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
         "--disable-blink-features=AutomationControlled",
         "--no-first-run",
       ],
+      userAgent: fp.userAgent,
+      viewport: fp.viewport,
+      locale: fp.locale,
+      timezoneId: fp.timezoneId ?? "Europe/Rome",
+      deviceScaleFactor: fp.deviceScaleFactor,
     });
+
+    await context.addInitScript(getStealthScript(fp));
+    this.context = context;
+    return context;
   }
 
-  /** Create a stealth context with fingerprint. */
+  /** Create a stealth context with fingerprint (for non-persistent use). */
   protected async createStealthContext(
     browser: Browser,
   ): Promise<BrowserContext> {
@@ -144,10 +157,9 @@ export abstract class BaseLoginAdapter implements LoginPort {
     profile: BrowserProfile,
     service: SocialService,
   ): Promise<SessionInfo> {
-    let browser: Browser | null = null;
+    let context: BrowserContext | null = null;
     try {
-      browser = await this.launchBrowser(profile, true);
-      const context = await this.createStealthContext(browser);
+      context = await this.launchPersistentContext(profile, true);
       const page = await context.newPage();
 
       const verifyUrl = SERVICE_VERIFY_URLS[service];
@@ -155,12 +167,10 @@ export abstract class BaseLoginAdapter implements LoginPort {
         waitUntil: "domcontentloaded",
         timeout: 15_000,
       });
-      // Small delay for redirects
       await new Promise((r) => setTimeout(r, getRandomDelay(1000, 2000)));
 
       const loggedIn = await this.isLoggedIn(page, service);
       await page.close();
-      await context.close();
 
       return {
         valid: loggedIn,
@@ -178,12 +188,13 @@ export abstract class BaseLoginAdapter implements LoginPort {
         detail: `Verification failed: ${err instanceof Error ? err.message : "unknown"}`,
       };
     } finally {
-      await browser?.close().catch(() => {});
+      await context?.close().catch(() => {});
+      this.context = null;
     }
   }
 
   async close(): Promise<void> {
-    await this.browser?.close().catch(() => {});
-    this.browser = null;
+    await this.context?.close().catch(() => {});
+    this.context = null;
   }
 }

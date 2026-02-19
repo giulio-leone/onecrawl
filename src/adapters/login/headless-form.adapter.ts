@@ -91,10 +91,9 @@ export class HeadlessFormAdapter extends BaseLoginAdapter {
       };
     }
 
-    let browser = null;
+    let context = null;
     try {
-      browser = await this.launchBrowser(profile, headless);
-      const context = await this.createStealthContext(browser);
+      context = await this.launchPersistentContext(profile, headless);
       const page = await context.newPage();
 
       // Navigate to login page
@@ -118,7 +117,6 @@ export class HeadlessFormAdapter extends BaseLoginAdapter {
           remainingSeconds: Math.floor(timeoutMs / 1000),
         });
         await page.close();
-        await context.close();
         return {
           success: false,
           method: "headless_form",
@@ -162,7 +160,6 @@ export class HeadlessFormAdapter extends BaseLoginAdapter {
           remainingSeconds: 60,
         });
         await page.close();
-        await context.close();
         return {
           success: false,
           method: "headless_form",
@@ -174,7 +171,6 @@ export class HeadlessFormAdapter extends BaseLoginAdapter {
       }
 
       await page.close();
-      await context.close();
 
       return {
         success: result.ok,
@@ -190,7 +186,8 @@ export class HeadlessFormAdapter extends BaseLoginAdapter {
         durationMs: Date.now() - start,
       };
     } finally {
-      await browser?.close().catch(() => {});
+      await context?.close().catch(() => {});
+      this.context = null;
     }
   }
 

@@ -33,11 +33,10 @@ export class HeadedFullAdapter extends BaseLoginAdapter {
     const start = Date.now();
     const timeoutMs = options?.timeoutMs ?? 180_000; // 3 minutes for manual login
 
-    let browser = null;
+    let context = null;
     try {
       // Always launch headed — this is the full-UI fallback
-      browser = await this.launchBrowser(profile, false);
-      const context = await this.createStealthContext(browser);
+      context = await this.launchPersistentContext(profile, false);
       const page = await context.newPage();
 
       // Use a comfortable viewport
@@ -63,7 +62,6 @@ export class HeadedFullAdapter extends BaseLoginAdapter {
       if (!loggedIn) {
         const screenshot = await this.takeScreenshot(page);
         await page.close();
-        await context.close();
 
         return {
           success: false,
@@ -78,7 +76,6 @@ export class HeadedFullAdapter extends BaseLoginAdapter {
       // Wait for cookies to persist
       await new Promise((r) => setTimeout(r, 3000));
       await page.close();
-      await context.close();
 
       return {
         success: true,
@@ -93,7 +90,8 @@ export class HeadedFullAdapter extends BaseLoginAdapter {
         durationMs: Date.now() - start,
       };
     } finally {
-      await browser?.close().catch(() => {});
+      await context?.close().catch(() => {});
+      this.context = null;
     }
   }
 }

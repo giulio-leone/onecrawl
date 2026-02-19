@@ -38,11 +38,10 @@ export class PopupOAuthAdapter extends BaseLoginAdapter {
     const start = Date.now();
     const timeoutMs = options?.timeoutMs ?? 120_000; // 2 minutes default
 
-    let browser = null;
+    let context = null;
     try {
       // Always launch headed for popup login
-      browser = await this.launchBrowser(profile, false);
-      const context = await this.createStealthContext(browser);
+      context = await this.launchPersistentContext(profile, false);
       const page = await context.newPage();
 
       // Set a compact viewport (popup style)
@@ -69,7 +68,6 @@ export class PopupOAuthAdapter extends BaseLoginAdapter {
         // Take screenshot to show what happened
         const screenshot = await this.takeScreenshot(page);
         await page.close();
-        await context.close();
 
         return {
           success: false,
@@ -84,7 +82,6 @@ export class PopupOAuthAdapter extends BaseLoginAdapter {
       // Small delay to ensure cookies are flushed
       await new Promise((r) => setTimeout(r, 2000));
       await page.close();
-      await context.close();
 
       return {
         success: true,
@@ -99,7 +96,8 @@ export class PopupOAuthAdapter extends BaseLoginAdapter {
         durationMs: Date.now() - start,
       };
     } finally {
-      await browser?.close().catch(() => {});
+      await context?.close().catch(() => {});
+      this.context = null;
     }
   }
 }
