@@ -255,3 +255,9 @@ export interface StealthPort {
 // =============================================================================
 
 export type { StoragePort } from "./storage.port.js";
+export type { LoginPort, LoginOptions, InteractionData } from "./login.port.js";
+export {
+  SERVICE_LOGIN_URLS,
+  SERVICE_VERIFY_URLS,
+  SERVICE_LOGGED_IN_SELECTORS,
+} from "./login.port.js";
