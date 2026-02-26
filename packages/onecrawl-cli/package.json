@@ -1,6 +1,6 @@
 {
   "name": "@giulio-leone/onecrawl-cli",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Token-efficient browser CLI with stealth patches for AI agents",
   "license": "Apache-2.0",
   "main": "onecrawl-cli.js",

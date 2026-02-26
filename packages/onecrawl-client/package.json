@@ -1,6 +1,6 @@
 {
   "name": "@giulio-leone/onecrawl-client",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "HTTP client for OneCrawl server — zero-dependency, works in Node, Deno, browser",
   "type": "module",
   "main": "dist/index.js",
