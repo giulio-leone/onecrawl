@@ -3,14 +3,8 @@
  * Limits parallel requests per origin for polite crawling.
  */
 
-interface QueuedRequest<T> {
-  execute: () => Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason: unknown) => void;
-}
-
 interface OriginState {
-  pending: Array<QueuedRequest<unknown>>;
+  pending: Array<() => void>;
   active: number;
 }
 
@@ -35,10 +29,8 @@ export class OriginQueue {
     }
 
     return new Promise<T>((resolve, reject) => {
-      state.pending.push({
-        execute: execute as () => Promise<unknown>,
-        resolve: resolve as (v: unknown) => void,
-        reject,
+      state.pending.push(() => {
+        this.run(origin, state, execute).then(resolve, reject);
       });
     });
   }
@@ -73,24 +65,6 @@ export class OriginQueue {
     }
 
     const next = state.pending.shift()!;
-    state.active++;
-
-    next
-      .execute()
-      .then(next.resolve, next.reject)
-      .then(
-        () => {
-          state.active--;
-          queueMicrotask(() => this.dequeue(origin, state));
-        },
-        (err: unknown) => {
-          state.active--;
-          queueMicrotask(() => this.dequeue(origin, state));
-          throw err;
-        },
-      )
-      .catch(() => {
-        /* error boundary: dequeue errors must not propagate */
-      });
+    next();
   }
 }

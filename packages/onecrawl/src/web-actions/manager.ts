@@ -51,6 +51,12 @@ const SESSION_IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 min
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // check every 5 min
 const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_CDP_URL = "http://127.0.0.1:9222";
+const DEBUG =
+  process.env.ONECRAWL_DEBUG === "true" || process.env.ONECRAWL_DEBUG === "1";
+
+function debugLog(msg: string): void {
+  if (DEBUG) process.stderr.write(`${msg}\n`);
+}
 
 // ── Manager ──────────────────────────────────────────────────────────────────
 
@@ -158,7 +164,7 @@ export class WebActionManager {
     }
 
     const wsUrl = this.resolveCdpWebSocketUrl(cdpUrl);
-    console.log(`[web-actions] connecting to Chrome via CDP: ${wsUrl}`);
+    debugLog(`[web-actions] connecting to Chrome via CDP: ${wsUrl}`);
     const browser = await chromium.connectOverCDP(wsUrl);
     const contexts = browser.contexts();
     // Use the first (default) context — that's the user's normal session
@@ -313,7 +319,7 @@ export class WebActionManager {
     }
 
     for (const id of expired) {
-      console.log(`[web-actions] closing idle session: ${id}`);
+      debugLog(`[web-actions] closing idle session: ${id}`);
       await this.closeSession(id);
     }
   }

@@ -127,15 +127,18 @@ export class HeadlessFormAdapter extends BaseLoginAdapter {
         };
       }
 
-      // Fill username
-      await this.fillField(page, spec.usernameSelector, ""); // TODO: credentials from secure store
+      /**
+       * @todo Retrieve credentials from a secure store (e.g. Cookie Vault)
+       * instead of passing empty strings. The adapter currently fills blank
+       * values and will always fail authentication.
+       */
+      await this.fillField(page, spec.usernameSelector, "");
       if (spec.nextButtonSelector) {
         await page.click(spec.nextButtonSelector);
         await new Promise((r) => setTimeout(r, getRandomDelay(1000, 2000)));
       }
 
-      // Fill password
-      await this.fillField(page, spec.passwordSelector, ""); // TODO: credentials from secure store
+      await this.fillField(page, spec.passwordSelector, "");
 
       // Submit
       await page.click(spec.submitSelector);

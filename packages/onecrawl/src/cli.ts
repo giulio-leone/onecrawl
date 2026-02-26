@@ -83,7 +83,7 @@ function parseArgs(args: string[]): CliArgs {
 }
 
 function printHelp(): void {
-  console.log(`
+  process.stderr.write(`
 OneCrawl v${VERSION} - Native TypeScript Web Crawler
 
 USAGE:
@@ -106,7 +106,7 @@ EXAMPLES:
   onecrawl scrape https://spa.example.com --browser
   onecrawl search "TypeScript tutorial" --engine duckduckgo
   onecrawl search "AI news" -n 5 -o json
-`);
+\n`);
 }
 
 async function runScrape(
