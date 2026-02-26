@@ -5,6 +5,17 @@
  * Works in Node.js, Deno, and modern browsers.
  */
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function createTimeoutSignal(ms: number): AbortSignal {
+  if (typeof AbortSignal.timeout === 'function') {
+    return AbortSignal.timeout(ms);
+  }
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), ms);
+  return controller.signal;
+}
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type SearchEngine = "google" | "bing" | "duckduckgo";
@@ -267,7 +278,7 @@ export class OneCrawlClient {
     const res = await this.fetchFn(`${this.baseUrl}${path}`, {
       method: "GET",
       headers: { ...this.defaultHeaders },
-      signal: AbortSignal.timeout(this.timeout),
+      signal: createTimeoutSignal(this.timeout),
     });
     return this.handleResponse<T>(res);
   }
@@ -278,7 +289,7 @@ export class OneCrawlClient {
       method: "POST",
       headers: { "Content-Type": "application/json", ...this.defaultHeaders },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(this.timeout),
+      signal: createTimeoutSignal(this.timeout),
     });
     return this.handleResponse<T>(res);
   }
@@ -288,7 +299,7 @@ export class OneCrawlClient {
     const res = await this.fetchFn(`${this.baseUrl}${path}`, {
       method: "DELETE",
       headers: { ...this.defaultHeaders },
-      signal: AbortSignal.timeout(this.timeout),
+      signal: createTimeoutSignal(this.timeout),
     });
     return this.handleResponse<T>(res);
   }
