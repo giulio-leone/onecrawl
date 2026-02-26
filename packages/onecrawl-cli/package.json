@@ -1,0 +1,43 @@
+{
+  "name": "@giulio-leone/onecrawl-cli",
+  "version": "0.4.1",
+  "description": "Token-efficient browser CLI with stealth patches for AI agents",
+  "license": "Apache-2.0",
+  "main": "onecrawl-cli.js",
+  "bin": {
+    "onecrawl-cli": "onecrawl-cli.js"
+  },
+  "scripts": {},
+  "files": [
+    "onecrawl-cli.js",
+    "stealth-loader.js",
+    "patches/",
+    "stealth.js",
+    "stealth-init.js",
+    "ghost-click.js",
+    "skills"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/giulio-leone/onecrawl.git",
+    "directory": "packages/onecrawl-cli"
+  },
+  "keywords": [
+    "playwright",
+    "browser-automation",
+    "ai-agent",
+    "stealth",
+    "cli",
+    "mcp",
+    "token-efficient"
+  ],
+  "dependencies": {
+    "playwright": "1.59.0-alpha-2026-02-25"
+  }
+}

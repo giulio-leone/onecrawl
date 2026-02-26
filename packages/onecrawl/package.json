@@ -1,0 +1,148 @@
+{
+  "name": "@giulio-leone/onecrawl",
+  "version": "2.0.0",
+  "description": "Native TypeScript web crawler, scraper & browser automation. Zero Python dependencies.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "onecrawl": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "react-native": {
+        "types": "./dist/index.native.d.ts",
+        "import": "./dist/index.native.js",
+        "default": "./dist/index.native.js"
+      },
+      "node": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "default": "./dist/index.js"
+      },
+      "default": "./dist/index.js"
+    },
+    "./adapters": {
+      "react-native": {
+        "types": "./dist/adapters/index.native.d.ts",
+        "import": "./dist/adapters/index.native.js",
+        "default": "./dist/adapters/index.native.js"
+      },
+      "node": {
+        "types": "./dist/adapters/index.d.ts",
+        "import": "./dist/adapters/index.js",
+        "default": "./dist/adapters/index.js"
+      },
+      "default": "./dist/adapters/index.js"
+    },
+    "./ports": {
+      "types": "./dist/ports/index.d.ts",
+      "import": "./dist/ports/index.js",
+      "default": "./dist/ports/index.js"
+    },
+    "./auth": {
+      "react-native": {
+        "types": "./dist/auth/index.native.d.ts",
+        "import": "./dist/auth/index.native.js",
+        "default": "./dist/auth/index.native.js"
+      },
+      "node": {
+        "types": "./dist/auth/index.d.ts",
+        "import": "./dist/auth/index.js",
+        "default": "./dist/auth/index.js"
+      },
+      "default": "./dist/auth/index.js"
+    },
+    "./swarm": {
+      "types": "./dist/swarm/index.d.ts",
+      "import": "./dist/swarm/index.js",
+      "default": "./dist/swarm/index.js"
+    },
+    "./cli": {
+      "import": "./dist/cli.js",
+      "default": "./dist/cli.js"
+    },
+    "./web-actions": {
+      "types": "./dist/web-actions/index.d.ts",
+      "import": "./dist/web-actions/index.js",
+      "default": "./dist/web-actions/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist",
+    "cli": "node dist/cli.js"
+  },
+  "dependencies": {
+    "zod": "^4.0.0"
+  },
+  "optionalDependencies": {
+    "playwright": "^1.50.0",
+    "rebrowser-playwright": "^1.52.0",
+    "ghost-cursor-playwright": "^2.1.0",
+    "undici": "^7.19.1",
+    "ws": "^8.19.0",
+    "turndown": "^7.2.0",
+    "playwright-core": "^1.50.0",
+    "@sparticuz/chromium": "^133.0.0"
+  },
+  "peerDependencies": {
+    "ai": "^6.0.68",
+    "@react-native-async-storage/async-storage": ">=1.0.0",
+    "react-native-mmkv": ">=2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ai": {
+      "optional": true
+    },
+    "@react-native-async-storage/async-storage": {
+      "optional": true
+    },
+    "react-native-mmkv": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/turndown": "^5.0.5",
+    "@types/ws": "^8.18.1",
+    "ai": "^6.0.68",
+    "typescript": "^5.9.2",
+    "vitest": "^4.0.17"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "crawler",
+    "scraper",
+    "web",
+    "playwright",
+    "typescript",
+    "search",
+    "browser",
+    "cli",
+    "http2",
+    "cdp",
+    "agent",
+    "swarm",
+    "ai",
+    "stealth",
+    "automation",
+    "web-actions"
+  ],
+  "author": "OneGenUI",
+  "license": "MIT",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/giulio-leone/onecrawl.git",
+    "directory": "packages/onecrawl"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "name": "@giulio-leone/onecrawl-client",
+  "version": "1.0.0",
+  "description": "HTTP client for OneCrawl server — zero-dependency, works in Node, Deno, browser",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.5",
+    "typescript": "^5.7.3"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/giulio-leone/onecrawl.git",
+    "directory": "packages/onecrawl-client"
+  },
+  "license": "MIT",
+  "keywords": [
+    "onecrawl",
+    "http-client",
+    "scraper",
+    "crawler",
+    "browser-automation"
+  ]
+}

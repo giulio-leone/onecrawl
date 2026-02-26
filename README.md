@@ -2,6 +2,23 @@
 
 Native TypeScript web crawler and scraper. Zero Python dependencies.
 
+> **Monorepo** — this repository contains three packages:
+
+| Package | Description | Version |
+|---------|-------------|---------|
+| [`@giulio-leone/onecrawl`](./packages/onecrawl) | Core crawler library | 2.0.0 |
+| [`@giulio-leone/onecrawl-cli`](./packages/onecrawl-cli) | Optional stealth CLI for AI agents | 0.4.1 |
+| [`@giulio-leone/onecrawl-client`](./packages/onecrawl-client) | HTTP client for OneCrawl server (zero-dep) | 1.0.0 |
+
+## Repository Structure
+
+```
+packages/
+├── onecrawl/          # Core library — crawl, scrape, search
+├── onecrawl-cli/      # Stealth CLI — browser automation with anti-detection patches
+└── onecrawl-client/   # HTTP client — typed fetch wrapper for OneCrawl server API
+```
+
 ## Features
 
 - **Pure TypeScript** - No Python runtime required
@@ -17,9 +34,14 @@ Native TypeScript web crawler and scraper. Zero Python dependencies.
 ## Installation
 
 ```bash
-npm install onecrawl
-# or
-pnpm add onecrawl
+# Core library
+pnpm add @giulio-leone/onecrawl
+
+# HTTP client (for consuming OneCrawl server API)
+pnpm add @giulio-leone/onecrawl-client
+
+# Stealth CLI (optional, for AI agent browser automation)
+pnpm add @giulio-leone/onecrawl-cli
 ```
 
 For browser-based scraping, also install Playwright:
@@ -27,6 +49,14 @@ For browser-based scraping, also install Playwright:
 ```bash
 npm install playwright
 npx playwright install chromium
+```
+
+## Development
+
+```bash
+pnpm install
+pnpm run build
+pnpm run test
 ```
 
 ## Quick Start
