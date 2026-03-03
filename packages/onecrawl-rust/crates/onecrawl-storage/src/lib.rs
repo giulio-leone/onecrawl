@@ -1,5 +1,7 @@
 //! OneCrawl Storage — encrypted key-value store backed by sled.
 
+pub mod retry;
+
 use onecrawl_core::{EncryptedPayload, Error, Result};
 use sled::Db;
 

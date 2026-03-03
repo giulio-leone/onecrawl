@@ -35,7 +35,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "stdio" => {
             tracing::info!("starting OneCrawl MCP server (stdio transport)");
             let service = rmcp::ServiceExt::serve(mcp, rmcp::transport::stdio()).await?;
-            service.waiting().await?;
+            tokio::select! {
+                result = service.waiting() => {
+                    result?;
+                }
+                _ = tokio::signal::ctrl_c() => {
+                    tracing::info!("Received shutdown signal, stopping...");
+                }
+            }
         }
         "sse" => {
             eprintln!("SSE transport on port {} (not yet implemented)", cli.port);

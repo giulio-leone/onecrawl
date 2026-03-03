@@ -7,6 +7,10 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[features]
+default = []
+playwright = ["dep:playwright"]
+
 [dependencies]
 onecrawl-core = { path = "../onecrawl-core" }
 chromiumoxide = { workspace = true }
@@ -16,6 +20,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 rand = { workspace = true }
+playwright = { workspace = true, optional = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

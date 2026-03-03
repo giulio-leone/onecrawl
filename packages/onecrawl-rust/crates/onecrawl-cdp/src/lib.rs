@@ -5,9 +5,12 @@
 pub mod bridge;
 pub mod browser;
 pub mod element;
+pub mod logging;
 pub mod navigation;
 pub mod network;
 pub mod page;
+#[cfg(feature = "playwright")]
+pub mod playwright_backend;
 pub mod screenshot;
 pub mod stealth;
 
