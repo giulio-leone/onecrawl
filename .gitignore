@@ -11,3 +11,6 @@ coverage
 # Rust build artifacts
 packages/onecrawl-rust/target/
 packages/onecrawl-rust/.venv/
+docs/node_modules/
+docs/build/
+docs/.docusaurus/
