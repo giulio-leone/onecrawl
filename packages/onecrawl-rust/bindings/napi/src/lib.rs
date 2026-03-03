@@ -1705,6 +1705,18 @@ impl NativeBrowser {
             .map_err(|e| Error::from_reason(e.to_string()))?;
         serde_json::to_string(&info).map_err(|e| Error::from_reason(e.to_string()))
     }
+
+    // ──────────────── Benchmark ────────────────
+
+    /// Run the CDP benchmark suite. Returns JSON string of BenchmarkSuite.
+    #[napi(js_name = "runBenchmark")]
+    pub async fn run_benchmark(&self, iterations: Option<u32>) -> Result<String> {
+        let iters = iterations.unwrap_or(100);
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let suite = onecrawl_cdp::benchmark::run_cdp_benchmarks(page, iters).await;
+        serde_json::to_string(&suite).map_err(|e| Error::from_reason(e.to_string()))
+    }
 }
 
 fn parse_network_profile(name: &str) -> std::result::Result<onecrawl_cdp::NetworkProfile, String> {

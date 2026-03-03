@@ -360,6 +360,27 @@ enum Commands {
         action: AdvancedEmulationAction,
     },
 
+    // ── Tab Management ──────────────────────────────────────────────
+    /// Multi-tab management
+    Tab {
+        #[command(subcommand)]
+        action: TabAction,
+    },
+
+    // ── Download Management ─────────────────────────────────────────
+    /// File download management
+    Download {
+        #[command(subcommand)]
+        action: DownloadAction,
+    },
+
+    // ── Screenshot Diff ─────────────────────────────────────────────
+    /// Screenshot comparison and visual regression
+    ScreenshotDiff {
+        #[command(subcommand)]
+        action: ScreenshotDiffAction,
+    },
+
     // ── Offline Commands ────────────────────────────────────────────
     /// Crypto operations
     Crypto {
@@ -382,6 +403,95 @@ enum Commands {
     Health,
     /// Show version and system info
     Info,
+
+    // ── Benchmark ────────────────────────────────────────────────────
+    /// CDP benchmark suite
+    Bench {
+        #[command(subcommand)]
+        action: BenchAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum BenchAction {
+    /// Run CDP benchmark suite
+    Run {
+        /// Number of iterations per benchmark
+        #[arg(short, long, default_value = "20")]
+        iterations: u32,
+        /// Filter to specific module
+        #[arg(short, long)]
+        module: Option<String>,
+    },
+    /// Show last benchmark results
+    Report {
+        /// Output format: table or json
+        #[arg(short, long, default_value = "table")]
+        format: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum TabAction {
+    /// List all open tabs
+    List,
+    /// Open a new tab
+    New {
+        /// URL to navigate to
+        url: String,
+    },
+    /// Close a tab by index
+    Close {
+        /// Tab index (0-based)
+        index: usize,
+    },
+    /// Switch to a tab by index
+    Switch {
+        /// Tab index (0-based)
+        index: usize,
+    },
+    /// Get the count of open tabs
+    Count,
+}
+
+#[derive(Subcommand)]
+enum DownloadAction {
+    /// Set download directory path
+    SetPath {
+        /// Directory path for downloads
+        path: String,
+    },
+    /// List tracked downloads
+    List,
+    /// Download a file by URL (returns base64)
+    Fetch {
+        /// File URL
+        url: String,
+    },
+    /// Wait for a download to appear
+    Wait {
+        /// Timeout in milliseconds
+        #[arg(short, long, default_value = "10000")]
+        timeout: u64,
+    },
+    /// Clear download history
+    Clear,
+}
+
+#[derive(Subcommand)]
+enum ScreenshotDiffAction {
+    /// Compare two screenshot files
+    Compare {
+        /// Baseline screenshot path
+        baseline: String,
+        /// Current screenshot path
+        current: String,
+    },
+    /// Visual regression against a baseline
+    Regression {
+        /// Baseline file path (created if missing)
+        baseline_path: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1122,6 +1232,44 @@ async fn main() {
             }
             AdvancedEmulationAction::NavigatorInfo => {
                 commands::browser::adv_emulation_navigator_info().await
+            }
+        },
+
+        // ── Tab Management ──────────────────────────────────────────
+        Commands::Tab { action } => match action {
+            TabAction::List => commands::browser::tab_list().await,
+            TabAction::New { url } => commands::browser::tab_new(&url).await,
+            TabAction::Close { index } => commands::browser::tab_close(index).await,
+            TabAction::Switch { index } => commands::browser::tab_switch(index).await,
+            TabAction::Count => commands::browser::tab_count_cmd().await,
+        },
+
+        // ── Download Management ─────────────────────────────────────
+        Commands::Download { action } => match action {
+            DownloadAction::SetPath { path } => commands::browser::download_set_path(&path).await,
+            DownloadAction::List => commands::browser::download_list().await,
+            DownloadAction::Fetch { url } => commands::browser::download_fetch(&url).await,
+            DownloadAction::Wait { timeout } => commands::browser::download_wait(timeout).await,
+            DownloadAction::Clear => commands::browser::download_clear().await,
+        },
+
+        // ── Screenshot Diff ─────────────────────────────────────────
+        Commands::ScreenshotDiff { action } => match action {
+            ScreenshotDiffAction::Compare { baseline, current } => {
+                commands::browser::screenshot_diff_compare(&baseline, &current).await
+            }
+            ScreenshotDiffAction::Regression { baseline_path } => {
+                commands::browser::screenshot_diff_regression(&baseline_path).await
+            }
+        },
+
+        // ── Benchmark ───────────────────────────────────────────────
+        Commands::Bench { action } => match action {
+            BenchAction::Run { iterations, module } => {
+                commands::browser::bench_run(iterations, module.as_deref()).await
+            }
+            BenchAction::Report { format } => {
+                commands::browser::bench_report(&format).await
             }
         },
     }

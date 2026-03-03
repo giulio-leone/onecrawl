@@ -255,6 +255,8 @@ export declare class NativeBrowser {
   setDeviceMemory(gb: number): Promise<void>
   /** Get current navigator properties as JSON. */
   getNavigatorInfo(): Promise<string>
+  /** Run the CDP benchmark suite. Returns JSON string of BenchmarkSuite. */
+  runBenchmark(iterations?: number | undefined | null): Promise<string>
 }
 
 /** Encrypted key-value store backed by sled + AES-256-GCM. */

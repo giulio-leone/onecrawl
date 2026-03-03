@@ -20,6 +20,25 @@ where
     }
 }
 
+/// Run a browser command that needs the BrowserSession (e.g. tab management).
+pub async fn with_session<F, Fut>(f: F)
+where
+    F: FnOnce(onecrawl_cdp::BrowserSession, Page) -> Fut,
+    Fut: std::future::Future<Output = Result<(), String>>,
+{
+    let (session, page) = match super::session::connect_to_session().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("{} {e}", "✗".red());
+            std::process::exit(1);
+        }
+    };
+    if let Err(e) = f(session, page).await {
+        eprintln!("{} {e}", "✗".red());
+        std::process::exit(1);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
@@ -1694,4 +1713,210 @@ pub async fn adv_emulation_navigator_info() {
         Ok(())
     })
     .await;
+}
+
+// ---------------------------------------------------------------------------
+// Tab Management
+// ---------------------------------------------------------------------------
+
+pub async fn tab_list() {
+    with_session(|session, _page| async move {
+        let tabs = onecrawl_cdp::tabs::list_tabs(session.browser())
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&tabs).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn tab_new(url: &str) {
+    let url = url.to_string();
+    with_session(|session, _page| async move {
+        let _page = onecrawl_cdp::tabs::new_tab(session.browser(), &url)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Opened new tab: {}", "✓".green(), url.cyan());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn tab_close(index: usize) {
+    with_session(|session, _page| async move {
+        onecrawl_cdp::tabs::close_tab(session.browser(), index)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Closed tab {}", "✓".green(), index);
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn tab_switch(index: usize) {
+    with_session(|session, _page| async move {
+        let _tab = onecrawl_cdp::tabs::get_tab(session.browser(), index)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Switched to tab {}", "✓".green(), index);
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn tab_count_cmd() {
+    with_session(|session, _page| async move {
+        let count = onecrawl_cdp::tabs::tab_count(session.browser())
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{count}");
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Download Management
+// ---------------------------------------------------------------------------
+
+pub async fn download_set_path(path: &str) {
+    let path = path.to_string();
+    with_page(|page| async move {
+        onecrawl_cdp::downloads::set_download_path(&page, std::path::Path::new(&path))
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Download path set to: {}", "✓".green(), path.cyan());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn download_list() {
+    with_page(|page| async move {
+        let downloads = onecrawl_cdp::downloads::get_downloads(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&downloads).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn download_fetch(url: &str) {
+    let url = url.to_string();
+    with_page(|page| async move {
+        let b64 = onecrawl_cdp::downloads::download_file(&page, &url)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{b64}");
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn download_wait(timeout_ms: u64) {
+    with_page(|page| async move {
+        let result = onecrawl_cdp::downloads::wait_for_download(&page, timeout_ms)
+            .await
+            .map_err(|e| e.to_string())?;
+        match result {
+            Some(d) => println!("{}", serde_json::to_string_pretty(&d).unwrap_or_default()),
+            None => println!("No download detected within {timeout_ms}ms"),
+        }
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn download_clear() {
+    with_page(|page| async move {
+        onecrawl_cdp::downloads::clear_downloads(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Download history cleared", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Screenshot Diff
+// ---------------------------------------------------------------------------
+
+pub async fn screenshot_diff_compare(baseline: &str, current: &str) {
+    let b = baseline.to_string();
+    let c = current.to_string();
+    with_page(|_page| async move {
+        let result = onecrawl_cdp::screenshot_diff::compare_screenshot_files(
+            std::path::Path::new(&b),
+            std::path::Path::new(&c),
+        )
+        .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn screenshot_diff_regression(baseline_path: &str) {
+    let bp = baseline_path.to_string();
+    with_page(|page| async move {
+        let result = onecrawl_cdp::screenshot_diff::visual_regression(
+            &page,
+            std::path::Path::new(&bp),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Benchmark
+// ---------------------------------------------------------------------------
+
+pub async fn bench_run(iterations: u32, _module: Option<&str>) {
+    with_page(|page| async move {
+        println!("{} Running CDP benchmarks ({iterations} iterations)…", "⏱".yellow());
+        let suite = onecrawl_cdp::benchmark::run_cdp_benchmarks(&page, iterations).await;
+        let table = onecrawl_cdp::benchmark::format_results(&suite);
+        println!("{table}");
+
+        // Save JSON report
+        let dir = std::path::PathBuf::from("reports");
+        let _ = std::fs::create_dir_all(&dir);
+        let json_path = dir.join("cdp-bench.json");
+        if let Ok(json) = serde_json::to_string_pretty(&suite) {
+            let _ = std::fs::write(&json_path, &json);
+            println!("{} Report saved to {}", "✓".green(), json_path.display());
+        }
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn bench_report(format: &str) {
+    let json_path = std::path::PathBuf::from("reports").join("cdp-bench.json");
+
+    let data = match std::fs::read_to_string(&json_path) {
+        Ok(d) => d,
+        Err(_) => {
+            eprintln!("{} No benchmark data found. Run `onecrawl bench run` first.", "✗".red());
+            std::process::exit(1);
+        }
+    };
+
+    match format {
+        "json" => println!("{data}"),
+        _ => {
+            if let Ok(suite) = serde_json::from_str::<onecrawl_cdp::BenchmarkSuite>(&data) {
+                println!("{}", onecrawl_cdp::benchmark::format_results(&suite));
+            } else {
+                eprintln!("{} Failed to parse benchmark data", "✗".red());
+                std::process::exit(1);
+            }
+        }
+    }
 }

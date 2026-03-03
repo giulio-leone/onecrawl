@@ -1276,6 +1276,15 @@ impl Browser {
         let info = self.rt.block_on(onecrawl_cdp::advanced_emulation::get_navigator_info(page)).map_err(py_err)?;
         serde_json::to_string(&info).map_err(py_err)
     }
+
+    /// Run the CDP benchmark suite. Returns JSON string of BenchmarkSuite.
+    #[pyo3(signature = (iterations=100))]
+    fn run_benchmark(&self, iterations: u32) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let suite = self.rt.block_on(onecrawl_cdp::benchmark::run_cdp_benchmarks(page, iterations));
+        serde_json::to_string(&suite).map_err(py_err)
+    }
 }
 
 // ──────────────────────────── Module ────────────────────────────

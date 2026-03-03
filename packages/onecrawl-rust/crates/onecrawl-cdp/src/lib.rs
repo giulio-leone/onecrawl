@@ -4,6 +4,7 @@
 
 pub mod accessibility;
 pub mod advanced_emulation;
+pub mod benchmark;
 pub mod bridge;
 pub mod browser;
 pub mod console;
@@ -11,6 +12,7 @@ pub mod cookie;
 pub mod coverage;
 pub mod dialog;
 pub mod dom_observer;
+pub mod downloads;
 pub mod element;
 pub mod emulation;
 pub mod events;
@@ -22,11 +24,13 @@ pub mod keyboard;
 pub mod navigation;
 pub mod network;
 pub mod page;
+pub mod tabs;
 #[cfg(feature = "playwright")]
 pub mod playwright_backend;
 pub mod print;
 pub mod proxy;
 pub mod screenshot;
+pub mod screenshot_diff;
 pub mod stealth;
 pub mod throttle;
 pub mod tracing_cdp;
@@ -36,6 +40,7 @@ pub mod websocket;
 pub mod workers;
 
 pub use accessibility::AccessibilityAudit;
+pub use benchmark::{BenchmarkResult, BenchmarkSuite};
 pub use browser::BrowserSession;
 pub use bridge::PlaywrightBridge;
 pub use console::ConsoleEntry;
@@ -58,6 +63,10 @@ pub use intercept::{InterceptAction, InterceptRule};
 pub use print::DetailedPdfOptions;
 pub use proxy::{ProxyConfig, ProxyPool, RotationStrategy};
 pub use webauthn::{VirtualAuthenticator, VirtualCredential};
+
+pub use tabs::TabInfo;
+pub use downloads::DownloadInfo;
+pub use screenshot_diff::DiffResult;
 
 // Re-export chromiumoxide::Page for downstream consumers
 pub use chromiumoxide::Page;
