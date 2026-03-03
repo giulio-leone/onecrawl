@@ -13,6 +13,7 @@ pub mod console;
 pub mod cookie;
 pub mod cookie_jar;
 pub mod coverage;
+pub mod data_pipeline;
 pub mod dialog;
 pub mod dom_nav;
 pub mod dom_observer;
@@ -42,7 +43,9 @@ pub mod streaming;
 pub mod playwright_backend;
 pub mod print;
 pub mod proxy;
+pub mod rate_limiter;
 pub mod request_queue;
+pub mod retry_queue;
 pub mod robots;
 pub mod screenshot;
 pub mod screenshot_diff;
@@ -50,6 +53,7 @@ pub mod selectors;
 pub mod shell;
 pub mod snapshot;
 pub mod stealth;
+pub mod structured_data;
 pub mod tabs;
 pub mod throttle;
 pub mod tls_fingerprint;
@@ -108,6 +112,12 @@ pub use robots::{RobotsRule, RobotsTxt};
 pub use snapshot::{DomSnapshot, SnapshotDiff};
 pub use tabs::TabInfo;
 pub use tls_fingerprint::BrowserFingerprint;
+pub use rate_limiter::{RateLimitConfig, RateLimitState, RateLimitStats};
+pub use retry_queue::{RetryConfig, RetryItem, RetryQueue, QueueStats as RetryQueueStats};
+pub use data_pipeline::{Pipeline, PipelineStep, PipelineResult};
+pub use structured_data::{
+    JsonLdData, OpenGraphData, TwitterCardData, PageMetadata, StructuredDataResult,
+};
 
 // Re-export chromiumoxide::Page for downstream consumers
 pub use chromiumoxide::Page;

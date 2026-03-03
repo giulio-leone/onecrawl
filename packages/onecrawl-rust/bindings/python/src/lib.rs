@@ -216,6 +216,8 @@ struct Browser {
     event_stream: Arc<std::sync::Mutex<Option<onecrawl_cdp::EventStream>>>,
     har_recorder: Arc<std::sync::Mutex<Option<onecrawl_cdp::HarRecorder>>>,
     ws_recorder: Arc<std::sync::Mutex<Option<onecrawl_cdp::WsRecorder>>>,
+    rate_limiter: Arc<std::sync::Mutex<onecrawl_cdp::RateLimitState>>,
+    retry_queue: Arc<std::sync::Mutex<onecrawl_cdp::RetryQueue>>,
 }
 
 fn py_err(e: impl std::fmt::Display) -> PyErr {
@@ -261,6 +263,12 @@ impl Browser {
             event_stream: Arc::new(std::sync::Mutex::new(None)),
             har_recorder: Arc::new(std::sync::Mutex::new(None)),
             ws_recorder: Arc::new(std::sync::Mutex::new(None)),
+            rate_limiter: Arc::new(std::sync::Mutex::new(
+                onecrawl_cdp::RateLimitState::new(onecrawl_cdp::RateLimitConfig::default()),
+            )),
+            retry_queue: Arc::new(std::sync::Mutex::new(
+                onecrawl_cdp::RetryQueue::new(onecrawl_cdp::RetryConfig::default()),
+            )),
         })
     }
 
@@ -281,6 +289,12 @@ impl Browser {
             event_stream: Arc::new(std::sync::Mutex::new(None)),
             har_recorder: Arc::new(std::sync::Mutex::new(None)),
             ws_recorder: Arc::new(std::sync::Mutex::new(None)),
+            rate_limiter: Arc::new(std::sync::Mutex::new(
+                onecrawl_cdp::RateLimitState::new(onecrawl_cdp::RateLimitConfig::default()),
+            )),
+            retry_queue: Arc::new(std::sync::Mutex::new(
+                onecrawl_cdp::RetryQueue::new(onecrawl_cdp::RetryConfig::default()),
+            )),
         })
     }
 
@@ -2660,6 +2674,239 @@ impl Browser {
             ))
             .map_err(py_err)?;
         serde_json::to_string(&diffs).map_err(py_err)
+    }
+
+    // ──────────────── Rate Limiter ────────────────
+
+    /// Set rate limiter config. Pass a preset name or JSON config string.
+    #[pyo3(signature = (config_or_preset=None))]
+    fn rate_limit_set(&self, config_or_preset: Option<&str>) -> PyResult<String> {
+        let mut rl = self.rate_limiter.lock().map_err(py_err)?;
+        let config = match config_or_preset {
+            Some(s) => {
+                let presets = onecrawl_cdp::rate_limiter::presets();
+                if let Some(cfg) = presets.get(s) {
+                    cfg.clone()
+                } else {
+                    serde_json::from_str(s)
+                        .map_err(|e| py_err(format!("invalid config: {e}")))?
+                }
+            }
+            None => onecrawl_cdp::RateLimitConfig::default(),
+        };
+        *rl = onecrawl_cdp::RateLimitState::new(config);
+        serde_json::to_string(&onecrawl_cdp::rate_limiter::get_stats(&rl)).map_err(py_err)
+    }
+
+    /// Check if a request can proceed under rate limits.
+    fn rate_limit_can_proceed(&self) -> PyResult<bool> {
+        let rl = self.rate_limiter.lock().map_err(py_err)?;
+        Ok(onecrawl_cdp::rate_limiter::can_proceed(&rl))
+    }
+
+    /// Record a request. Returns True if allowed, False if throttled.
+    fn rate_limit_record(&self) -> PyResult<bool> {
+        let mut rl = self.rate_limiter.lock().map_err(py_err)?;
+        Ok(onecrawl_cdp::rate_limiter::record_request(&mut rl))
+    }
+
+    /// Get ms to wait before next allowed request.
+    fn rate_limit_wait(&self) -> PyResult<u64> {
+        let rl = self.rate_limiter.lock().map_err(py_err)?;
+        Ok(onecrawl_cdp::rate_limiter::wait_duration(&rl))
+    }
+
+    /// Get rate limiter statistics as JSON.
+    fn rate_limit_stats(&self) -> PyResult<String> {
+        let rl = self.rate_limiter.lock().map_err(py_err)?;
+        serde_json::to_string(&onecrawl_cdp::rate_limiter::get_stats(&rl)).map_err(py_err)
+    }
+
+    /// Reset rate limiter counters.
+    fn rate_limit_reset(&self) -> PyResult<()> {
+        let mut rl = self.rate_limiter.lock().map_err(py_err)?;
+        onecrawl_cdp::rate_limiter::reset(&mut rl);
+        Ok(())
+    }
+
+    /// List rate limiter presets as JSON map.
+    fn rate_limit_presets(&self) -> PyResult<String> {
+        serde_json::to_string(&onecrawl_cdp::rate_limiter::presets()).map_err(py_err)
+    }
+
+    // ──────────────── Retry Queue ────────────────
+
+    /// Enqueue a URL/operation for retry. Returns the item id.
+    #[pyo3(signature = (url, operation, payload=None))]
+    fn retry_enqueue(&self, url: &str, operation: &str, payload: Option<&str>) -> PyResult<String> {
+        let mut q = self.retry_queue.lock().map_err(py_err)?;
+        Ok(onecrawl_cdp::retry_queue::enqueue(&mut q, url, operation, payload))
+    }
+
+    /// Get the next item due for retry as JSON, or None.
+    fn retry_next(&self) -> PyResult<Option<String>> {
+        let mut q = self.retry_queue.lock().map_err(py_err)?;
+        match onecrawl_cdp::retry_queue::get_next(&mut q) {
+            Some(item) => Ok(Some(serde_json::to_string(item).map_err(py_err)?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Mark a retry item as successful.
+    fn retry_success(&self, id: &str) -> PyResult<()> {
+        let mut q = self.retry_queue.lock().map_err(py_err)?;
+        onecrawl_cdp::retry_queue::mark_success(&mut q, id);
+        Ok(())
+    }
+
+    /// Mark a retry item as failed.
+    fn retry_fail(&self, id: &str, error: &str) -> PyResult<()> {
+        let mut q = self.retry_queue.lock().map_err(py_err)?;
+        onecrawl_cdp::retry_queue::mark_failure(&mut q, id, error);
+        Ok(())
+    }
+
+    /// Get retry queue statistics as JSON.
+    fn retry_stats(&self) -> PyResult<String> {
+        let q = self.retry_queue.lock().map_err(py_err)?;
+        serde_json::to_string(&onecrawl_cdp::retry_queue::get_stats(&q)).map_err(py_err)
+    }
+
+    /// Clear completed items. Returns count removed.
+    fn retry_clear(&self) -> PyResult<usize> {
+        let mut q = self.retry_queue.lock().map_err(py_err)?;
+        Ok(onecrawl_cdp::retry_queue::clear_completed(&mut q))
+    }
+
+    /// Save the retry queue to a file.
+    fn retry_save(&self, path: &str) -> PyResult<()> {
+        let q = self.retry_queue.lock().map_err(py_err)?;
+        onecrawl_cdp::retry_queue::save_queue(&q, std::path::Path::new(path)).map_err(py_err)
+    }
+
+    /// Load the retry queue from a file.
+    fn retry_load(&self, path: &str) -> PyResult<()> {
+        let loaded =
+            onecrawl_cdp::retry_queue::load_queue(std::path::Path::new(path)).map_err(py_err)?;
+        let mut q = self.retry_queue.lock().map_err(py_err)?;
+        *q = loaded;
+        Ok(())
+    }
+
+    // ──────────────── Data Pipeline ────────────────
+
+    /// Execute a data pipeline. Accepts pipeline JSON and items JSON array.
+    fn pipeline_execute(&self, pipeline_json: &str, items_json: &str) -> PyResult<String> {
+        let pipeline: onecrawl_cdp::Pipeline = serde_json::from_str(pipeline_json)
+            .map_err(|e| py_err(format!("invalid pipeline JSON: {e}")))?;
+        let items: Vec<std::collections::HashMap<String, String>> =
+            serde_json::from_str(items_json)
+                .map_err(|e| py_err(format!("invalid items JSON: {e}")))?;
+        let result = onecrawl_cdp::data_pipeline::execute_pipeline(&pipeline, items);
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Validate a pipeline configuration. Returns JSON array of error strings.
+    fn pipeline_validate(&self, pipeline_json: &str) -> PyResult<String> {
+        let pipeline: onecrawl_cdp::Pipeline = serde_json::from_str(pipeline_json)
+            .map_err(|e| py_err(format!("invalid pipeline JSON: {e}")))?;
+        let errors = onecrawl_cdp::data_pipeline::validate_pipeline(&pipeline);
+        serde_json::to_string(&errors).map_err(py_err)
+    }
+
+    /// Save a pipeline definition to a JSON file.
+    fn pipeline_save(&self, pipeline_json: &str, path: &str) -> PyResult<()> {
+        let pipeline: onecrawl_cdp::Pipeline = serde_json::from_str(pipeline_json)
+            .map_err(|e| py_err(format!("invalid pipeline JSON: {e}")))?;
+        onecrawl_cdp::data_pipeline::save_pipeline(&pipeline, std::path::Path::new(path))
+            .map_err(py_err)
+    }
+
+    /// Load a pipeline definition from a JSON file. Returns JSON string.
+    fn pipeline_load(&self, path: &str) -> PyResult<String> {
+        let pipeline =
+            onecrawl_cdp::data_pipeline::load_pipeline(std::path::Path::new(path)).map_err(py_err)?;
+        serde_json::to_string(&pipeline).map_err(py_err)
+    }
+
+    /// Export pipeline results to a file. Format: "json", "jsonl", or "csv".
+    #[pyo3(signature = (result_json, path, format=None))]
+    fn pipeline_export(
+        &self,
+        result_json: &str,
+        path: &str,
+        format: Option<&str>,
+    ) -> PyResult<usize> {
+        let result: onecrawl_cdp::PipelineResult = serde_json::from_str(result_json)
+            .map_err(|e| py_err(format!("invalid result JSON: {e}")))?;
+        let fmt = format.unwrap_or("json");
+        onecrawl_cdp::data_pipeline::export_processed(&result, std::path::Path::new(path), fmt)
+            .map_err(py_err)
+    }
+
+    // ──────────────── Structured Data ────────────────
+
+    /// Extract all structured data (JSON-LD, OG, Twitter, metadata). Returns JSON.
+    fn structured_extract_all(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let data = self
+            .rt
+            .block_on(onecrawl_cdp::structured_data::extract_all(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&data).map_err(py_err)
+    }
+
+    /// Extract JSON-LD from the current page. Returns JSON array.
+    fn structured_json_ld(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let data = self
+            .rt
+            .block_on(onecrawl_cdp::structured_data::extract_json_ld(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&data).map_err(py_err)
+    }
+
+    /// Extract OpenGraph metadata. Returns JSON.
+    fn structured_open_graph(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let data = self
+            .rt
+            .block_on(onecrawl_cdp::structured_data::extract_open_graph(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&data).map_err(py_err)
+    }
+
+    /// Extract Twitter Card metadata. Returns JSON.
+    fn structured_twitter_card(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let data = self
+            .rt
+            .block_on(onecrawl_cdp::structured_data::extract_twitter_card(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&data).map_err(py_err)
+    }
+
+    /// Extract page metadata. Returns JSON.
+    fn structured_metadata(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let data = self
+            .rt
+            .block_on(onecrawl_cdp::structured_data::extract_metadata(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&data).map_err(py_err)
+    }
+
+    /// Validate structured data completeness. Returns JSON array of warnings.
+    fn structured_validate(&self, data_json: &str) -> PyResult<String> {
+        let data: onecrawl_cdp::StructuredDataResult = serde_json::from_str(data_json)
+            .map_err(|e| py_err(format!("invalid data JSON: {e}")))?;
+        let warnings = onecrawl_cdp::structured_data::validate_schema(&data);
+        serde_json::to_string(&warnings).map_err(py_err)
     }
 }
 

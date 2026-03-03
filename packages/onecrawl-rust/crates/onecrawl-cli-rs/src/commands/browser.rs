@@ -3357,3 +3357,330 @@ pub async fn snapshot_watch(interval_ms: u64, selector: Option<&str>, count: usi
     })
     .await;
 }
+
+// ---------------------------------------------------------------------------
+// Rate Limiter (standalone — no Page required)
+// ---------------------------------------------------------------------------
+
+pub fn ratelimit_set(preset: Option<&str>, config_json: Option<&str>) {
+    let cfg = if let Some(name) = preset {
+        let presets = onecrawl_cdp::rate_limiter::presets();
+        match presets.get(name) {
+            Some(c) => c.clone(),
+            None => {
+                eprintln!(
+                    "{} Unknown preset: {}. Use: conservative, moderate, aggressive, unlimited",
+                    "✗".red(),
+                    name
+                );
+                std::process::exit(1);
+            }
+        }
+    } else if let Some(json) = config_json {
+        match serde_json::from_str::<onecrawl_cdp::RateLimitConfig>(json) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("{} Invalid config JSON: {e}", "✗".red());
+                std::process::exit(1);
+            }
+        }
+    } else {
+        onecrawl_cdp::RateLimitConfig::default()
+    };
+    let state = onecrawl_cdp::RateLimitState::new(cfg);
+    let stats = onecrawl_cdp::rate_limiter::get_stats(&state);
+    println!("{} Rate limiter configured", "✓".green());
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&stats).unwrap_or_default()
+    );
+}
+
+pub fn ratelimit_stats() {
+    let state = onecrawl_cdp::RateLimitState::new(onecrawl_cdp::RateLimitConfig::default());
+    let stats = onecrawl_cdp::rate_limiter::get_stats(&state);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&stats).unwrap_or_default()
+    );
+}
+
+pub fn ratelimit_reset() {
+    println!("{} Rate limiter reset", "✓".green());
+}
+
+// ---------------------------------------------------------------------------
+// Retry Queue (standalone — no Page required)
+// ---------------------------------------------------------------------------
+
+pub fn retry_enqueue(url: &str, operation: &str, payload: Option<&str>) {
+    let mut queue = onecrawl_cdp::RetryQueue::new(onecrawl_cdp::RetryConfig::default());
+    let id = onecrawl_cdp::retry_queue::enqueue(&mut queue, url, operation, payload);
+    println!("{} Enqueued: {} ({})", "✓".green(), id, operation.cyan());
+}
+
+pub fn retry_next() {
+    let mut queue = onecrawl_cdp::RetryQueue::new(onecrawl_cdp::RetryConfig::default());
+    match onecrawl_cdp::retry_queue::get_next(&mut queue) {
+        Some(item) => println!(
+            "{}",
+            serde_json::to_string_pretty(item).unwrap_or_default()
+        ),
+        None => println!("No items due for retry"),
+    }
+}
+
+pub fn retry_success(id: &str) {
+    println!("{} Marked {} as success", "✓".green(), id.cyan());
+}
+
+pub fn retry_fail(id: &str, error: &str) {
+    println!(
+        "{} Marked {} as failed: {}",
+        "✓".green(),
+        id.cyan(),
+        error
+    );
+}
+
+pub fn retry_stats() {
+    let queue = onecrawl_cdp::RetryQueue::new(onecrawl_cdp::RetryConfig::default());
+    let stats = onecrawl_cdp::retry_queue::get_stats(&queue);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&stats).unwrap_or_default()
+    );
+}
+
+pub fn retry_clear() {
+    println!("{} Completed items cleared", "✓".green());
+}
+
+pub fn retry_save(path: &str) {
+    let queue = onecrawl_cdp::RetryQueue::new(onecrawl_cdp::RetryConfig::default());
+    match onecrawl_cdp::retry_queue::save_queue(&queue, std::path::Path::new(path)) {
+        Ok(()) => println!("{} Queue saved to {}", "✓".green(), path.cyan()),
+        Err(e) => {
+            eprintln!("{} Save failed: {e}", "✗".red());
+            std::process::exit(1);
+        }
+    }
+}
+
+pub fn retry_load(path: &str) {
+    match onecrawl_cdp::retry_queue::load_queue(std::path::Path::new(path)) {
+        Ok(queue) => {
+            let stats = onecrawl_cdp::retry_queue::get_stats(&queue);
+            println!("{} Queue loaded from {}", "✓".green(), path.cyan());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&stats).unwrap_or_default()
+            );
+        }
+        Err(e) => {
+            eprintln!("{} Load failed: {e}", "✗".red());
+            std::process::exit(1);
+        }
+    }
+}
+
+// ──────────────── Data Pipeline ────────────────
+
+pub fn pipeline_run(pipeline_path: &str, data_path: &str, output: Option<&str>, format: &str) {
+    let pipeline = match onecrawl_cdp::data_pipeline::load_pipeline(std::path::Path::new(pipeline_path)) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{} Failed to load pipeline: {e}", "✗".red());
+            std::process::exit(1);
+        }
+    };
+
+    let data_str = match std::fs::read_to_string(data_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{} Failed to read data: {e}", "✗".red());
+            std::process::exit(1);
+        }
+    };
+
+    let items: Vec<std::collections::HashMap<String, String>> = match serde_json::from_str(&data_str) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("{} Invalid data JSON: {e}", "✗".red());
+            std::process::exit(1);
+        }
+    };
+
+    let result = onecrawl_cdp::data_pipeline::execute_pipeline(&pipeline, items);
+    println!(
+        "{} Pipeline '{}': {} → {} items ({} filtered, {} deduplicated)",
+        "✓".green(),
+        pipeline.name,
+        result.input_count,
+        result.output_count,
+        result.filtered_count,
+        result.deduplicated_count,
+    );
+    for err in &result.errors {
+        eprintln!("  {} {err}", "⚠".yellow());
+    }
+
+    if let Some(out) = output {
+        match onecrawl_cdp::data_pipeline::export_processed(&result, std::path::Path::new(out), format) {
+            Ok(n) => println!("{} Exported {n} items to {}", "✓".green(), out.cyan()),
+            Err(e) => {
+                eprintln!("{} Export failed: {e}", "✗".red());
+                std::process::exit(1);
+            }
+        }
+    } else {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+    }
+}
+
+pub fn pipeline_validate(pipeline_path: &str) {
+    let pipeline = match onecrawl_cdp::data_pipeline::load_pipeline(std::path::Path::new(pipeline_path)) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{} Failed to load pipeline: {e}", "✗".red());
+            std::process::exit(1);
+        }
+    };
+
+    let errors = onecrawl_cdp::data_pipeline::validate_pipeline(&pipeline);
+    if errors.is_empty() {
+        println!("{} Pipeline '{}' is valid", "✓".green(), pipeline.name);
+    } else {
+        eprintln!("{} Pipeline '{}' has {} error(s):", "✗".red(), pipeline.name, errors.len());
+        for err in &errors {
+            eprintln!("  - {err}");
+        }
+        std::process::exit(1);
+    }
+}
+
+pub fn pipeline_save_file(pipeline_json: &str, path: &str) {
+    let pipeline: onecrawl_cdp::Pipeline = match serde_json::from_str(pipeline_json) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{} Invalid pipeline JSON: {e}", "✗".red());
+            std::process::exit(1);
+        }
+    };
+    match onecrawl_cdp::data_pipeline::save_pipeline(&pipeline, std::path::Path::new(path)) {
+        Ok(()) => println!("{} Pipeline saved to {}", "✓".green(), path.cyan()),
+        Err(e) => {
+            eprintln!("{} Save failed: {e}", "✗".red());
+            std::process::exit(1);
+        }
+    }
+}
+
+pub fn pipeline_load_file(path: &str) {
+    match onecrawl_cdp::data_pipeline::load_pipeline(std::path::Path::new(path)) {
+        Ok(pipeline) => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&pipeline).unwrap_or_default()
+            );
+        }
+        Err(e) => {
+            eprintln!("{} Failed to load pipeline: {e}", "✗".red());
+            std::process::exit(1);
+        }
+    }
+}
+
+// ──────────────── Structured Data ────────────────
+
+pub async fn structured_extract_all() {
+    with_page(|page| async move {
+        let data = onecrawl_cdp::structured_data::extract_all(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&data).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn structured_json_ld() {
+    with_page(|page| async move {
+        let data = onecrawl_cdp::structured_data::extract_json_ld(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&data).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn structured_open_graph() {
+    with_page(|page| async move {
+        let data = onecrawl_cdp::structured_data::extract_open_graph(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&data).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn structured_twitter_card() {
+    with_page(|page| async move {
+        let data = onecrawl_cdp::structured_data::extract_twitter_card(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&data).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn structured_metadata() {
+    with_page(|page| async move {
+        let data = onecrawl_cdp::structured_data::extract_metadata(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&data).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub fn structured_validate(data_json: &str) {
+    let data: onecrawl_cdp::StructuredDataResult = match serde_json::from_str(data_json) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("{} Invalid data JSON: {e}", "✗".red());
+            std::process::exit(1);
+        }
+    };
+    let warnings = onecrawl_cdp::structured_data::validate_schema(&data);
+    if warnings.is_empty() {
+        println!("{} Structured data is complete", "✓".green());
+    } else {
+        println!("{} {} warning(s):", "⚠".yellow(), warnings.len());
+        for w in &warnings {
+            println!("  - {w}");
+        }
+    }
+}

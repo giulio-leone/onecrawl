@@ -555,6 +555,34 @@ enum Commands {
         #[command(subcommand)]
         action: HttpAction,
     },
+
+    // ── Rate Limiter ──────────────────────────────────────────────
+    /// Rate limiter for browser automation operations
+    Ratelimit {
+        #[command(subcommand)]
+        action: RateLimitAction,
+    },
+
+    // ── Retry Queue ───────────────────────────────────────────────
+    /// Retry queue for failed operations with exponential backoff
+    Retry {
+        #[command(subcommand)]
+        action: RetryAction,
+    },
+
+    // ── Data Pipeline ─────────────────────────────────────────────
+    /// Data processing pipeline for transforming and filtering scraped data
+    Pipeline {
+        #[command(subcommand)]
+        action: PipelineAction,
+    },
+
+    // ── Structured Data ───────────────────────────────────────────
+    /// Extract structured data (JSON-LD, OpenGraph, Twitter Card, metadata)
+    Structured {
+        #[command(subcommand)]
+        action: StructuredAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -648,6 +676,118 @@ enum HttpAction {
     Fetch {
         /// JSON HttpRequest object
         json: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum RateLimitAction {
+    /// Set rate limiter config (preset or JSON)
+    Set {
+        /// Preset name: conservative, moderate, aggressive, unlimited
+        #[arg(long)]
+        preset: Option<String>,
+        /// JSON config string (alternative to preset)
+        #[arg(long)]
+        config: Option<String>,
+    },
+    /// Show rate limiter statistics
+    Stats,
+    /// Reset rate limiter counters
+    Reset,
+}
+
+#[derive(Subcommand)]
+enum RetryAction {
+    /// Enqueue a URL/operation for retry
+    Enqueue {
+        /// Target URL
+        url: String,
+        /// Operation type (navigate, click, extract, submit, etc.)
+        operation: String,
+        /// Optional payload
+        #[arg(long)]
+        payload: Option<String>,
+    },
+    /// Get the next item due for retry
+    Next,
+    /// Mark an item as successful
+    Success {
+        /// Item id
+        id: String,
+    },
+    /// Mark an item as failed
+    Fail {
+        /// Item id
+        id: String,
+        /// Error message
+        error: String,
+    },
+    /// Show retry queue statistics
+    Stats,
+    /// Clear completed items
+    Clear,
+    /// Save queue to a file
+    Save {
+        /// Output file path (JSON)
+        path: String,
+    },
+    /// Load queue from a file
+    Load {
+        /// Input file path (JSON)
+        path: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum PipelineAction {
+    /// Run a pipeline on data
+    Run {
+        /// Path to pipeline definition JSON
+        pipeline_json: String,
+        /// Path to data JSON file (array of objects)
+        data_json: String,
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<String>,
+        /// Output format: json, jsonl, csv
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
+    /// Validate a pipeline definition
+    Validate {
+        /// Path to pipeline definition JSON
+        pipeline_json: String,
+    },
+    /// Save a pipeline definition to a file
+    Save {
+        /// Pipeline definition JSON (inline)
+        pipeline_json: String,
+        /// Output file path
+        path: String,
+    },
+    /// Load and display a pipeline from a file
+    Load {
+        /// Input file path
+        path: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum StructuredAction {
+    /// Extract all structured data from the current page
+    ExtractAll,
+    /// Extract JSON-LD from the current page
+    JsonLd,
+    /// Extract OpenGraph metadata from the current page
+    OpenGraph,
+    /// Extract Twitter Card metadata from the current page
+    TwitterCard,
+    /// Extract page metadata from the current page
+    Metadata,
+    /// Validate extracted structured data
+    Validate {
+        /// JSON string of StructuredDataResult
+        data_json: String,
     },
 }
 
@@ -2108,6 +2248,94 @@ async fn main() {
                 count,
             } => {
                 commands::browser::snapshot_watch(interval, selector.as_deref(), count).await;
+            }
+        },
+
+        // ── Rate Limiter ──────────────────────────────────────────────
+        Commands::Ratelimit { action } => match action {
+            RateLimitAction::Set { preset, config } => {
+                commands::browser::ratelimit_set(preset.as_deref(), config.as_deref());
+            }
+            RateLimitAction::Stats => {
+                commands::browser::ratelimit_stats();
+            }
+            RateLimitAction::Reset => {
+                commands::browser::ratelimit_reset();
+            }
+        },
+
+        // ── Retry Queue ───────────────────────────────────────────────
+        Commands::Retry { action } => match action {
+            RetryAction::Enqueue {
+                url,
+                operation,
+                payload,
+            } => {
+                commands::browser::retry_enqueue(&url, &operation, payload.as_deref());
+            }
+            RetryAction::Next => {
+                commands::browser::retry_next();
+            }
+            RetryAction::Success { id } => {
+                commands::browser::retry_success(&id);
+            }
+            RetryAction::Fail { id, error } => {
+                commands::browser::retry_fail(&id, &error);
+            }
+            RetryAction::Stats => {
+                commands::browser::retry_stats();
+            }
+            RetryAction::Clear => {
+                commands::browser::retry_clear();
+            }
+            RetryAction::Save { path } => {
+                commands::browser::retry_save(&path);
+            }
+            RetryAction::Load { path } => {
+                commands::browser::retry_load(&path);
+            }
+        },
+
+        // ── Data Pipeline ────────────────────────────────────────────
+        Commands::Pipeline { action } => match action {
+            PipelineAction::Run {
+                pipeline_json,
+                data_json,
+                output,
+                format,
+            } => {
+                commands::browser::pipeline_run(&pipeline_json, &data_json, output.as_deref(), &format);
+            }
+            PipelineAction::Validate { pipeline_json } => {
+                commands::browser::pipeline_validate(&pipeline_json);
+            }
+            PipelineAction::Save { pipeline_json, path } => {
+                commands::browser::pipeline_save_file(&pipeline_json, &path);
+            }
+            PipelineAction::Load { path } => {
+                commands::browser::pipeline_load_file(&path);
+            }
+        },
+
+        // ── Structured Data ──────────────────────────────────────────
+        Commands::Structured { action } => match action {
+            StructuredAction::ExtractAll => {
+                commands::browser::structured_extract_all().await;
+            }
+            StructuredAction::JsonLd => {
+                commands::browser::structured_json_ld().await;
+            }
+            StructuredAction::OpenGraph => {
+                commands::browser::structured_open_graph().await;
+            }
+            StructuredAction::TwitterCard => {
+                commands::browser::structured_twitter_card().await;
+            }
+            StructuredAction::Metadata => {
+                commands::browser::structured_metadata().await;
+            }
+            StructuredAction::Validate { data_json } => {
+                commands::browser::structured_validate(&data_json);
             }
         },
     }

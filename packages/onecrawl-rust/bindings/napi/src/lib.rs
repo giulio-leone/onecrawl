@@ -252,6 +252,8 @@ pub struct NativeBrowser {
     event_stream: Arc<TokioMutex<Option<onecrawl_cdp::EventStream>>>,
     har_recorder: Arc<TokioMutex<Option<onecrawl_cdp::HarRecorder>>>,
     ws_recorder: Arc<TokioMutex<Option<onecrawl_cdp::WsRecorder>>>,
+    rate_limiter: Arc<TokioMutex<onecrawl_cdp::RateLimitState>>,
+    retry_queue: Arc<TokioMutex<onecrawl_cdp::RetryQueue>>,
 }
 
 #[napi]
@@ -278,6 +280,12 @@ impl NativeBrowser {
             event_stream: Arc::new(TokioMutex::new(None)),
             har_recorder: Arc::new(TokioMutex::new(None)),
             ws_recorder: Arc::new(TokioMutex::new(None)),
+            rate_limiter: Arc::new(TokioMutex::new(
+                onecrawl_cdp::RateLimitState::new(onecrawl_cdp::RateLimitConfig::default()),
+            )),
+            retry_queue: Arc::new(TokioMutex::new(
+                onecrawl_cdp::RetryQueue::new(onecrawl_cdp::RetryConfig::default()),
+            )),
         })
     }
 
@@ -299,6 +307,12 @@ impl NativeBrowser {
             event_stream: Arc::new(TokioMutex::new(None)),
             har_recorder: Arc::new(TokioMutex::new(None)),
             ws_recorder: Arc::new(TokioMutex::new(None)),
+            rate_limiter: Arc::new(TokioMutex::new(
+                onecrawl_cdp::RateLimitState::new(onecrawl_cdp::RateLimitConfig::default()),
+            )),
+            retry_queue: Arc::new(TokioMutex::new(
+                onecrawl_cdp::RetryQueue::new(onecrawl_cdp::RetryConfig::default()),
+            )),
         })
     }
 
@@ -3192,6 +3206,293 @@ impl NativeBrowser {
         .await
         .map_err(|e| Error::from_reason(e.to_string()))?;
         serde_json::to_string(&diffs).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Rate Limiter ────────────────
+
+    /// Set rate limiter config. Accepts optional JSON RateLimitConfig or a preset name.
+    #[napi(js_name = "rateLimitSet")]
+    pub async fn rate_limit_set(&self, config_or_preset: Option<String>) -> Result<String> {
+        let mut rl = self.rate_limiter.lock().await;
+        let config = match config_or_preset {
+            Some(s) => {
+                let presets = onecrawl_cdp::rate_limiter::presets();
+                if let Some(cfg) = presets.get(&s) {
+                    cfg.clone()
+                } else {
+                    serde_json::from_str(&s)
+                        .map_err(|e| Error::from_reason(format!("invalid config: {e}")))?
+                }
+            }
+            None => onecrawl_cdp::RateLimitConfig::default(),
+        };
+        *rl = onecrawl_cdp::RateLimitState::new(config);
+        serde_json::to_string(&onecrawl_cdp::rate_limiter::get_stats(&rl))
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Check if a request can proceed under rate limits.
+    #[napi(js_name = "rateLimitCanProceed")]
+    pub async fn rate_limit_can_proceed(&self) -> Result<bool> {
+        let rl = self.rate_limiter.lock().await;
+        Ok(onecrawl_cdp::rate_limiter::can_proceed(&rl))
+    }
+
+    /// Record a request. Returns true if allowed, false if throttled.
+    #[napi(js_name = "rateLimitRecord")]
+    pub async fn rate_limit_record(&self) -> Result<bool> {
+        let mut rl = self.rate_limiter.lock().await;
+        Ok(onecrawl_cdp::rate_limiter::record_request(&mut rl))
+    }
+
+    /// Get ms to wait before next request is allowed.
+    #[napi(js_name = "rateLimitWait")]
+    pub async fn rate_limit_wait(&self) -> Result<f64> {
+        let rl = self.rate_limiter.lock().await;
+        Ok(onecrawl_cdp::rate_limiter::wait_duration(&rl) as f64)
+    }
+
+    /// Get rate limiter statistics. Returns JSON.
+    #[napi(js_name = "rateLimitStats")]
+    pub async fn rate_limit_stats(&self) -> Result<String> {
+        let rl = self.rate_limiter.lock().await;
+        serde_json::to_string(&onecrawl_cdp::rate_limiter::get_stats(&rl))
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Reset rate limiter counters.
+    #[napi(js_name = "rateLimitReset")]
+    pub async fn rate_limit_reset(&self) -> Result<()> {
+        let mut rl = self.rate_limiter.lock().await;
+        onecrawl_cdp::rate_limiter::reset(&mut rl);
+        Ok(())
+    }
+
+    /// List rate limiter presets. Returns JSON map.
+    #[napi(js_name = "rateLimitPresets")]
+    pub fn rate_limit_presets(&self) -> Result<String> {
+        serde_json::to_string(&onecrawl_cdp::rate_limiter::presets())
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Retry Queue ────────────────
+
+    /// Enqueue a URL/operation for retry. Returns the item id.
+    #[napi(js_name = "retryEnqueue")]
+    pub async fn retry_enqueue(
+        &self,
+        url: String,
+        operation: String,
+        payload: Option<String>,
+    ) -> Result<String> {
+        let mut q = self.retry_queue.lock().await;
+        Ok(onecrawl_cdp::retry_queue::enqueue(
+            &mut q,
+            &url,
+            &operation,
+            payload.as_deref(),
+        ))
+    }
+
+    /// Get the next item due for retry. Returns JSON RetryItem or null.
+    #[napi(js_name = "retryNext")]
+    pub async fn retry_next(&self) -> Result<Option<String>> {
+        let mut q = self.retry_queue.lock().await;
+        match onecrawl_cdp::retry_queue::get_next(&mut q) {
+            Some(item) => {
+                let json = serde_json::to_string(item)
+                    .map_err(|e| Error::from_reason(e.to_string()))?;
+                Ok(Some(json))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Mark a retry item as successful.
+    #[napi(js_name = "retrySuccess")]
+    pub async fn retry_success(&self, id: String) -> Result<()> {
+        let mut q = self.retry_queue.lock().await;
+        onecrawl_cdp::retry_queue::mark_success(&mut q, &id);
+        Ok(())
+    }
+
+    /// Mark a retry item as failed. Schedules retry or moves to completed.
+    #[napi(js_name = "retryFail")]
+    pub async fn retry_fail(&self, id: String, error: String) -> Result<()> {
+        let mut q = self.retry_queue.lock().await;
+        onecrawl_cdp::retry_queue::mark_failure(&mut q, &id, &error);
+        Ok(())
+    }
+
+    /// Get retry queue statistics. Returns JSON.
+    #[napi(js_name = "retryStats")]
+    pub async fn retry_stats(&self) -> Result<String> {
+        let q = self.retry_queue.lock().await;
+        serde_json::to_string(&onecrawl_cdp::retry_queue::get_stats(&q))
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Clear completed items from the retry queue. Returns count of removed items.
+    #[napi(js_name = "retryClear")]
+    pub async fn retry_clear(&self) -> Result<u32> {
+        let mut q = self.retry_queue.lock().await;
+        Ok(onecrawl_cdp::retry_queue::clear_completed(&mut q) as u32)
+    }
+
+    /// Save the retry queue to a file.
+    #[napi(js_name = "retrySave")]
+    pub async fn retry_save(&self, path: String) -> Result<()> {
+        let q = self.retry_queue.lock().await;
+        onecrawl_cdp::retry_queue::save_queue(&q, std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Load the retry queue from a file.
+    #[napi(js_name = "retryLoad")]
+    pub async fn retry_load(&self, path: String) -> Result<()> {
+        let loaded = onecrawl_cdp::retry_queue::load_queue(std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let mut q = self.retry_queue.lock().await;
+        *q = loaded;
+        Ok(())
+    }
+
+    // ──────────────── Data Pipeline ────────────────
+
+    /// Execute a data pipeline. Accepts pipeline JSON and items JSON array.
+    /// Returns PipelineResult JSON.
+    #[napi(js_name = "pipelineExecute")]
+    pub fn pipeline_execute(&self, pipeline_json: String, items_json: String) -> Result<String> {
+        let pipeline: onecrawl_cdp::Pipeline = serde_json::from_str(&pipeline_json)
+            .map_err(|e| Error::from_reason(format!("invalid pipeline JSON: {e}")))?;
+        let items: Vec<std::collections::HashMap<String, String>> =
+            serde_json::from_str(&items_json)
+                .map_err(|e| Error::from_reason(format!("invalid items JSON: {e}")))?;
+        let result = onecrawl_cdp::data_pipeline::execute_pipeline(&pipeline, items);
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Validate a pipeline configuration. Returns JSON array of error strings.
+    #[napi(js_name = "pipelineValidate")]
+    pub fn pipeline_validate(&self, pipeline_json: String) -> Result<String> {
+        let pipeline: onecrawl_cdp::Pipeline = serde_json::from_str(&pipeline_json)
+            .map_err(|e| Error::from_reason(format!("invalid pipeline JSON: {e}")))?;
+        let errors = onecrawl_cdp::data_pipeline::validate_pipeline(&pipeline);
+        serde_json::to_string(&errors).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Save a pipeline definition to a JSON file.
+    #[napi(js_name = "pipelineSave")]
+    pub fn pipeline_save(&self, pipeline_json: String, path: String) -> Result<()> {
+        let pipeline: onecrawl_cdp::Pipeline = serde_json::from_str(&pipeline_json)
+            .map_err(|e| Error::from_reason(format!("invalid pipeline JSON: {e}")))?;
+        onecrawl_cdp::data_pipeline::save_pipeline(&pipeline, std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Load a pipeline definition from a JSON file. Returns JSON string.
+    #[napi(js_name = "pipelineLoad")]
+    pub fn pipeline_load(&self, path: String) -> Result<String> {
+        let pipeline = onecrawl_cdp::data_pipeline::load_pipeline(std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&pipeline).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Export pipeline results to a file. Format: "json", "jsonl", or "csv".
+    /// Returns the number of items written.
+    #[napi(js_name = "pipelineExport")]
+    pub fn pipeline_export(
+        &self,
+        result_json: String,
+        path: String,
+        format: Option<String>,
+    ) -> Result<u32> {
+        let result: onecrawl_cdp::PipelineResult = serde_json::from_str(&result_json)
+            .map_err(|e| Error::from_reason(format!("invalid result JSON: {e}")))?;
+        let fmt = format.as_deref().unwrap_or("json");
+        let count = onecrawl_cdp::data_pipeline::export_processed(
+            &result,
+            std::path::Path::new(&path),
+            fmt,
+        )
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(count as u32)
+    }
+
+    // ──────────────── Structured Data ────────────────
+
+    /// Extract all structured data (JSON-LD, OG, Twitter, metadata). Returns JSON.
+    #[napi(js_name = "structuredExtractAll")]
+    pub async fn structured_extract_all(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let data = onecrawl_cdp::structured_data::extract_all(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&data).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Extract JSON-LD from the current page. Returns JSON array.
+    #[napi(js_name = "structuredJsonLd")]
+    pub async fn structured_json_ld(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let data = onecrawl_cdp::structured_data::extract_json_ld(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&data).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Extract OpenGraph metadata. Returns JSON.
+    #[napi(js_name = "structuredOpenGraph")]
+    pub async fn structured_open_graph(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let data = onecrawl_cdp::structured_data::extract_open_graph(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&data).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Extract Twitter Card metadata. Returns JSON.
+    #[napi(js_name = "structuredTwitterCard")]
+    pub async fn structured_twitter_card(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let data = onecrawl_cdp::structured_data::extract_twitter_card(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&data).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Extract page metadata (title, description, canonical, etc). Returns JSON.
+    #[napi(js_name = "structuredMetadata")]
+    pub async fn structured_metadata(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let data = onecrawl_cdp::structured_data::extract_metadata(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&data).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Validate structured data completeness. Returns JSON array of warnings.
+    #[napi(js_name = "structuredValidate")]
+    pub fn structured_validate(&self, data_json: String) -> Result<String> {
+        let data: onecrawl_cdp::StructuredDataResult = serde_json::from_str(&data_json)
+            .map_err(|e| Error::from_reason(format!("invalid data JSON: {e}")))?;
+        let warnings = onecrawl_cdp::structured_data::validate_schema(&data);
+        serde_json::to_string(&warnings).map_err(|e| Error::from_reason(e.to_string()))
     }
 }
 
