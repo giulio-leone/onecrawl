@@ -15,6 +15,13 @@ export {
 } from "./cookies.js";
 
 export {
+  AuthCascade,
+  type AuthMethod,
+  type AuthResult,
+  type AuthCascadeOptions,
+} from "./auth-cascade.js";
+
+export {
   StaticProxyPool,
   RotatingProxyService,
   proxyToUrl,
