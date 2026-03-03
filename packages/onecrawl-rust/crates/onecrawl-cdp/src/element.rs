@@ -86,3 +86,82 @@ pub async fn evaluate(page: &Page, expression: &str) -> Result<serde_json::Value
         .map_err(|e| Error::Browser(format!("parse result failed: {e}")))?;
     Ok(result)
 }
+
+/// Double-click an element by CSS selector.
+pub async fn double_click(page: &Page, selector: &str) -> Result<()> {
+    page.evaluate(format!(
+        "(() => {{ const el = document.querySelector('{}'); \
+         if (!el) throw new Error('not found'); \
+         el.dispatchEvent(new MouseEvent('dblclick', {{bubbles: true}})); \
+         }})()",
+        selector.replace('\'', "\\'")
+    ))
+    .await
+    .map_err(|e| Error::Browser(format!("double_click failed: {e}")))?;
+    Ok(())
+}
+
+/// Check a checkbox element (sets `checked = true`).
+pub async fn check(page: &Page, selector: &str) -> Result<()> {
+    page.evaluate(format!(
+        "(() => {{ const el = document.querySelector('{}'); \
+         if (!el) throw new Error('not found'); \
+         if (!el.checked) {{ el.checked = true; \
+         el.dispatchEvent(new Event('change', {{bubbles: true}})); }} \
+         }})()",
+        selector.replace('\'', "\\'")
+    ))
+    .await
+    .map_err(|e| Error::Browser(format!("check failed: {e}")))?;
+    Ok(())
+}
+
+/// Uncheck a checkbox element (sets `checked = false`).
+pub async fn uncheck(page: &Page, selector: &str) -> Result<()> {
+    page.evaluate(format!(
+        "(() => {{ const el = document.querySelector('{}'); \
+         if (!el) throw new Error('not found'); \
+         if (el.checked) {{ el.checked = false; \
+         el.dispatchEvent(new Event('change', {{bubbles: true}})); }} \
+         }})()",
+        selector.replace('\'', "\\'")
+    ))
+    .await
+    .map_err(|e| Error::Browser(format!("uncheck failed: {e}")))?;
+    Ok(())
+}
+
+/// Get the value of an attribute on an element.
+pub async fn get_attribute(page: &Page, selector: &str, attribute: &str) -> Result<Option<String>> {
+    let val = page
+        .evaluate(format!(
+            "document.querySelector('{}')?.getAttribute('{}')",
+            selector.replace('\'', "\\'"),
+            attribute.replace('\'', "\\'")
+        ))
+        .await
+        .map_err(|e| Error::Browser(format!("get_attribute failed: {e}")))?
+        .into_value::<serde_json::Value>()
+        .map_err(|e| Error::Browser(format!("parse attribute failed: {e}")))?;
+    match val {
+        serde_json::Value::String(s) => Ok(Some(s)),
+        serde_json::Value::Null => Ok(None),
+        other => Ok(Some(other.to_string())),
+    }
+}
+
+/// Select an option in a `<select>` element by its value attribute.
+pub async fn select_option(page: &Page, selector: &str, value: &str) -> Result<()> {
+    page.evaluate(format!(
+        "(() => {{ const el = document.querySelector('{}'); \
+         if (!el) throw new Error('not found'); \
+         el.value = '{}'; \
+         el.dispatchEvent(new Event('change', {{bubbles: true}})); \
+         }})()",
+        selector.replace('\'', "\\'"),
+        value.replace('\'', "\\'")
+    ))
+    .await
+    .map_err(|e| Error::Browser(format!("select_option failed: {e}")))?;
+    Ok(())
+}
