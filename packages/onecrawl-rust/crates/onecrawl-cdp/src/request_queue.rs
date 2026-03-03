@@ -54,7 +54,8 @@ impl Default for QueueConfig {
 pub async fn execute_request(page: &Page, request: &QueuedRequest) -> Result<RequestResult> {
     let req_json = serde_json::to_string(request)
         .map_err(|e| Error::Browser(format!("serialize request failed: {e}")))?;
-    let js = format!(r#"
+    let js = format!(
+        r#"
         (async () => {{
             const req = {req_json};
             let lastError = null;
@@ -114,14 +115,15 @@ pub async fn execute_request(page: &Page, request: &QueuedRequest) -> Result<Req
                 error: lastError
             }};
         }})()
-    "#);
-    let val = page.evaluate(js)
+    "#
+    );
+    let val = page
+        .evaluate(js)
         .await
         .map_err(|e| Error::Browser(format!("execute_request failed: {e}")))?;
-    let result: RequestResult = serde_json::from_value(
-        val.into_value().unwrap_or(serde_json::json!({})),
-    )
-    .map_err(|e| Error::Browser(format!("parse request result failed: {e}")))?;
+    let result: RequestResult =
+        serde_json::from_value(val.into_value().unwrap_or(serde_json::json!({})))
+            .map_err(|e| Error::Browser(format!("parse request result failed: {e}")))?;
     Ok(result)
 }
 
@@ -136,7 +138,8 @@ pub async fn execute_batch(
     let concurrency = config.concurrency;
     let delay = config.delay_between_ms;
 
-    let js = format!(r#"
+    let js = format!(
+        r#"
         (async () => {{
             const reqs = {reqs_json};
             const concurrency = {concurrency};
@@ -217,14 +220,15 @@ pub async fn execute_batch(
 
             return results;
         }})()
-    "#);
-    let val = page.evaluate(js)
+    "#
+    );
+    let val = page
+        .evaluate(js)
         .await
         .map_err(|e| Error::Browser(format!("execute_batch failed: {e}")))?;
-    let results: Vec<RequestResult> = serde_json::from_value(
-        val.into_value().unwrap_or(serde_json::json!([])),
-    )
-    .map_err(|e| Error::Browser(format!("parse batch results failed: {e}")))?;
+    let results: Vec<RequestResult> =
+        serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))
+            .map_err(|e| Error::Browser(format!("parse batch results failed: {e}")))?;
     Ok(results)
 }
 

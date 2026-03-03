@@ -30,11 +30,7 @@ const USER_AGENTS: &[&str] = &[
 ];
 
 #[allow(dead_code)]
-const PLATFORMS: &[&str] = &[
-    "Win32",
-    "MacIntel",
-    "Linux x86_64",
-];
+const PLATFORMS: &[&str] = &["Win32", "MacIntel", "Linux x86_64"];
 
 const VIEWPORTS: &[(u32, u32)] = &[
     (1920, 1080),
@@ -69,11 +65,26 @@ const TIMEZONES: &[&str] = &[
 
 const WEBGL_CONFIGS: &[(&str, &str)] = &[
     ("Intel Inc.", "Intel Iris OpenGL Engine"),
-    ("Intel Inc.", "ANGLE (Intel, Intel(R) UHD Graphics 630, OpenGL 4.1)"),
-    ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce GTX 1650, OpenGL 4.5)"),
-    ("Google Inc. (NVIDIA)", "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060, OpenGL 4.5)"),
-    ("Google Inc. (AMD)", "ANGLE (AMD, AMD Radeon Pro 5500M, OpenGL 4.1)"),
-    ("Google Inc. (Intel)", "ANGLE (Intel, Intel(R) UHD Graphics, OpenGL 4.1)"),
+    (
+        "Intel Inc.",
+        "ANGLE (Intel, Intel(R) UHD Graphics 630, OpenGL 4.1)",
+    ),
+    (
+        "Google Inc. (NVIDIA)",
+        "ANGLE (NVIDIA, NVIDIA GeForce GTX 1650, OpenGL 4.5)",
+    ),
+    (
+        "Google Inc. (NVIDIA)",
+        "ANGLE (NVIDIA, NVIDIA GeForce RTX 3060, OpenGL 4.5)",
+    ),
+    (
+        "Google Inc. (AMD)",
+        "ANGLE (AMD, AMD Radeon Pro 5500M, OpenGL 4.1)",
+    ),
+    (
+        "Google Inc. (Intel)",
+        "ANGLE (Intel, Intel(R) UHD Graphics, OpenGL 4.1)",
+    ),
 ];
 
 const HARDWARE_CONCURRENCY: &[u32] = &[4, 6, 8, 12, 16];

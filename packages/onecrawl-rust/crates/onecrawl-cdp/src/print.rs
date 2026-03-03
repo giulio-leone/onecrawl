@@ -49,8 +49,7 @@ impl Default for DetailedPdfOptions {
 
 /// Generate PDF with detailed options.
 pub async fn print_to_pdf(page: &Page, options: &DetailedPdfOptions) -> Result<Vec<u8>> {
-    let mut builder =
-        chromiumoxide::cdp::browser_protocol::page::PrintToPdfParams::builder();
+    let mut builder = chromiumoxide::cdp::browser_protocol::page::PrintToPdfParams::builder();
 
     if let Some(v) = options.landscape {
         builder = builder.landscape(v);

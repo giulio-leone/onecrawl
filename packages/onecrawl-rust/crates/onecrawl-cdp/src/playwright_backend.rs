@@ -37,15 +37,9 @@ impl PlaywrightSession {
         let options = LaunchOptions::new().headless(headless);
 
         let browser = match engine {
-            BrowserEngine::Chromium => {
-                playwright.chromium().launch_with_options(options).await?
-            }
-            BrowserEngine::Firefox => {
-                playwright.firefox().launch_with_options(options).await?
-            }
-            BrowserEngine::Webkit => {
-                playwright.webkit().launch_with_options(options).await?
-            }
+            BrowserEngine::Chromium => playwright.chromium().launch_with_options(options).await?,
+            BrowserEngine::Firefox => playwright.firefox().launch_with_options(options).await?,
+            BrowserEngine::Webkit => playwright.webkit().launch_with_options(options).await?,
         };
 
         let page = browser.new_page().await?;

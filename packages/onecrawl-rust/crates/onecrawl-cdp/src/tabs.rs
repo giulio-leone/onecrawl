@@ -1,5 +1,5 @@
-use chromiumoxide::browser::Browser as CrBrowser;
 use chromiumoxide::Page;
+use chromiumoxide::browser::Browser as CrBrowser;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -19,12 +19,7 @@ pub async fn list_tabs(browser: &CrBrowser) -> Result<Vec<TabInfo>> {
         .map_err(|e| Error::Browser(format!("list_tabs failed: {e}")))?;
     let mut tabs = Vec::new();
     for (i, page) in pages.iter().enumerate() {
-        let url = page
-            .url()
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_default();
+        let url = page.url().await.ok().flatten().unwrap_or_default();
         let title: String = page
             .evaluate("document.title")
             .await

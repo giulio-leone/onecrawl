@@ -1,7 +1,7 @@
 //! Retry logic for storage operations.
 
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 
 /// Retry a fallible operation with exponential backoff.
 pub fn retry_with_backoff<T, E, F>(

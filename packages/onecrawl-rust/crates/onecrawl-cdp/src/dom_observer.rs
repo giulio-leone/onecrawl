@@ -91,10 +91,7 @@ pub async fn drain_dom_mutations(page: &Page) -> Result<Vec<DomMutation>> {
         .await
         .map_err(|e| onecrawl_core::Error::Browser(format!("drain_dom_mutations failed: {e}")))?;
 
-    let mutations: Vec<DomMutation> = match result.into_value() {
-        Ok(v) => v,
-        Err(_) => Vec::new(),
-    };
+    let mutations: Vec<DomMutation> = result.into_value().unwrap_or_default();
 
     Ok(mutations)
 }

@@ -140,9 +140,7 @@ impl PlaywrightBridge {
     /// Gracefully shut down the bridge process.
     pub async fn shutdown(mut self) -> Result<()> {
         // Send a shutdown command
-        let _ = self
-            .execute("shutdown", serde_json::Value::Null)
-            .await;
+        let _ = self.execute("shutdown", serde_json::Value::Null).await;
         let _ = self.child.kill().await;
         Ok(())
     }

@@ -86,20 +86,20 @@ pub async fn handle(action: SessionAction) {
             connect,
             background: _,
         } => {
-            if Path::new(SESSION_FILE).exists() {
-                if let Some(info) = load_session() {
-                    // Check if session is still alive
-                    if BrowserSession::connect(&info.ws_url).await.is_ok() {
-                        eprintln!(
-                            "{} Session already active at {}",
-                            "⚠".yellow(),
-                            info.ws_url.cyan()
-                        );
-                        return;
-                    }
-                    // Stale session file, clean up
-                    remove_session();
+            if Path::new(SESSION_FILE).exists()
+                && let Some(info) = load_session()
+            {
+                // Check if session is still alive
+                if BrowserSession::connect(&info.ws_url).await.is_ok() {
+                    eprintln!(
+                        "{} Session already active at {}",
+                        "⚠".yellow(),
+                        info.ws_url.cyan()
+                    );
+                    return;
                 }
+                // Stale session file, clean up
+                remove_session();
             }
 
             let result = if let Some(ref url) = connect {
@@ -129,10 +129,7 @@ pub async fn handle(action: SessionAction) {
                     println!("  File: {}", SESSION_FILE.dimmed());
 
                     // Keep the session alive — wait for Ctrl+C
-                    println!(
-                        "  {}",
-                        "Press Ctrl+C to stop the browser.".dimmed()
-                    );
+                    println!("  {}", "Press Ctrl+C to stop the browser.".dimmed());
                     tokio::signal::ctrl_c().await.ok();
                     println!("\n{} Shutting down...", "→".blue());
                     remove_session();

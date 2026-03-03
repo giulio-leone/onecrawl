@@ -1,7 +1,7 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 use onecrawl_core::{EncryptedPayload, Error, Result};
 use rand::RngCore;
-use ring::aead::{self, Aad, BoundKey, Nonce, NonceSequence, NONCE_LEN, UnboundKey};
+use ring::aead::{self, Aad, BoundKey, NONCE_LEN, Nonce, NonceSequence, UnboundKey};
 use zeroize::Zeroize;
 
 struct SingleNonce(Option<[u8; NONCE_LEN]>);

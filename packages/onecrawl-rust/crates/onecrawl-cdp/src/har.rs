@@ -35,6 +35,12 @@ pub struct HarRecorder {
     entries: Arc<Mutex<Vec<HarEntry>>>,
 }
 
+impl Default for HarRecorder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HarRecorder {
     pub fn new() -> Self {
         Self {
@@ -55,6 +61,11 @@ impl HarRecorder {
     /// Number of recorded entries.
     pub async fn len(&self) -> usize {
         self.entries.lock().await.len()
+    }
+
+    /// Returns true if no entries have been recorded.
+    pub async fn is_empty(&self) -> bool {
+        self.entries.lock().await.is_empty()
     }
 }
 
@@ -117,7 +128,8 @@ pub async fn start_har_recording(page: &Page, recorder: &HarRecorder) -> Result<
         })()
     "#;
 
-    let result = page.evaluate(existing_js)
+    let result = page
+        .evaluate(existing_js)
         .await
         .map_err(|e| Error::Browser(format!("get existing entries: {e}")))?;
 
@@ -165,41 +177,44 @@ pub async fn drain_har_entries(page: &Page, recorder: &HarRecorder) -> Result<us
 pub async fn export_har(recorder: &HarRecorder, page_url: &str) -> Result<serde_json::Value> {
     let entries = recorder.entries.lock().await;
 
-    let har_entries: Vec<serde_json::Value> = entries.iter().map(|e| {
-        serde_json::json!({
-            "startedDateTime": format!("{}Z", chrono_like_timestamp(e.started)),
-            "time": e.duration_ms,
-            "request": {
-                "method": e.method,
-                "url": e.url,
-                "httpVersion": e.protocol,
-                "headers": e.request_headers,
-                "queryString": [],
-                "headersSize": -1,
-                "bodySize": e.request_body_size,
-            },
-            "response": {
-                "status": e.status,
-                "statusText": e.status_text,
-                "httpVersion": e.protocol,
-                "headers": e.response_headers,
-                "content": {
-                    "size": e.response_body_size,
-                    "mimeType": e.mime_type,
+    let har_entries: Vec<serde_json::Value> = entries
+        .iter()
+        .map(|e| {
+            serde_json::json!({
+                "startedDateTime": format!("{}Z", chrono_like_timestamp(e.started)),
+                "time": e.duration_ms,
+                "request": {
+                    "method": e.method,
+                    "url": e.url,
+                    "httpVersion": e.protocol,
+                    "headers": e.request_headers,
+                    "queryString": [],
+                    "headersSize": -1,
+                    "bodySize": e.request_body_size,
                 },
-                "redirectURL": "",
-                "headersSize": -1,
-                "bodySize": e.response_body_size as i64,
-            },
-            "cache": {},
-            "timings": {
-                "send": 0,
-                "wait": e.duration_ms,
-                "receive": 0,
-            },
-            "serverIPAddress": e.remote_address,
+                "response": {
+                    "status": e.status,
+                    "statusText": e.status_text,
+                    "httpVersion": e.protocol,
+                    "headers": e.response_headers,
+                    "content": {
+                        "size": e.response_body_size,
+                        "mimeType": e.mime_type,
+                    },
+                    "redirectURL": "",
+                    "headersSize": -1,
+                    "bodySize": e.response_body_size as i64,
+                },
+                "cache": {},
+                "timings": {
+                    "send": 0,
+                    "wait": e.duration_ms,
+                    "receive": 0,
+                },
+                "serverIPAddress": e.remote_address,
+            })
         })
-    }).collect();
+        .collect();
 
     Ok(serde_json::json!({
         "log": {
@@ -233,7 +248,10 @@ fn perf_entry_to_har(entry: &serde_json::Value) -> HarEntry {
         response_body_size: entry["decodedBodySize"].as_f64().unwrap_or(0.0),
         started: entry["timestamp"].as_f64().unwrap_or(0.0),
         duration_ms: entry["duration"].as_f64().unwrap_or(0.0),
-        resource_type: entry["initiatorType"].as_str().unwrap_or("other").to_string(),
+        resource_type: entry["initiatorType"]
+            .as_str()
+            .unwrap_or("other")
+            .to_string(),
         from_cache: entry["transferSize"].as_f64().unwrap_or(0.0) == 0.0
             && entry["decodedBodySize"].as_f64().unwrap_or(0.0) > 0.0,
         remote_address: String::new(),

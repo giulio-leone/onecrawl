@@ -205,11 +205,9 @@ pub async fn get_virtual_credentials(page: &Page) -> Result<Vec<VirtualCredentia
         .evaluate("window.__onecrawl_webauthn?.credentials || []")
         .await
         .map_err(|e| onecrawl_core::Error::Browser(format!("get_virtual_credentials: {e}")))?;
-    let creds: Vec<VirtualCredential> = serde_json::from_value(
-        val.into_value()
-            .unwrap_or(serde_json::json!([])),
-    )
-    .unwrap_or_default();
+    let creds: Vec<VirtualCredential> =
+        serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))
+            .unwrap_or_default();
     Ok(creds)
 }
 
@@ -219,11 +217,9 @@ pub async fn get_webauthn_log(page: &Page) -> Result<Vec<serde_json::Value>> {
         .evaluate("window.__onecrawl_webauthn?.log || []")
         .await
         .map_err(|e| onecrawl_core::Error::Browser(format!("get_webauthn_log: {e}")))?;
-    let log: Vec<serde_json::Value> = serde_json::from_value(
-        val.into_value()
-            .unwrap_or(serde_json::json!([])),
-    )
-    .unwrap_or_default();
+    let log: Vec<serde_json::Value> =
+        serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))
+            .unwrap_or_default();
     Ok(log)
 }
 

@@ -65,13 +65,14 @@ impl Viewport {
 
 /// Set the viewport/device emulation.
 pub async fn set_viewport(page: &Page, viewport: &Viewport) -> Result<()> {
-    let params = chromiumoxide::cdp::browser_protocol::emulation::SetDeviceMetricsOverrideParams::builder()
-        .width(viewport.width as i64)
-        .height(viewport.height as i64)
-        .device_scale_factor(viewport.device_scale_factor)
-        .mobile(viewport.is_mobile)
-        .build()
-        .map_err(|e| Error::Browser(format!("SetDeviceMetricsOverride build: {e}")))?;
+    let params =
+        chromiumoxide::cdp::browser_protocol::emulation::SetDeviceMetricsOverrideParams::builder()
+            .width(viewport.width as i64)
+            .height(viewport.height as i64)
+            .device_scale_factor(viewport.device_scale_factor)
+            .mobile(viewport.is_mobile)
+            .build()
+            .map_err(|e| Error::Browser(format!("SetDeviceMetricsOverride build: {e}")))?;
 
     page.execute(params)
         .await
@@ -79,7 +80,9 @@ pub async fn set_viewport(page: &Page, viewport: &Viewport) -> Result<()> {
 
     if viewport.has_touch {
         let touch_params =
-            chromiumoxide::cdp::browser_protocol::emulation::SetTouchEmulationEnabledParams::new(true);
+            chromiumoxide::cdp::browser_protocol::emulation::SetTouchEmulationEnabledParams::new(
+                true,
+            );
         page.execute(touch_params)
             .await
             .map_err(|e| Error::Browser(format!("SetTouchEmulationEnabled failed: {e}")))?;
@@ -91,7 +94,8 @@ pub async fn set_viewport(page: &Page, viewport: &Viewport) -> Result<()> {
 /// Clear viewport override (revert to browser defaults).
 pub async fn clear_viewport(page: &Page) -> Result<()> {
     page.execute(
-        chromiumoxide::cdp::browser_protocol::emulation::ClearDeviceMetricsOverrideParams::default(),
+        chromiumoxide::cdp::browser_protocol::emulation::ClearDeviceMetricsOverrideParams::default(
+        ),
     )
     .await
     .map_err(|e| Error::Browser(format!("ClearDeviceMetricsOverride failed: {e}")))?;
@@ -100,10 +104,9 @@ pub async fn clear_viewport(page: &Page) -> Result<()> {
 
 /// Set user agent override.
 pub async fn set_user_agent(page: &Page, user_agent: &str) -> Result<()> {
-    let params =
-        chromiumoxide::cdp::browser_protocol::emulation::SetUserAgentOverrideParams::new(
-            user_agent,
-        );
+    let params = chromiumoxide::cdp::browser_protocol::emulation::SetUserAgentOverrideParams::new(
+        user_agent,
+    );
     page.execute(params)
         .await
         .map_err(|e| Error::Browser(format!("SetUserAgentOverride failed: {e}")))?;
@@ -111,12 +114,18 @@ pub async fn set_user_agent(page: &Page, user_agent: &str) -> Result<()> {
 }
 
 /// Set geolocation override.
-pub async fn set_geolocation(page: &Page, latitude: f64, longitude: f64, accuracy: f64) -> Result<()> {
-    let params = chromiumoxide::cdp::browser_protocol::emulation::SetGeolocationOverrideParams::builder()
-        .latitude(latitude)
-        .longitude(longitude)
-        .accuracy(accuracy)
-        .build();
+pub async fn set_geolocation(
+    page: &Page,
+    latitude: f64,
+    longitude: f64,
+    accuracy: f64,
+) -> Result<()> {
+    let params =
+        chromiumoxide::cdp::browser_protocol::emulation::SetGeolocationOverrideParams::builder()
+            .latitude(latitude)
+            .longitude(longitude)
+            .accuracy(accuracy)
+            .build();
 
     page.execute(params)
         .await
@@ -139,15 +148,12 @@ pub async fn set_timezone(page: &Page, timezone_id: &str) -> Result<()> {
 /// Emulate color scheme (dark/light).
 pub async fn set_color_scheme(page: &Page, scheme: &str) -> Result<()> {
     use chromiumoxide::cdp::browser_protocol::emulation::{MediaFeature, SetEmulatedMediaParams};
-    let features = vec![
-        MediaFeature {
-            name: "prefers-color-scheme".to_string(),
-            value: scheme.to_string(),
-        },
-    ];
-    let params: SetEmulatedMediaParams = SetEmulatedMediaParams::builder()
-        .features(features)
-        .build();
+    let features = vec![MediaFeature {
+        name: "prefers-color-scheme".to_string(),
+        value: scheme.to_string(),
+    }];
+    let params: SetEmulatedMediaParams =
+        SetEmulatedMediaParams::builder().features(features).build();
     page.execute(params)
         .await
         .map_err(|e| Error::Browser(format!("SetEmulatedMedia failed: {e}")))?;

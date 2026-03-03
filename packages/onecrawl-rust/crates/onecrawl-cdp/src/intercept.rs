@@ -128,9 +128,7 @@ pub async fn get_intercepted_requests(page: &Page) -> Result<Vec<serde_json::Val
     let val = page
         .evaluate("JSON.stringify(window.__onecrawl_intercepted_log || [])")
         .await
-        .map_err(|e| {
-            onecrawl_core::Error::Browser(format!("get_intercepted_requests: {e}"))
-        })?;
+        .map_err(|e| onecrawl_core::Error::Browser(format!("get_intercepted_requests: {e}")))?;
 
     let raw = val
         .into_value::<String>()

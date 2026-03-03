@@ -35,9 +35,7 @@ pub struct CoverageReport {
 
 /// Start JS code coverage collection via CDP Profiler.
 pub async fn start_js_coverage(page: &Page) -> Result<()> {
-    use chromiumoxide::cdp::js_protocol::profiler::{
-        EnableParams, StartPreciseCoverageParams,
-    };
+    use chromiumoxide::cdp::js_protocol::profiler::{EnableParams, StartPreciseCoverageParams};
 
     page.execute(EnableParams::default())
         .await
@@ -58,8 +56,8 @@ pub async fn start_js_coverage(page: &Page) -> Result<()> {
 /// Stop JS coverage and return the report.
 pub async fn stop_js_coverage(page: &Page) -> Result<CoverageReport> {
     use chromiumoxide::cdp::js_protocol::profiler::{
-        TakePreciseCoverageParams, TakePreciseCoverageReturns,
-        StopPreciseCoverageParams, DisableParams,
+        DisableParams, StopPreciseCoverageParams, TakePreciseCoverageParams,
+        TakePreciseCoverageReturns,
     };
 
     let resp = page
@@ -135,8 +133,8 @@ pub async fn stop_js_coverage(page: &Page) -> Result<CoverageReport> {
 
 /// Start CSS coverage collection.
 pub async fn start_css_coverage(page: &Page) -> Result<()> {
-    use chromiumoxide::cdp::browser_protocol::dom::EnableParams as DomEnableParams;
     use chromiumoxide::cdp::browser_protocol::css::EnableParams;
+    use chromiumoxide::cdp::browser_protocol::dom::EnableParams as DomEnableParams;
 
     page.execute(DomEnableParams::default())
         .await

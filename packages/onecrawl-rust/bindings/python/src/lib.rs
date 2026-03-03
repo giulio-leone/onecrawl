@@ -145,9 +145,8 @@ impl Store {
     /// Open (or create) an encrypted store at the given path.
     #[new]
     fn new(path: &str, password: &str) -> PyResult<Self> {
-        let store =
-            onecrawl_storage::EncryptedStore::open(std::path::Path::new(path), password)
-                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+        let store = onecrawl_storage::EncryptedStore::open(std::path::Path::new(path), password)
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         Ok(Self { inner: store })
     }
 
@@ -230,7 +229,9 @@ fn py_parse_network_profile(name: &str) -> PyResult<onecrawl_cdp::NetworkProfile
         "offline" => Ok(onecrawl_cdp::NetworkProfile::Offline),
         "regular4g" | "4g" => Ok(onecrawl_cdp::NetworkProfile::Regular4G),
         "wifi" => Ok(onecrawl_cdp::NetworkProfile::WiFi),
-        _ => Err(py_err(format!("Unknown profile: {name}. Use: fast3g, slow3g, offline, regular4g, wifi"))),
+        _ => Err(py_err(format!(
+            "Unknown profile: {name}. Use: fast3g, slow3g, offline, regular4g, wifi"
+        ))),
     }
 }
 
@@ -241,14 +242,18 @@ impl Browser {
     #[pyo3(signature = (headless=true))]
     fn launch(headless: bool) -> PyResult<Self> {
         let rt = tokio::runtime::Runtime::new().map_err(py_err)?;
-        let session = rt.block_on(async {
-            if headless {
-                onecrawl_cdp::BrowserSession::launch_headless().await
-            } else {
-                onecrawl_cdp::BrowserSession::launch_headed().await
-            }
-        }).map_err(py_err)?;
-        let page = rt.block_on(session.new_page("about:blank")).map_err(py_err)?;
+        let session = rt
+            .block_on(async {
+                if headless {
+                    onecrawl_cdp::BrowserSession::launch_headless().await
+                } else {
+                    onecrawl_cdp::BrowserSession::launch_headed().await
+                }
+            })
+            .map_err(py_err)?;
+        let page = rt
+            .block_on(session.new_page("about:blank"))
+            .map_err(py_err)?;
         Ok(Self {
             rt: Arc::new(rt),
             session: Arc::new(session),
@@ -263,8 +268,12 @@ impl Browser {
     #[staticmethod]
     fn connect(ws_url: &str) -> PyResult<Self> {
         let rt = tokio::runtime::Runtime::new().map_err(py_err)?;
-        let session = rt.block_on(onecrawl_cdp::BrowserSession::connect(ws_url)).map_err(py_err)?;
-        let page = rt.block_on(session.new_page("about:blank")).map_err(py_err)?;
+        let session = rt
+            .block_on(onecrawl_cdp::BrowserSession::connect(ws_url))
+            .map_err(py_err)?;
+        let page = rt
+            .block_on(session.new_page("about:blank"))
+            .map_err(py_err)?;
         Ok(Self {
             rt: Arc::new(rt),
             session: Arc::new(session),
@@ -279,70 +288,91 @@ impl Browser {
     fn goto(&self, url: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::navigation::goto(page, url)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::navigation::goto(page, url))
+            .map_err(py_err)
     }
 
     /// Get current URL.
     fn get_url(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::navigation::get_url(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::navigation::get_url(page))
+            .map_err(py_err)
     }
 
     /// Get page title.
     fn get_title(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::navigation::get_title(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::navigation::get_title(page))
+            .map_err(py_err)
     }
 
     /// Get page HTML content.
     fn content(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::page::get_content(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::page::get_content(page))
+            .map_err(py_err)
     }
 
     /// Set page HTML content.
     fn set_content(&self, html: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::page::set_content(page, html)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::page::set_content(page, html))
+            .map_err(py_err)
     }
 
     /// Take a viewport screenshot (PNG bytes).
     fn screenshot(&self) -> PyResult<Vec<u8>> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::screenshot::screenshot_viewport(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::screenshot::screenshot_viewport(page))
+            .map_err(py_err)
     }
 
     /// Take a full-page screenshot (PNG bytes).
     fn screenshot_full(&self) -> PyResult<Vec<u8>> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::screenshot::screenshot_full(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::screenshot::screenshot_full(page))
+            .map_err(py_err)
     }
 
     /// Screenshot a specific element by CSS selector.
     fn screenshot_element(&self, selector: &str) -> PyResult<Vec<u8>> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::screenshot::screenshot_element(page, selector)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::screenshot::screenshot_element(page, selector))
+            .map_err(py_err)
     }
 
     /// Save page as PDF (bytes).
     fn pdf(&self) -> PyResult<Vec<u8>> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::screenshot::pdf(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::screenshot::pdf(page))
+            .map_err(py_err)
     }
 
     /// Evaluate JavaScript. Returns JSON string.
     fn evaluate(&self, expression: &str) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let val = self.rt.block_on(onecrawl_cdp::page::evaluate_js(page, expression)).map_err(py_err)?;
+        let val = self
+            .rt
+            .block_on(onecrawl_cdp::page::evaluate_js(page, expression))
+            .map_err(py_err)?;
         Ok(val.to_string())
     }
 
@@ -350,70 +380,92 @@ impl Browser {
     fn click(&self, selector: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::element::click(page, selector)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::element::click(page, selector))
+            .map_err(py_err)
     }
 
     /// Double-click an element.
     fn double_click(&self, selector: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::element::double_click(page, selector)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::element::double_click(page, selector))
+            .map_err(py_err)
     }
 
     /// Type text into an element (key-by-key).
     fn type_text(&self, selector: &str, text: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::element::type_text(page, selector, text)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::element::type_text(page, selector, text))
+            .map_err(py_err)
     }
 
     /// Get text content of an element.
     fn get_text(&self, selector: &str) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::element::get_text(page, selector)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::element::get_text(page, selector))
+            .map_err(py_err)
     }
 
     /// Get attribute value from an element.
     fn get_attribute(&self, selector: &str, attribute: &str) -> PyResult<Option<String>> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::element::get_attribute(page, selector, attribute)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::element::get_attribute(
+                page, selector, attribute,
+            ))
+            .map_err(py_err)
     }
 
     /// Hover over an element.
     fn hover(&self, selector: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::element::hover(page, selector)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::element::hover(page, selector))
+            .map_err(py_err)
     }
 
     /// Scroll element into view.
     fn scroll_into_view(&self, selector: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::element::scroll_into_view(page, selector)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::element::scroll_into_view(page, selector))
+            .map_err(py_err)
     }
 
     /// Check a checkbox.
     fn check(&self, selector: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::element::check(page, selector)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::element::check(page, selector))
+            .map_err(py_err)
     }
 
     /// Uncheck a checkbox.
     fn uncheck(&self, selector: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::element::uncheck(page, selector)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::element::uncheck(page, selector))
+            .map_err(py_err)
     }
 
     /// Select an option in a `<select>` by value.
     fn select_option(&self, selector: &str, value: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::element::select_option(page, selector, value)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::element::select_option(page, selector, value))
+            .map_err(py_err)
     }
 
     /// Wait for a selector to appear (timeout in ms, default 30000).
@@ -421,7 +473,11 @@ impl Browser {
     fn wait_for_selector(&self, selector: &str, timeout_ms: u64) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::navigation::wait_for_selector(page, selector, timeout_ms)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::navigation::wait_for_selector(
+                page, selector, timeout_ms,
+            ))
+            .map_err(py_err)
     }
 
     /// Wait for URL to contain pattern (timeout in ms, default 30000).
@@ -429,28 +485,38 @@ impl Browser {
     fn wait_for_url(&self, pattern: &str, timeout_ms: u64) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::navigation::wait_for_url(page, pattern, timeout_ms)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::navigation::wait_for_url(
+                page, pattern, timeout_ms,
+            ))
+            .map_err(py_err)
     }
 
     /// Go back in history.
     fn go_back(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::navigation::go_back(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::navigation::go_back(page))
+            .map_err(py_err)
     }
 
     /// Go forward in history.
     fn go_forward(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::navigation::go_forward(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::navigation::go_forward(page))
+            .map_err(py_err)
     }
 
     /// Reload the page.
     fn reload(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::navigation::reload(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::navigation::reload(page))
+            .map_err(py_err)
     }
 
     /// Inject stealth anti-detection patches. Returns (platform, hw_concurrency, device_memory).
@@ -465,15 +531,20 @@ impl Browser {
                 .map_err(|e| py_err(format!("stealth injection failed: {e}")))?;
             Ok::<_, PyErr>(())
         })?;
-        Ok((fp.platform.clone(), fp.hardware_concurrency, fp.device_memory))
+        Ok((
+            fp.platform.clone(),
+            fp.hardware_concurrency,
+            fp.device_memory,
+        ))
     }
 
     /// Open a new page/tab and switch to it.
     #[pyo3(signature = (url=None))]
     fn new_page(&self, url: Option<&str>) -> PyResult<()> {
-        let new_page = self.rt.block_on(
-            self.session.new_page(url.unwrap_or("about:blank"))
-        ).map_err(py_err)?;
+        let new_page = self
+            .rt
+            .block_on(self.session.new_page(url.unwrap_or("about:blank")))
+            .map_err(py_err)?;
         let mut guard = self.page.lock().map_err(py_err)?;
         *guard = Some(new_page);
         Ok(())
@@ -498,7 +569,10 @@ impl Browser {
     fn get_cookies(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let cookies = self.rt.block_on(onecrawl_cdp::cookie::get_all_cookies(page)).map_err(py_err)?;
+        let cookies = self
+            .rt
+            .block_on(onecrawl_cdp::cookie::get_all_cookies(page))
+            .map_err(py_err)?;
         serde_json::to_string(&cookies).map_err(py_err)
     }
 
@@ -508,7 +582,9 @@ impl Browser {
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
         let params: onecrawl_cdp::SetCookieParams = serde_json::from_str(params_json)
             .map_err(|e| py_err(format!("invalid cookie params: {e}")))?;
-        self.rt.block_on(onecrawl_cdp::cookie::set_cookie(page, &params)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::cookie::set_cookie(page, &params))
+            .map_err(py_err)
     }
 
     /// Delete cookies by name (optional domain/path).
@@ -516,14 +592,20 @@ impl Browser {
     fn delete_cookies(&self, name: &str, domain: Option<&str>, path: Option<&str>) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::cookie::delete_cookies(page, name, domain, path)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::cookie::delete_cookies(
+                page, name, domain, path,
+            ))
+            .map_err(py_err)
     }
 
     /// Clear all browser cookies.
     fn clear_cookies(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::cookie::clear_cookies(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::cookie::clear_cookies(page))
+            .map_err(py_err)
     }
 
     // ──────────────── Keyboard ────────────────
@@ -532,35 +614,45 @@ impl Browser {
     fn press_key(&self, key: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::keyboard::press_key(page, key)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::keyboard::press_key(page, key))
+            .map_err(py_err)
     }
 
     /// Send a keyboard shortcut (e.g., "Control+a", "Meta+c").
     fn keyboard_shortcut(&self, shortcut: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::keyboard::keyboard_shortcut(page, shortcut)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::keyboard::keyboard_shortcut(page, shortcut))
+            .map_err(py_err)
     }
 
     /// Hold a key down.
     fn key_down(&self, key: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::keyboard::key_down(page, key)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::keyboard::key_down(page, key))
+            .map_err(py_err)
     }
 
     /// Release a key.
     fn key_up(&self, key: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::keyboard::key_up(page, key)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::keyboard::key_up(page, key))
+            .map_err(py_err)
     }
 
     /// Fill an input field (clear + set value + fire events).
     fn fill(&self, selector: &str, value: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::keyboard::fill(page, selector, value)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::keyboard::fill(page, selector, value))
+            .map_err(py_err)
     }
 
     // ──────────────── Advanced Input ────────────────
@@ -569,28 +661,40 @@ impl Browser {
     fn drag_and_drop(&self, source: &str, target: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::input::drag_and_drop(page, source, target)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::input::drag_and_drop(page, source, target))
+            .map_err(py_err)
     }
 
     /// Upload files to a `<input type="file">` element.
     fn upload_file(&self, selector: &str, file_paths: Vec<String>) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::input::set_file_input(page, selector, &file_paths)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::input::set_file_input(
+                page,
+                selector,
+                &file_paths,
+            ))
+            .map_err(py_err)
     }
 
     /// Get bounding box of an element. Returns (x, y, width, height).
     fn bounding_box(&self, selector: &str) -> PyResult<(f64, f64, f64, f64)> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::input::bounding_box(page, selector)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::input::bounding_box(page, selector))
+            .map_err(py_err)
     }
 
     /// Tap an element (touch simulation).
     fn tap(&self, selector: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::input::tap(page, selector)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::input::tap(page, selector))
+            .map_err(py_err)
     }
 
     // ──── Emulation ────
@@ -614,7 +718,9 @@ impl Browser {
             is_mobile: is_mobile.unwrap_or(false),
             has_touch: has_touch.unwrap_or(false),
         };
-        self.rt.block_on(onecrawl_cdp::emulation::set_viewport(page, &vp)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::emulation::set_viewport(page, &vp))
+            .map_err(py_err)
     }
 
     /// Set viewport from a device preset name.
@@ -628,36 +734,56 @@ impl Browser {
             "pixel7" | "pixel_7" | "pixel" => onecrawl_cdp::emulation::Viewport::pixel_7(),
             _ => return Err(py_err(format!("Unknown device: {device}"))),
         };
-        self.rt.block_on(onecrawl_cdp::emulation::set_viewport(page, &vp)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::emulation::set_viewport(page, &vp))
+            .map_err(py_err)
     }
 
     /// Clear viewport override.
     fn clear_viewport(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::emulation::clear_viewport(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::emulation::clear_viewport(page))
+            .map_err(py_err)
     }
 
     /// Override user agent string.
     fn set_user_agent(&self, user_agent: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::emulation::set_user_agent(page, user_agent)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::emulation::set_user_agent(page, user_agent))
+            .map_err(py_err)
     }
 
     /// Set geolocation override.
     #[pyo3(signature = (latitude, longitude, accuracy=None))]
-    fn set_geolocation(&self, latitude: f64, longitude: f64, accuracy: Option<f64>) -> PyResult<()> {
+    fn set_geolocation(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        accuracy: Option<f64>,
+    ) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::emulation::set_geolocation(page, latitude, longitude, accuracy.unwrap_or(1.0))).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::emulation::set_geolocation(
+                page,
+                latitude,
+                longitude,
+                accuracy.unwrap_or(1.0),
+            ))
+            .map_err(py_err)
     }
 
     /// Emulate color scheme preference (dark/light).
     fn set_color_scheme(&self, scheme: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::emulation::set_color_scheme(page, scheme)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::emulation::set_color_scheme(page, scheme))
+            .map_err(py_err)
     }
 
     // ──── Network (advanced) ────
@@ -671,7 +797,9 @@ impl Browser {
             .map(|s| serde_json::from_str(&format!("\"{}\"", s)))
             .collect::<std::result::Result<_, _>>()
             .map_err(|e| py_err(format!("Invalid resource type: {e}")))?;
-        self.rt.block_on(onecrawl_cdp::network::block_resources(page, &types)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::network::block_resources(page, &types))
+            .map_err(py_err)
     }
 
     // ──── Screenshot & PDF (with options) ────
@@ -696,7 +824,11 @@ impl Browser {
             quality,
             full_page: full_page.unwrap_or(false),
         };
-        self.rt.block_on(onecrawl_cdp::screenshot::screenshot_with_options(page, &opts)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::screenshot::screenshot_with_options(
+                page, &opts,
+            ))
+            .map_err(py_err)
     }
 
     /// Generate PDF with custom options.
@@ -716,7 +848,9 @@ impl Browser {
             paper_width: paper_width.unwrap_or(8.5),
             paper_height: paper_height.unwrap_or(11.0),
         };
-        self.rt.block_on(onecrawl_cdp::screenshot::pdf_with_options(page, &opts)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::screenshot::pdf_with_options(page, &opts))
+            .map_err(py_err)
     }
 
     // ──── Event Streaming ────
@@ -729,8 +863,12 @@ impl Browser {
         let stream = onecrawl_cdp::EventStream::new(256);
         let tx = stream.sender();
 
-        self.rt.block_on(onecrawl_cdp::events::observe_console(page, tx.clone())).map_err(py_err)?;
-        self.rt.block_on(onecrawl_cdp::events::observe_errors(page, tx.clone())).map_err(py_err)?;
+        self.rt
+            .block_on(onecrawl_cdp::events::observe_console(page, tx.clone()))
+            .map_err(py_err)?;
+        self.rt
+            .block_on(onecrawl_cdp::events::observe_errors(page, tx.clone()))
+            .map_err(py_err)?;
 
         let mut es = self.event_stream.lock().map_err(py_err)?;
         *es = Some(stream);
@@ -743,26 +881,37 @@ impl Browser {
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
 
         let es = self.event_stream.lock().map_err(py_err)?;
-        let stream = es.as_ref().ok_or_else(|| py_err("event stream not started — call start_event_stream() first"))?;
+        let stream = es
+            .as_ref()
+            .ok_or_else(|| py_err("event stream not started — call start_event_stream() first"))?;
         let tx = stream.sender();
 
-        let console_count = self.rt.block_on(onecrawl_cdp::events::drain_console(page, &tx)).map_err(py_err)?;
-        let error_count = self.rt.block_on(onecrawl_cdp::events::drain_errors(page, &tx)).map_err(py_err)?;
+        let console_count = self
+            .rt
+            .block_on(onecrawl_cdp::events::drain_console(page, &tx))
+            .map_err(py_err)?;
+        let error_count = self
+            .rt
+            .block_on(onecrawl_cdp::events::drain_errors(page, &tx))
+            .map_err(py_err)?;
 
         Ok(serde_json::json!({
             "console_messages": console_count,
             "page_errors": error_count,
             "total": console_count + error_count,
-        }).to_string())
+        })
+        .to_string())
     }
 
     /// Emit a custom event into the stream.
     fn emit_event(&self, name: &str, data: &str) -> PyResult<()> {
         let es = self.event_stream.lock().map_err(py_err)?;
-        let stream = es.as_ref().ok_or_else(|| py_err("event stream not started"))?;
+        let stream = es
+            .as_ref()
+            .ok_or_else(|| py_err("event stream not started"))?;
         let tx = stream.sender();
-        let json_data: serde_json::Value = serde_json::from_str(data)
-            .unwrap_or(serde_json::Value::String(data.to_string()));
+        let json_data: serde_json::Value =
+            serde_json::from_str(data).unwrap_or(serde_json::Value::String(data.to_string()));
         onecrawl_cdp::events::emit_custom(&tx, name, json_data).map_err(py_err)
     }
 
@@ -773,7 +922,9 @@ impl Browser {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
         let recorder = onecrawl_cdp::HarRecorder::new();
-        self.rt.block_on(onecrawl_cdp::har::start_har_recording(page, &recorder)).map_err(py_err)?;
+        self.rt
+            .block_on(onecrawl_cdp::har::start_har_recording(page, &recorder))
+            .map_err(py_err)?;
         let mut hr = self.har_recorder.lock().map_err(py_err)?;
         *hr = Some(recorder);
         Ok(())
@@ -784,21 +935,33 @@ impl Browser {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
         let hr = self.har_recorder.lock().map_err(py_err)?;
-        let recorder = hr.as_ref().ok_or_else(|| py_err("HAR recording not started"))?;
-        self.rt.block_on(onecrawl_cdp::har::drain_har_entries(page, recorder)).map_err(py_err)
+        let recorder = hr
+            .as_ref()
+            .ok_or_else(|| py_err("HAR recording not started"))?;
+        self.rt
+            .block_on(onecrawl_cdp::har::drain_har_entries(page, recorder))
+            .map_err(py_err)
     }
 
     /// Export all HAR entries as HAR 1.2 JSON string.
     fn export_har(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page_url = if let Some(page) = guard.as_ref() {
-            self.rt.block_on(page.url()).unwrap_or(None).unwrap_or_default()
+            self.rt
+                .block_on(page.url())
+                .unwrap_or(None)
+                .unwrap_or_default()
         } else {
             String::new()
         };
         let hr = self.har_recorder.lock().map_err(py_err)?;
-        let recorder = hr.as_ref().ok_or_else(|| py_err("HAR recording not started"))?;
-        let har = self.rt.block_on(onecrawl_cdp::har::export_har(recorder, &page_url)).map_err(py_err)?;
+        let recorder = hr
+            .as_ref()
+            .ok_or_else(|| py_err("HAR recording not started"))?;
+        let har = self
+            .rt
+            .block_on(onecrawl_cdp::har::export_har(recorder, &page_url))
+            .map_err(py_err)?;
         Ok(har.to_string())
     }
 
@@ -809,7 +972,9 @@ impl Browser {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
         let recorder = onecrawl_cdp::WsRecorder::new();
-        self.rt.block_on(onecrawl_cdp::websocket::start_ws_recording(page, &recorder)).map_err(py_err)?;
+        self.rt
+            .block_on(onecrawl_cdp::websocket::start_ws_recording(page, &recorder))
+            .map_err(py_err)?;
         let mut wr = self.ws_recorder.lock().map_err(py_err)?;
         *wr = Some(recorder);
         Ok(())
@@ -820,15 +985,24 @@ impl Browser {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
         let wr = self.ws_recorder.lock().map_err(py_err)?;
-        let recorder = wr.as_ref().ok_or_else(|| py_err("WS recording not started"))?;
-        self.rt.block_on(onecrawl_cdp::websocket::drain_ws_frames(page, recorder)).map_err(py_err)
+        let recorder = wr
+            .as_ref()
+            .ok_or_else(|| py_err("WS recording not started"))?;
+        self.rt
+            .block_on(onecrawl_cdp::websocket::drain_ws_frames(page, recorder))
+            .map_err(py_err)
     }
 
     /// Export all captured WebSocket frames as JSON string.
     fn export_ws_frames(&self) -> PyResult<String> {
         let wr = self.ws_recorder.lock().map_err(py_err)?;
-        let recorder = wr.as_ref().ok_or_else(|| py_err("WS recording not started"))?;
-        let frames = self.rt.block_on(onecrawl_cdp::websocket::export_ws_frames(recorder)).map_err(py_err)?;
+        let recorder = wr
+            .as_ref()
+            .ok_or_else(|| py_err("WS recording not started"))?;
+        let frames = self
+            .rt
+            .block_on(onecrawl_cdp::websocket::export_ws_frames(recorder))
+            .map_err(py_err)?;
         Ok(frames.to_string())
     }
 
@@ -836,7 +1010,9 @@ impl Browser {
     fn active_ws_connections(&self) -> PyResult<usize> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::websocket::active_ws_connections(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::websocket::active_ws_connections(page))
+            .map_err(py_err)
     }
 
     // ── Console Interception ──────────────────────────────────────
@@ -845,14 +1021,19 @@ impl Browser {
     fn start_console_capture(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::console::start_console_capture(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::console::start_console_capture(page))
+            .map_err(py_err)
     }
 
     /// Drain captured console entries as JSON string.
     fn drain_console_entries(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let entries = self.rt.block_on(onecrawl_cdp::console::drain_console_entries(page)).map_err(py_err)?;
+        let entries = self
+            .rt
+            .block_on(onecrawl_cdp::console::drain_console_entries(page))
+            .map_err(py_err)?;
         serde_json::to_string(&entries).map_err(py_err)
     }
 
@@ -860,7 +1041,9 @@ impl Browser {
     fn clear_console(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::console::clear_console(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::console::clear_console(page))
+            .map_err(py_err)
     }
 
     // ── Dialog Handling ───────────────────────────────────────────
@@ -870,14 +1053,23 @@ impl Browser {
     fn set_dialog_handler(&self, accept: bool, prompt_text: Option<&str>) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::dialog::set_dialog_handler(page, accept, prompt_text)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::dialog::set_dialog_handler(
+                page,
+                accept,
+                prompt_text,
+            ))
+            .map_err(py_err)
     }
 
     /// Get dialog history as JSON string.
     fn get_dialog_history(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let events = self.rt.block_on(onecrawl_cdp::dialog::get_dialog_history(page)).map_err(py_err)?;
+        let events = self
+            .rt
+            .block_on(onecrawl_cdp::dialog::get_dialog_history(page))
+            .map_err(py_err)?;
         serde_json::to_string(&events).map_err(py_err)
     }
 
@@ -885,7 +1077,9 @@ impl Browser {
     fn clear_dialog_history(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::dialog::clear_dialog_history(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::dialog::clear_dialog_history(page))
+            .map_err(py_err)
     }
 
     // ── Service Workers ───────────────────────────────────────────
@@ -894,7 +1088,10 @@ impl Browser {
     fn get_service_workers(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let workers = self.rt.block_on(onecrawl_cdp::workers::get_service_workers(page)).map_err(py_err)?;
+        let workers = self
+            .rt
+            .block_on(onecrawl_cdp::workers::get_service_workers(page))
+            .map_err(py_err)?;
         serde_json::to_string(&workers).map_err(py_err)
     }
 
@@ -902,14 +1099,19 @@ impl Browser {
     fn unregister_service_workers(&self) -> PyResult<usize> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::workers::unregister_service_workers(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::workers::unregister_service_workers(page))
+            .map_err(py_err)
     }
 
     /// Get worker info as JSON string.
     fn get_worker_info(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let info = self.rt.block_on(onecrawl_cdp::workers::get_worker_info(page)).map_err(py_err)?;
+        let info = self
+            .rt
+            .block_on(onecrawl_cdp::workers::get_worker_info(page))
+            .map_err(py_err)?;
         Ok(info.to_string())
     }
 
@@ -919,14 +1121,21 @@ impl Browser {
     fn start_dom_observer(&self, selector: Option<&str>) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::dom_observer::start_dom_observer(page, selector)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::dom_observer::start_dom_observer(
+                page, selector,
+            ))
+            .map_err(py_err)
     }
 
     /// Drain accumulated DOM mutations as JSON string.
     fn drain_dom_mutations(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let mutations = self.rt.block_on(onecrawl_cdp::dom_observer::drain_dom_mutations(page)).map_err(py_err)?;
+        let mutations = self
+            .rt
+            .block_on(onecrawl_cdp::dom_observer::drain_dom_mutations(page))
+            .map_err(py_err)?;
         serde_json::to_string(&mutations).map_err(py_err)
     }
 
@@ -934,14 +1143,18 @@ impl Browser {
     fn stop_dom_observer(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::dom_observer::stop_dom_observer(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::dom_observer::stop_dom_observer(page))
+            .map_err(py_err)
     }
 
     /// Get a snapshot of the current DOM as HTML string.
     fn get_dom_snapshot(&self, selector: Option<&str>) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::dom_observer::get_dom_snapshot(page, selector)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::dom_observer::get_dom_snapshot(page, selector))
+            .map_err(py_err)
     }
 
     // ── Iframe Management ─────────────────────────────────────────
@@ -950,7 +1163,10 @@ impl Browser {
     fn list_iframes(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let iframes = self.rt.block_on(onecrawl_cdp::iframe::list_iframes(page)).map_err(py_err)?;
+        let iframes = self
+            .rt
+            .block_on(onecrawl_cdp::iframe::list_iframes(page))
+            .map_err(py_err)?;
         serde_json::to_string(&iframes).map_err(py_err)
     }
 
@@ -958,7 +1174,12 @@ impl Browser {
     fn eval_in_iframe(&self, index: usize, expression: &str) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let val = self.rt.block_on(onecrawl_cdp::iframe::eval_in_iframe(page, index, expression)).map_err(py_err)?;
+        let val = self
+            .rt
+            .block_on(onecrawl_cdp::iframe::eval_in_iframe(
+                page, index, expression,
+            ))
+            .map_err(py_err)?;
         serde_json::to_string(&val).map_err(py_err)
     }
 
@@ -966,7 +1187,9 @@ impl Browser {
     fn get_iframe_content(&self, index: usize) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::iframe::get_iframe_content(page, index)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::iframe::get_iframe_content(page, index))
+            .map_err(py_err)
     }
 
     // ── Print / PDF (Enhanced) ────────────────────────────────────
@@ -979,14 +1202,19 @@ impl Browser {
             Some(json) => serde_json::from_str(json).map_err(py_err)?,
             None => Default::default(),
         };
-        self.rt.block_on(onecrawl_cdp::print::print_to_pdf(page, &opts)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::print::print_to_pdf(page, &opts))
+            .map_err(py_err)
     }
 
     /// Get page print preview metrics as JSON string.
     fn get_print_metrics(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let val = self.rt.block_on(onecrawl_cdp::print::get_print_metrics(page)).map_err(py_err)?;
+        let val = self
+            .rt
+            .block_on(onecrawl_cdp::print::get_print_metrics(page))
+            .map_err(py_err)?;
         serde_json::to_string(&val).map_err(py_err)
     }
 
@@ -996,7 +1224,10 @@ impl Browser {
     fn get_local_storage(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let data = self.rt.block_on(onecrawl_cdp::web_storage::get_local_storage(page)).map_err(py_err)?;
+        let data = self
+            .rt
+            .block_on(onecrawl_cdp::web_storage::get_local_storage(page))
+            .map_err(py_err)?;
         Ok(data.to_string())
     }
 
@@ -1004,21 +1235,30 @@ impl Browser {
     fn set_local_storage(&self, key: &str, value: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::web_storage::set_local_storage(page, key, value)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::web_storage::set_local_storage(
+                page, key, value,
+            ))
+            .map_err(py_err)
     }
 
     /// Clear all localStorage.
     fn clear_local_storage(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::web_storage::clear_local_storage(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::web_storage::clear_local_storage(page))
+            .map_err(py_err)
     }
 
     /// Get all sessionStorage contents as JSON string.
     fn get_session_storage(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let data = self.rt.block_on(onecrawl_cdp::web_storage::get_session_storage(page)).map_err(py_err)?;
+        let data = self
+            .rt
+            .block_on(onecrawl_cdp::web_storage::get_session_storage(page))
+            .map_err(py_err)?;
         Ok(data.to_string())
     }
 
@@ -1026,21 +1266,30 @@ impl Browser {
     fn set_session_storage(&self, key: &str, value: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::web_storage::set_session_storage(page, key, value)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::web_storage::set_session_storage(
+                page, key, value,
+            ))
+            .map_err(py_err)
     }
 
     /// Clear all sessionStorage.
     fn clear_session_storage(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::web_storage::clear_session_storage(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::web_storage::clear_session_storage(page))
+            .map_err(py_err)
     }
 
     /// Get IndexedDB database names as JSON string.
     fn get_indexeddb_databases(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let names = self.rt.block_on(onecrawl_cdp::web_storage::get_indexeddb_databases(page)).map_err(py_err)?;
+        let names = self
+            .rt
+            .block_on(onecrawl_cdp::web_storage::get_indexeddb_databases(page))
+            .map_err(py_err)?;
         serde_json::to_string(&names).map_err(py_err)
     }
 
@@ -1048,7 +1297,9 @@ impl Browser {
     fn clear_site_data(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::web_storage::clear_site_data(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::web_storage::clear_site_data(page))
+            .map_err(py_err)
     }
 
     // ── Code Coverage ──────────────────────────────────────────────
@@ -1057,14 +1308,19 @@ impl Browser {
     fn start_js_coverage(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::coverage::start_js_coverage(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::coverage::start_js_coverage(page))
+            .map_err(py_err)
     }
 
     /// Stop JavaScript code coverage and return the report as JSON string.
     fn stop_js_coverage(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let report = self.rt.block_on(onecrawl_cdp::coverage::stop_js_coverage(page)).map_err(py_err)?;
+        let report = self
+            .rt
+            .block_on(onecrawl_cdp::coverage::stop_js_coverage(page))
+            .map_err(py_err)?;
         serde_json::to_string(&report).map_err(py_err)
     }
 
@@ -1072,14 +1328,19 @@ impl Browser {
     fn start_css_coverage(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::coverage::start_css_coverage(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::coverage::start_css_coverage(page))
+            .map_err(py_err)
     }
 
     /// Get CSS coverage summary as JSON string.
     fn get_css_coverage(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let report = self.rt.block_on(onecrawl_cdp::coverage::get_css_coverage(page)).map_err(py_err)?;
+        let report = self
+            .rt
+            .block_on(onecrawl_cdp::coverage::get_css_coverage(page))
+            .map_err(py_err)?;
         Ok(report.to_string())
     }
 
@@ -1089,7 +1350,10 @@ impl Browser {
     fn get_accessibility_tree(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let result = self.rt.block_on(onecrawl_cdp::accessibility::get_accessibility_tree(page)).map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::accessibility::get_accessibility_tree(page))
+            .map_err(py_err)?;
         Ok(result.to_string())
     }
 
@@ -1097,7 +1361,12 @@ impl Browser {
     fn get_element_accessibility(&self, selector: &str) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let result = self.rt.block_on(onecrawl_cdp::accessibility::get_element_accessibility(page, selector)).map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::accessibility::get_element_accessibility(
+                page, selector,
+            ))
+            .map_err(py_err)?;
         Ok(result.to_string())
     }
 
@@ -1105,7 +1374,10 @@ impl Browser {
     fn audit_accessibility(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let result = self.rt.block_on(onecrawl_cdp::accessibility::audit_accessibility(page)).map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::accessibility::audit_accessibility(page))
+            .map_err(py_err)?;
         serde_json::to_string(&result).map_err(py_err)
     }
 
@@ -1116,22 +1388,39 @@ impl Browser {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
         let p = py_parse_network_profile(profile)?;
-        self.rt.block_on(onecrawl_cdp::throttle::set_network_conditions(page, p)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::throttle::set_network_conditions(page, p))
+            .map_err(py_err)
     }
 
     /// Set custom network throttling conditions.
-    fn set_network_throttle_custom(&self, download_kbps: f64, upload_kbps: f64, latency_ms: f64) -> PyResult<()> {
+    fn set_network_throttle_custom(
+        &self,
+        download_kbps: f64,
+        upload_kbps: f64,
+        latency_ms: f64,
+    ) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let profile = onecrawl_cdp::NetworkProfile::Custom { download_kbps, upload_kbps, latency_ms };
-        self.rt.block_on(onecrawl_cdp::throttle::set_network_conditions(page, profile)).map_err(py_err)
+        let profile = onecrawl_cdp::NetworkProfile::Custom {
+            download_kbps,
+            upload_kbps,
+            latency_ms,
+        };
+        self.rt
+            .block_on(onecrawl_cdp::throttle::set_network_conditions(
+                page, profile,
+            ))
+            .map_err(py_err)
     }
 
     /// Clear network throttling.
     fn clear_network_throttle(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::throttle::clear_network_conditions(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::throttle::clear_network_conditions(page))
+            .map_err(py_err)
     }
 
     // ── Performance Tracing ────────────────────────────────────────
@@ -1140,14 +1429,19 @@ impl Browser {
     fn start_tracing(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::tracing_cdp::start_tracing(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::tracing_cdp::start_tracing(page))
+            .map_err(py_err)
     }
 
     /// Stop tracing and return trace data as JSON.
     fn stop_tracing(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let result = self.rt.block_on(onecrawl_cdp::tracing_cdp::stop_tracing(page)).map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::tracing_cdp::stop_tracing(page))
+            .map_err(py_err)?;
         Ok(result.to_string())
     }
 
@@ -1155,7 +1449,10 @@ impl Browser {
     fn get_performance_metrics(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let result = self.rt.block_on(onecrawl_cdp::tracing_cdp::get_performance_metrics(page)).map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::tracing_cdp::get_performance_metrics(page))
+            .map_err(py_err)?;
         serde_json::to_string(&result).map_err(py_err)
     }
 
@@ -1163,7 +1460,10 @@ impl Browser {
     fn get_navigation_timing(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let result = self.rt.block_on(onecrawl_cdp::tracing_cdp::get_navigation_timing(page)).map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::tracing_cdp::get_navigation_timing(page))
+            .map_err(py_err)?;
         Ok(result.to_string())
     }
 
@@ -1171,7 +1471,10 @@ impl Browser {
     fn get_resource_timing(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let result = self.rt.block_on(onecrawl_cdp::tracing_cdp::get_resource_timing(page)).map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::tracing_cdp::get_resource_timing(page))
+            .map_err(py_err)?;
         serde_json::to_string(&result).map_err(py_err)
     }
 
@@ -1195,7 +1498,7 @@ impl Browser {
     #[staticmethod]
     fn next_proxy(pool: &str) -> PyResult<String> {
         let mut p: onecrawl_cdp::ProxyPool = serde_json::from_str(pool).map_err(py_err)?;
-        p.next();
+        p.next_proxy();
         p.to_json().map_err(py_err)
     }
 
@@ -1205,15 +1508,21 @@ impl Browser {
     fn set_intercept_rules(&self, rules: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let parsed: Vec<onecrawl_cdp::InterceptRule> = serde_json::from_str(rules).map_err(py_err)?;
-        self.rt.block_on(onecrawl_cdp::intercept::set_intercept_rules(page, parsed)).map_err(py_err)
+        let parsed: Vec<onecrawl_cdp::InterceptRule> =
+            serde_json::from_str(rules).map_err(py_err)?;
+        self.rt
+            .block_on(onecrawl_cdp::intercept::set_intercept_rules(page, parsed))
+            .map_err(py_err)
     }
 
     /// Get intercepted request log as JSON.
     fn get_intercepted_requests(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let log = self.rt.block_on(onecrawl_cdp::intercept::get_intercepted_requests(page)).map_err(py_err)?;
+        let log = self
+            .rt
+            .block_on(onecrawl_cdp::intercept::get_intercepted_requests(page))
+            .map_err(py_err)?;
         serde_json::to_string(&log).map_err(py_err)
     }
 
@@ -1221,7 +1530,9 @@ impl Browser {
     fn clear_intercept_rules(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::intercept::clear_intercept_rules(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::intercept::clear_intercept_rules(page))
+            .map_err(py_err)
     }
 
     // ── Advanced Emulation ─────────────────────────────────────────
@@ -1231,49 +1542,79 @@ impl Browser {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
         let reading = onecrawl_cdp::advanced_emulation::SensorReading { alpha, beta, gamma };
-        self.rt.block_on(onecrawl_cdp::advanced_emulation::set_device_orientation(page, reading)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::advanced_emulation::set_device_orientation(
+                page, reading,
+            ))
+            .map_err(py_err)
     }
 
     /// Override a permission query result.
     fn override_permission(&self, permission: &str, state: &str) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::advanced_emulation::override_permission(page, permission, state)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::advanced_emulation::override_permission(
+                page, permission, state,
+            ))
+            .map_err(py_err)
     }
 
     /// Override battery status API.
     fn set_battery_status(&self, level: f64, charging: bool) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::advanced_emulation::set_battery_status(page, level, charging)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::advanced_emulation::set_battery_status(
+                page, level, charging,
+            ))
+            .map_err(py_err)
     }
 
     /// Override Network Information API.
     fn set_connection_info(&self, effective_type: &str, downlink: f64, rtt: u32) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::advanced_emulation::set_connection_info(page, effective_type, downlink, rtt)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::advanced_emulation::set_connection_info(
+                page,
+                effective_type,
+                downlink,
+                rtt,
+            ))
+            .map_err(py_err)
     }
 
     /// Override hardware concurrency (CPU cores).
     fn set_hardware_concurrency(&self, cores: u32) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::advanced_emulation::set_hardware_concurrency(page, cores)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::advanced_emulation::set_hardware_concurrency(
+                page, cores,
+            ))
+            .map_err(py_err)
     }
 
     /// Override device memory (GB).
     fn set_device_memory(&self, gb: f64) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::advanced_emulation::set_device_memory(page, gb)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::advanced_emulation::set_device_memory(
+                page, gb,
+            ))
+            .map_err(py_err)
     }
 
     /// Get current navigator properties as JSON.
     fn get_navigator_info(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let info = self.rt.block_on(onecrawl_cdp::advanced_emulation::get_navigator_info(page)).map_err(py_err)?;
+        let info = self
+            .rt
+            .block_on(onecrawl_cdp::advanced_emulation::get_navigator_info(page))
+            .map_err(py_err)?;
         serde_json::to_string(&info).map_err(py_err)
     }
 
@@ -1282,7 +1623,11 @@ impl Browser {
     fn run_benchmark(&self, iterations: u32) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let suite = self.rt.block_on(onecrawl_cdp::benchmark::run_cdp_benchmarks(page, iterations));
+        let suite = self
+            .rt
+            .block_on(onecrawl_cdp::benchmark::run_cdp_benchmarks(
+                page, iterations,
+            ));
         serde_json::to_string(&suite).map_err(py_err)
     }
 
@@ -1294,7 +1639,9 @@ impl Browser {
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
         let p: onecrawl_cdp::GeoProfile = serde_json::from_str(profile)
             .map_err(|e| py_err(format!("invalid geo profile: {e}")))?;
-        self.rt.block_on(onecrawl_cdp::geofencing::apply_geo_profile(page, &p)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::geofencing::apply_geo_profile(page, &p))
+            .map_err(py_err)
     }
 
     /// List available geo preset names.
@@ -1313,7 +1660,10 @@ impl Browser {
     fn get_current_geo(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let val = self.rt.block_on(onecrawl_cdp::geofencing::get_current_geo(page)).map_err(py_err)?;
+        let val = self
+            .rt
+            .block_on(onecrawl_cdp::geofencing::get_current_geo(page))
+            .map_err(py_err)?;
         serde_json::to_string(&val).map_err(py_err)
     }
 
@@ -1323,7 +1673,10 @@ impl Browser {
     fn export_cookies(&self) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let jar = self.rt.block_on(onecrawl_cdp::cookie_jar::export_cookies(page)).map_err(py_err)?;
+        let jar = self
+            .rt
+            .block_on(onecrawl_cdp::cookie_jar::export_cookies(page))
+            .map_err(py_err)?;
         serde_json::to_string(&jar).map_err(py_err)
     }
 
@@ -1331,30 +1684,44 @@ impl Browser {
     fn import_cookies(&self, jar: &str) -> PyResult<usize> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let cookie_jar: onecrawl_cdp::CookieJar = serde_json::from_str(jar)
-            .map_err(|e| py_err(format!("invalid cookie jar: {e}")))?;
-        self.rt.block_on(onecrawl_cdp::cookie_jar::import_cookies(page, &cookie_jar)).map_err(py_err)
+        let cookie_jar: onecrawl_cdp::CookieJar =
+            serde_json::from_str(jar).map_err(|e| py_err(format!("invalid cookie jar: {e}")))?;
+        self.rt
+            .block_on(onecrawl_cdp::cookie_jar::import_cookies(page, &cookie_jar))
+            .map_err(py_err)
     }
 
     /// Save cookies to a file. Returns count saved.
     fn save_cookies_to_file(&self, path: &str) -> PyResult<usize> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::cookie_jar::save_cookies_to_file(page, std::path::Path::new(path))).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::cookie_jar::save_cookies_to_file(
+                page,
+                std::path::Path::new(path),
+            ))
+            .map_err(py_err)
     }
 
     /// Load cookies from a file. Returns count loaded.
     fn load_cookies_from_file(&self, path: &str) -> PyResult<usize> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::cookie_jar::load_cookies_from_file(page, std::path::Path::new(path))).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::cookie_jar::load_cookies_from_file(
+                page,
+                std::path::Path::new(path),
+            ))
+            .map_err(py_err)
     }
 
     /// Clear all cookies via cookie_jar module.
     fn clear_all_cookies(&self) -> PyResult<()> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        self.rt.block_on(onecrawl_cdp::cookie_jar::clear_all_cookies(page)).map_err(py_err)
+        self.rt
+            .block_on(onecrawl_cdp::cookie_jar::clear_all_cookies(page))
+            .map_err(py_err)
     }
 
     // ──────────────── Request Queue ────────────────
@@ -1363,9 +1730,12 @@ impl Browser {
     fn execute_request(&self, request: &str) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let req: onecrawl_cdp::QueuedRequest = serde_json::from_str(request)
-            .map_err(|e| py_err(format!("invalid request: {e}")))?;
-        let result = self.rt.block_on(onecrawl_cdp::request_queue::execute_request(page, &req)).map_err(py_err)?;
+        let req: onecrawl_cdp::QueuedRequest =
+            serde_json::from_str(request).map_err(|e| py_err(format!("invalid request: {e}")))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::request_queue::execute_request(page, &req))
+            .map_err(py_err)?;
         serde_json::to_string(&result).map_err(py_err)
     }
 
@@ -1374,14 +1744,20 @@ impl Browser {
     fn execute_batch(&self, requests: &str, config: Option<&str>) -> PyResult<String> {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
-        let reqs: Vec<onecrawl_cdp::QueuedRequest> = serde_json::from_str(requests)
-            .map_err(|e| py_err(format!("invalid requests: {e}")))?;
+        let reqs: Vec<onecrawl_cdp::QueuedRequest> =
+            serde_json::from_str(requests).map_err(|e| py_err(format!("invalid requests: {e}")))?;
         let cfg: onecrawl_cdp::QueueConfig = match config {
-            Some(c) => serde_json::from_str(c)
-                .map_err(|e| py_err(format!("invalid config: {e}")))?,
+            Some(c) => {
+                serde_json::from_str(c).map_err(|e| py_err(format!("invalid config: {e}")))?
+            }
             None => onecrawl_cdp::QueueConfig::default(),
         };
-        let results = self.rt.block_on(onecrawl_cdp::request_queue::execute_batch(page, &reqs, &cfg)).map_err(py_err)?;
+        let results = self
+            .rt
+            .block_on(onecrawl_cdp::request_queue::execute_batch(
+                page, &reqs, &cfg,
+            ))
+            .map_err(py_err)?;
         serde_json::to_string(&results).map_err(py_err)
     }
 

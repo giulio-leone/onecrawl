@@ -35,7 +35,10 @@ mod tests {
     #[test]
     fn pkce_roundtrip() {
         let challenge = generate_pkce_challenge().unwrap();
-        assert!(verify_pkce(&challenge.code_verifier, &challenge.code_challenge));
+        assert!(verify_pkce(
+            &challenge.code_verifier,
+            &challenge.code_challenge
+        ));
     }
 
     #[test]

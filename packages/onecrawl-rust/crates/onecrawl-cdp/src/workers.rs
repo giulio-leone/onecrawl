@@ -35,10 +35,7 @@ pub async fn get_service_workers(page: &Page) -> Result<Vec<ServiceWorkerInfo>> 
         .await
         .map_err(|e| onecrawl_core::Error::Browser(format!("get_service_workers failed: {e}")))?;
 
-    let workers: Vec<ServiceWorkerInfo> = match result.into_value() {
-        Ok(v) => v,
-        Err(_) => Vec::new(),
-    };
+    let workers: Vec<ServiceWorkerInfo> = result.into_value().unwrap_or_default();
 
     Ok(workers)
 }
@@ -62,7 +59,9 @@ pub async fn unregister_service_workers(page: &Page) -> Result<usize> {
             "#,
         )
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("unregister_service_workers failed: {e}")))?;
+        .map_err(|e| {
+            onecrawl_core::Error::Browser(format!("unregister_service_workers failed: {e}"))
+        })?;
 
     let count: usize = result.into_value().unwrap_or(0);
     Ok(count)

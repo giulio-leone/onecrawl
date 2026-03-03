@@ -2,11 +2,11 @@
 //!
 //! Preset profiles for common network conditions (3G, 4G, WiFi, Offline).
 
+use chromiumoxide::Page;
 #[allow(deprecated)]
 use chromiumoxide::cdp::browser_protocol::network::{
     ConnectionType, EmulateNetworkConditionsParams,
 };
-use chromiumoxide::Page;
 use onecrawl_core::{Error, Result};
 
 /// Preset network profiles for throttling.
@@ -133,16 +133,10 @@ pub async fn clear_network_conditions(page: &Page) -> Result<()> {
 /// Get a description of what a given profile applies.
 pub fn describe_profile(profile: &NetworkProfile) -> String {
     match profile {
-        NetworkProfile::Fast3G => {
-            "Fast 3G: 1.6 Mbps down, 750 Kbps up, 150ms latency".to_string()
-        }
-        NetworkProfile::Slow3G => {
-            "Slow 3G: 500 Kbps down, 500 Kbps up, 400ms latency".to_string()
-        }
+        NetworkProfile::Fast3G => "Fast 3G: 1.6 Mbps down, 750 Kbps up, 150ms latency".to_string(),
+        NetworkProfile::Slow3G => "Slow 3G: 500 Kbps down, 500 Kbps up, 400ms latency".to_string(),
         NetworkProfile::Offline => "Offline: no connectivity".to_string(),
-        NetworkProfile::Regular4G => {
-            "Regular 4G: 4 Mbps down, 3 Mbps up, 20ms latency".to_string()
-        }
+        NetworkProfile::Regular4G => "Regular 4G: 4 Mbps down, 3 Mbps up, 20ms latency".to_string(),
         NetworkProfile::WiFi => "WiFi: 30 Mbps down, 15 Mbps up, 2ms latency".to_string(),
         NetworkProfile::Custom {
             download_kbps,

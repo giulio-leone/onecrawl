@@ -18,7 +18,11 @@ pub struct DialogEvent {
 }
 
 /// Auto-handle dialogs with the specified behavior.
-pub async fn set_dialog_handler(page: &Page, accept: bool, prompt_text: Option<&str>) -> Result<()> {
+pub async fn set_dialog_handler(
+    page: &Page,
+    accept: bool,
+    prompt_text: Option<&str>,
+) -> Result<()> {
     let prompt_val = match prompt_text {
         Some(t) => format!("'{}'", t.replace('\'', "\\'")),
         None => "null".to_string(),
@@ -94,10 +98,7 @@ pub async fn get_dialog_history(page: &Page) -> Result<Vec<DialogEvent>> {
         .await
         .map_err(|e| onecrawl_core::Error::Browser(format!("get_dialog_history failed: {e}")))?;
 
-    let events: Vec<DialogEvent> = match result.into_value() {
-        Ok(v) => v,
-        Err(_) => Vec::new(),
-    };
+    let events: Vec<DialogEvent> = result.into_value().unwrap_or_default();
 
     Ok(events)
 }

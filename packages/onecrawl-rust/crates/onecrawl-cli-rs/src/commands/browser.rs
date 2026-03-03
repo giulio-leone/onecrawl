@@ -135,16 +135,18 @@ pub async fn get(what: &str, selector: Option<&str>) {
                         .map_err(|e| e.to_string())?;
                     println!("{text}");
                 } else {
-                    let val = onecrawl_cdp::page::evaluate_js(
-                        &page,
-                        "document.body?.innerText || ''",
-                    )
-                    .await
-                    .map_err(|e| e.to_string())?;
+                    let val =
+                        onecrawl_cdp::page::evaluate_js(&page, "document.body?.innerText || ''")
+                            .await
+                            .map_err(|e| e.to_string())?;
                     println!("{}", val.as_str().unwrap_or(&val.to_string()));
                 }
             }
-            other => return Err(format!("Unknown target: {other}. Use: text, html, url, title")),
+            other => {
+                return Err(format!(
+                    "Unknown target: {other}. Use: text, html, url, title"
+                ));
+            }
         }
         Ok(())
     })
@@ -159,7 +161,10 @@ pub async fn eval(expression: &str) {
         match &val {
             serde_json::Value::String(s) => println!("{s}"),
             serde_json::Value::Null => println!("undefined"),
-            other => println!("{}", serde_json::to_string_pretty(other).unwrap_or_default()),
+            other => println!(
+                "{}",
+                serde_json::to_string_pretty(other).unwrap_or_default()
+            ),
         }
         Ok(())
     })
@@ -334,10 +339,15 @@ pub async fn upload(selector: &str, file_path: &str) {
     let sel = selector.to_string();
     let fp = file_path.to_string();
     with_page(|page| async move {
-        onecrawl_cdp::input::set_file_input(&page, &sel, &[fp.clone()])
+        onecrawl_cdp::input::set_file_input(&page, &sel, std::slice::from_ref(&fp))
             .await
             .map_err(|e| e.to_string())?;
-        println!("{} Uploaded {} to {}", "✓".green(), fp.dimmed(), sel.dimmed());
+        println!(
+            "{} Uploaded {} to {}",
+            "✓".green(),
+            fp.dimmed(),
+            sel.dimmed()
+        );
         Ok(())
     })
     .await;
@@ -619,7 +629,7 @@ pub async fn emulate_device(name: &str) {
             _ => {
                 return Err(format!(
                     "Unknown device: {n}. Available: iphone_14, ipad, pixel_7, desktop"
-                ))
+                ));
             }
         };
         onecrawl_cdp::emulation::set_viewport(&page, &vp)
@@ -820,7 +830,11 @@ pub async fn ws_export(output: &str) {
             .map_err(|e| e.to_string())?;
         let json = serde_json::to_string_pretty(&frames).unwrap_or_default();
         std::fs::write(&out, &json).map_err(|e| format!("write failed: {e}"))?;
-        println!("{} WebSocket frames exported to {}", "✓".green(), out.cyan());
+        println!(
+            "{} WebSocket frames exported to {}",
+            "✓".green(),
+            out.cyan()
+        );
         Ok(())
     })
     .await;
@@ -949,7 +963,9 @@ fn cli_parse_network_profile(name: &str) -> Result<onecrawl_cdp::NetworkProfile,
         "offline" => Ok(onecrawl_cdp::NetworkProfile::Offline),
         "regular4g" | "4g" => Ok(onecrawl_cdp::NetworkProfile::Regular4G),
         "wifi" => Ok(onecrawl_cdp::NetworkProfile::WiFi),
-        _ => Err(format!("Unknown profile: {name}. Use: fast3g, slow3g, offline, regular4g, wifi")),
+        _ => Err(format!(
+            "Unknown profile: {name}. Use: fast3g, slow3g, offline, regular4g, wifi"
+        )),
     }
 }
 
@@ -1096,7 +1112,10 @@ pub async fn console_drain() {
         let entries = onecrawl_cdp::console::drain_console_entries(&page)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&entries).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&entries).unwrap_or_default()
+        );
         Ok(())
     })
     .await;
@@ -1134,7 +1153,10 @@ pub async fn dialog_history() {
         let events = onecrawl_cdp::dialog::get_dialog_history(&page)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&events).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&events).unwrap_or_default()
+        );
         Ok(())
     })
     .await;
@@ -1160,7 +1182,10 @@ pub async fn worker_list() {
         let workers = onecrawl_cdp::workers::get_service_workers(&page)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&workers).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&workers).unwrap_or_default()
+        );
         Ok(())
     })
     .await;
@@ -1182,7 +1207,10 @@ pub async fn worker_info() {
         let info = onecrawl_cdp::workers::get_worker_info(&page)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&info).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&info).unwrap_or_default()
+        );
         Ok(())
     })
     .await;
@@ -1197,7 +1225,10 @@ pub async fn web_storage_local_get() {
         let data = onecrawl_cdp::web_storage::get_local_storage(&page)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&data).unwrap_or_default()
+        );
         Ok(())
     })
     .await;
@@ -1232,7 +1263,10 @@ pub async fn web_storage_session_get() {
         let data = onecrawl_cdp::web_storage::get_session_storage(&page)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&data).unwrap_or_default()
+        );
         Ok(())
     })
     .await;
@@ -1267,7 +1301,10 @@ pub async fn web_storage_indexeddb_list() {
         let names = onecrawl_cdp::web_storage::get_indexeddb_databases(&page)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&names).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&names).unwrap_or_default()
+        );
         Ok(())
     })
     .await;
@@ -1301,10 +1338,7 @@ pub async fn stealth_inject() {
             .map_err(|e| e.to_string())?;
         println!("{} Stealth patches injected", "✓".green());
         println!("  UA: {}", fp.user_agent.dimmed());
-        println!(
-            "  Viewport: {}×{}",
-            fp.viewport_width, fp.viewport_height
-        );
+        println!("  Viewport: {}×{}", fp.viewport_width, fp.viewport_height);
         Ok(())
     })
     .await;
@@ -1396,7 +1430,10 @@ pub async fn dom_mutations() {
         let mutations = onecrawl_cdp::dom_observer::drain_dom_mutations(&page)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&mutations).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&mutations).unwrap_or_default()
+        );
         Ok(())
     })
     .await;
@@ -1434,7 +1471,10 @@ pub async fn iframe_list() {
         let iframes = onecrawl_cdp::iframe::list_iframes(&page)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&iframes).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&iframes).unwrap_or_default()
+        );
         Ok(())
     })
     .await;
@@ -1467,6 +1507,7 @@ pub async fn iframe_content(index: usize) {
 // Print (Enhanced)
 // ---------------------------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 pub async fn print_pdf(
     output: &str,
     landscape: bool,
@@ -1570,7 +1611,7 @@ pub async fn proxy_chrome_args(json: &str) {
 pub async fn proxy_next(json: &str) {
     match onecrawl_cdp::ProxyPool::from_json(json) {
         Ok(mut pool) => {
-            pool.next();
+            pool.next_proxy();
             match pool.to_json() {
                 Ok(out) => println!("{out}"),
                 Err(e) => {
@@ -1640,7 +1681,10 @@ pub async fn adv_emulation_orientation(alpha: f64, beta: f64, gamma: f64) {
         onecrawl_cdp::advanced_emulation::set_device_orientation(&page, reading)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{} Device orientation set (α={alpha}, β={beta}, γ={gamma})", "✓".green());
+        println!(
+            "{} Device orientation set (α={alpha}, β={beta}, γ={gamma})",
+            "✓".green()
+        );
         Ok(())
     })
     .await;
@@ -1664,7 +1708,12 @@ pub async fn adv_emulation_battery(level: f64, charging: bool) {
         onecrawl_cdp::advanced_emulation::set_battery_status(&page, level, charging)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{} Battery: {:.0}% {}", "✓".green(), level * 100.0, if charging { "(charging)" } else { "" });
+        println!(
+            "{} Battery: {:.0}% {}",
+            "✓".green(),
+            level * 100.0,
+            if charging { "(charging)" } else { "" }
+        );
         Ok(())
     })
     .await;
@@ -1676,7 +1725,10 @@ pub async fn adv_emulation_connection(effective_type: &str, downlink: f64, rtt: 
         onecrawl_cdp::advanced_emulation::set_connection_info(&page, &et, downlink, rtt)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{} Connection: {et} ↓{downlink}Mbps RTT={rtt}ms", "✓".green());
+        println!(
+            "{} Connection: {et} ↓{downlink}Mbps RTT={rtt}ms",
+            "✓".green()
+        );
         Ok(())
     })
     .await;
@@ -1709,7 +1761,10 @@ pub async fn adv_emulation_navigator_info() {
         let info = onecrawl_cdp::advanced_emulation::get_navigator_info(&page)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&info).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&info).unwrap_or_default()
+        );
         Ok(())
     })
     .await;
@@ -1724,7 +1779,10 @@ pub async fn tab_list() {
         let tabs = onecrawl_cdp::tabs::list_tabs(session.browser())
             .await
             .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&tabs).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&tabs).unwrap_or_default()
+        );
         Ok(())
     })
     .await;
@@ -1796,7 +1854,10 @@ pub async fn download_list() {
         let downloads = onecrawl_cdp::downloads::get_downloads(&page)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&downloads).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&downloads).unwrap_or_default()
+        );
         Ok(())
     })
     .await;
@@ -1852,7 +1913,10 @@ pub async fn screenshot_diff_compare(baseline: &str, current: &str) {
             std::path::Path::new(&c),
         )
         .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
         Ok(())
     })
     .await;
@@ -1861,13 +1925,14 @@ pub async fn screenshot_diff_compare(baseline: &str, current: &str) {
 pub async fn screenshot_diff_regression(baseline_path: &str) {
     let bp = baseline_path.to_string();
     with_page(|page| async move {
-        let result = onecrawl_cdp::screenshot_diff::visual_regression(
-            &page,
-            std::path::Path::new(&bp),
-        )
-        .await
-        .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+        let result =
+            onecrawl_cdp::screenshot_diff::visual_regression(&page, std::path::Path::new(&bp))
+                .await
+                .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
         Ok(())
     })
     .await;
@@ -1879,7 +1944,10 @@ pub async fn screenshot_diff_regression(baseline_path: &str) {
 
 pub async fn bench_run(iterations: u32, _module: Option<&str>) {
     with_page(|page| async move {
-        println!("{} Running CDP benchmarks ({iterations} iterations)…", "⏱".yellow());
+        println!(
+            "{} Running CDP benchmarks ({iterations} iterations)…",
+            "⏱".yellow()
+        );
         let suite = onecrawl_cdp::benchmark::run_cdp_benchmarks(&page, iterations).await;
         let table = onecrawl_cdp::benchmark::format_results(&suite);
         println!("{table}");
@@ -1903,7 +1971,10 @@ pub async fn bench_report(format: &str) {
     let data = match std::fs::read_to_string(&json_path) {
         Ok(d) => d,
         Err(_) => {
-            eprintln!("{} No benchmark data found. Run `onecrawl bench run` first.", "✗".red());
+            eprintln!(
+                "{} No benchmark data found. Run `onecrawl bench run` first.",
+                "✗".red()
+            );
             std::process::exit(1);
         }
     };
@@ -1928,15 +1999,23 @@ pub async fn bench_report(format: &str) {
 pub async fn geo_apply(profile: &str) {
     let profile = profile.to_string();
     with_page(|page| async move {
-        let geo: onecrawl_cdp::GeoProfile = if let Some(p) = onecrawl_cdp::geofencing::get_preset(&profile) {
-            p
-        } else {
-            serde_json::from_str(&profile).map_err(|e| format!("Invalid profile name or JSON: {e}"))?
-        };
+        let geo: onecrawl_cdp::GeoProfile =
+            if let Some(p) = onecrawl_cdp::geofencing::get_preset(&profile) {
+                p
+            } else {
+                serde_json::from_str(&profile)
+                    .map_err(|e| format!("Invalid profile name or JSON: {e}"))?
+            };
         onecrawl_cdp::geofencing::apply_geo_profile(&page, &geo)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{} Geo profile '{}' applied (lat={}, lng={})", "✓".green(), geo.name, geo.latitude, geo.longitude);
+        println!(
+            "{} Geo profile '{}' applied (lat={}, lng={})",
+            "✓".green(),
+            geo.name,
+            geo.latitude,
+            geo.longitude
+        );
         Ok(())
     })
     .await;
@@ -1946,7 +2025,13 @@ pub async fn geo_presets() {
     let presets = onecrawl_cdp::geofencing::list_presets();
     for name in &presets {
         if let Some(p) = onecrawl_cdp::geofencing::get_preset(name) {
-            println!("  {} — lat={:.4}, lng={:.4}, tz={}", name.green(), p.latitude, p.longitude, p.timezone);
+            println!(
+                "  {} — lat={:.4}, lng={:.4}, tz={}",
+                name.green(),
+                p.latitude,
+                p.longitude,
+                p.timezone
+            );
         }
     }
 }
@@ -1970,9 +2055,10 @@ pub async fn cookie_jar_export(output: Option<&str>) {
     let output = output.map(String::from);
     with_page(|page| async move {
         if let Some(path) = output {
-            let count = onecrawl_cdp::cookie_jar::save_cookies_to_file(&page, std::path::Path::new(&path))
-                .await
-                .map_err(|e| e.to_string())?;
+            let count =
+                onecrawl_cdp::cookie_jar::save_cookies_to_file(&page, std::path::Path::new(&path))
+                    .await
+                    .map_err(|e| e.to_string())?;
             println!("{} Exported {} cookies to {}", "✓".green(), count, path);
         } else {
             let jar = onecrawl_cdp::cookie_jar::export_cookies(&page)
@@ -1988,9 +2074,10 @@ pub async fn cookie_jar_export(output: Option<&str>) {
 pub async fn cookie_jar_import(path: &str) {
     let path = path.to_string();
     with_page(|page| async move {
-        let count = onecrawl_cdp::cookie_jar::load_cookies_from_file(&page, std::path::Path::new(&path))
-            .await
-            .map_err(|e| e.to_string())?;
+        let count =
+            onecrawl_cdp::cookie_jar::load_cookies_from_file(&page, std::path::Path::new(&path))
+                .await
+                .map_err(|e| e.to_string())?;
         println!("{} Imported {} cookies from {}", "✓".green(), count, path);
         Ok(())
     })
@@ -2015,12 +2102,15 @@ pub async fn cookie_jar_clear() {
 pub async fn request_execute(json: &str) {
     let json = json.to_string();
     with_page(|page| async move {
-        let req: onecrawl_cdp::QueuedRequest = serde_json::from_str(&json)
-            .map_err(|e| format!("Invalid request JSON: {e}"))?;
+        let req: onecrawl_cdp::QueuedRequest =
+            serde_json::from_str(&json).map_err(|e| format!("Invalid request JSON: {e}"))?;
         let result = onecrawl_cdp::request_queue::execute_request(&page, &req)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
         Ok(())
     })
     .await;
@@ -2029,8 +2119,8 @@ pub async fn request_execute(json: &str) {
 pub async fn request_batch(json: &str, concurrency: usize, delay: u64) {
     let json = json.to_string();
     with_page(|page| async move {
-        let reqs: Vec<onecrawl_cdp::QueuedRequest> = serde_json::from_str(&json)
-            .map_err(|e| format!("Invalid requests JSON: {e}"))?;
+        let reqs: Vec<onecrawl_cdp::QueuedRequest> =
+            serde_json::from_str(&json).map_err(|e| format!("Invalid requests JSON: {e}"))?;
         let config = onecrawl_cdp::QueueConfig {
             concurrency,
             delay_between_ms: delay,
@@ -2039,7 +2129,10 @@ pub async fn request_batch(json: &str, concurrency: usize, delay: u64) {
         let results = onecrawl_cdp::request_queue::execute_batch(&page, &reqs, &config)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{}", serde_json::to_string_pretty(&results).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&results).unwrap_or_default()
+        );
         Ok(())
     })
     .await;

@@ -32,6 +32,12 @@ pub struct WsRecorder {
     frames: Arc<Mutex<Vec<WsFrame>>>,
 }
 
+impl Default for WsRecorder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WsRecorder {
     pub fn new() -> Self {
         Self {
@@ -52,6 +58,11 @@ impl WsRecorder {
     /// Number of captured frames.
     pub async fn len(&self) -> usize {
         self.frames.lock().await.len()
+    }
+
+    /// Returns true if no frames have been captured.
+    pub async fn is_empty(&self) -> bool {
+        self.frames.lock().await.is_empty()
     }
 }
 
@@ -157,6 +168,5 @@ pub async fn active_ws_connections(page: &Page) -> Result<usize> {
 /// Export all captured frames as JSON.
 pub async fn export_ws_frames(recorder: &WsRecorder) -> Result<serde_json::Value> {
     let frames = recorder.frames.lock().await;
-    serde_json::to_value(&*frames)
-        .map_err(|e| Error::Browser(format!("export_ws_frames: {e}")))
+    serde_json::to_value(&*frames).map_err(|e| Error::Browser(format!("export_ws_frames: {e}")))
 }

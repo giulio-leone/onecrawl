@@ -1012,9 +1012,7 @@ async fn main() {
         // ── Element Interaction ─────────────────────────────────────
         Commands::Click { selector } => commands::browser::click(&selector).await,
         Commands::Dblclick { selector } => commands::browser::dblclick(&selector).await,
-        Commands::Type { selector, text } => {
-            commands::browser::type_text(&selector, &text).await
-        }
+        Commands::Type { selector, text } => commands::browser::type_text(&selector, &text).await,
         Commands::Fill { selector, text } => commands::browser::fill(&selector, &text).await,
         Commands::Focus { selector } => commands::browser::focus(&selector).await,
         Commands::Hover { selector } => commands::browser::hover(&selector).await,
@@ -1032,17 +1030,13 @@ async fn main() {
             selector,
             file_path,
         } => commands::browser::upload(&selector, &file_path).await,
-        Commands::BoundingBox { selector } => {
-            commands::browser::bounding_box(&selector).await
-        }
+        Commands::BoundingBox { selector } => commands::browser::bounding_box(&selector).await,
 
         // ── Keyboard ────────────────────────────────────────────────
         Commands::PressKey { key } => commands::browser::press_key(&key).await,
         Commands::KeyDown { key } => commands::browser::key_down(&key).await,
         Commands::KeyUp { key } => commands::browser::key_up(&key).await,
-        Commands::KeyboardShortcut { keys } => {
-            commands::browser::keyboard_shortcut(&keys).await
-        }
+        Commands::KeyboardShortcut { keys } => commands::browser::keyboard_shortcut(&keys).await,
 
         // ── Screenshot / PDF ────────────────────────────────────────
         Commands::Screenshot {
@@ -1052,8 +1046,7 @@ async fn main() {
             format,
             quality,
         } => {
-            commands::browser::screenshot(&output, full, element.as_deref(), &format, quality)
-                .await
+            commands::browser::screenshot(&output, full, element.as_deref(), &format, quality).await
         }
         Commands::Pdf {
             output,
@@ -1089,14 +1082,10 @@ async fn main() {
                 scale,
             } => commands::browser::emulate_viewport(width, height, scale).await,
             EmulateAction::Device { name } => commands::browser::emulate_device(&name).await,
-            EmulateAction::UserAgent { ua } => {
-                commands::browser::emulate_user_agent(&ua).await
+            EmulateAction::UserAgent { ua } => commands::browser::emulate_user_agent(&ua).await,
+            EmulateAction::Geolocation { lat, lon, accuracy } => {
+                commands::browser::emulate_geolocation(lat, lon, accuracy).await
             }
-            EmulateAction::Geolocation {
-                lat,
-                lon,
-                accuracy,
-            } => commands::browser::emulate_geolocation(lat, lon, accuracy).await,
             EmulateAction::ColorScheme { scheme } => {
                 commands::browser::emulate_color_scheme(&scheme).await
             }
@@ -1142,17 +1131,12 @@ async fn main() {
 
         // ── Throttle ────────────────────────────────────────────────
         Commands::Throttle { action } => match action {
-            ThrottleAction::Set { profile } => {
-                commands::browser::throttle_set(&profile).await
-            }
+            ThrottleAction::Set { profile } => commands::browser::throttle_set(&profile).await,
             ThrottleAction::Custom {
                 download_kbps,
                 upload_kbps,
                 latency_ms,
-            } => {
-                commands::browser::throttle_custom(download_kbps, upload_kbps, latency_ms)
-                    .await
-            }
+            } => commands::browser::throttle_custom(download_kbps, upload_kbps, latency_ms).await,
             ThrottleAction::Clear => commands::browser::throttle_clear().await,
         },
 
@@ -1174,9 +1158,10 @@ async fn main() {
 
         // ── Dialog ──────────────────────────────────────────────────
         Commands::Dialog { action } => match action {
-            DialogAction::SetHandler { accept, prompt_text } => {
-                commands::browser::dialog_set_handler(accept, prompt_text.as_deref()).await
-            }
+            DialogAction::SetHandler {
+                accept,
+                prompt_text,
+            } => commands::browser::dialog_set_handler(accept, prompt_text.as_deref()).await,
             DialogAction::History => commands::browser::dialog_history().await,
             DialogAction::Clear => commands::browser::dialog_clear().await,
         },
@@ -1206,9 +1191,7 @@ async fn main() {
             IframeAction::Eval { index, expression } => {
                 commands::browser::iframe_eval(index, &expression).await
             }
-            IframeAction::Content { index } => {
-                commands::browser::iframe_content(index).await
-            }
+            IframeAction::Content { index } => commands::browser::iframe_content(index).await,
         },
 
         // ── Print (Enhanced) ────────────────────────────────────────
@@ -1226,8 +1209,16 @@ async fn main() {
                 footer,
             } => {
                 commands::browser::print_pdf(
-                    &output, landscape, background, scale, paper_width, paper_height,
-                    margins.as_deref(), page_ranges, header, footer,
+                    &output,
+                    landscape,
+                    background,
+                    scale,
+                    paper_width,
+                    paper_height,
+                    margins.as_deref(),
+                    page_ranges,
+                    header,
+                    footer,
                 )
                 .await
             }
@@ -1246,7 +1237,9 @@ async fn main() {
                 commands::browser::web_storage_session_set(&key, &value).await
             }
             WebStorageAction::SessionClear => commands::browser::web_storage_session_clear().await,
-            WebStorageAction::IndexeddbList => commands::browser::web_storage_indexeddb_list().await,
+            WebStorageAction::IndexeddbList => {
+                commands::browser::web_storage_indexeddb_list().await
+            }
             WebStorageAction::ClearAll => commands::browser::web_storage_clear_all().await,
         },
 
@@ -1276,7 +1269,9 @@ async fn main() {
 
         // ── Request Interception ────────────────────────────────────
         Commands::Intercept { action } => match action {
-            InterceptCommandAction::Set { rules_json } => commands::browser::intercept_set(&rules_json).await,
+            InterceptCommandAction::Set { rules_json } => {
+                commands::browser::intercept_set(&rules_json).await
+            }
             InterceptCommandAction::Log => commands::browser::intercept_log().await,
             InterceptCommandAction::Clear => commands::browser::intercept_clear().await,
         },
@@ -1292,9 +1287,11 @@ async fn main() {
             AdvancedEmulationAction::Battery { level, charging } => {
                 commands::browser::adv_emulation_battery(level, charging).await
             }
-            AdvancedEmulationAction::Connection { effective_type, downlink, rtt } => {
-                commands::browser::adv_emulation_connection(&effective_type, downlink, rtt).await
-            }
+            AdvancedEmulationAction::Connection {
+                effective_type,
+                downlink,
+                rtt,
+            } => commands::browser::adv_emulation_connection(&effective_type, downlink, rtt).await,
             AdvancedEmulationAction::CpuCores { n } => {
                 commands::browser::adv_emulation_cpu_cores(n).await
             }
@@ -1346,24 +1343,18 @@ async fn main() {
             CookieJarAction::Export { output } => {
                 commands::browser::cookie_jar_export(output.as_deref()).await
             }
-            CookieJarAction::Import { path } => {
-                commands::browser::cookie_jar_import(&path).await
-            }
+            CookieJarAction::Import { path } => commands::browser::cookie_jar_import(&path).await,
             CookieJarAction::Clear => commands::browser::cookie_jar_clear().await,
         },
 
         // ── Request Queue ──────────────────────────────────────────
         Commands::Request { action } => match action {
-            RequestAction::Execute { json } => {
-                commands::browser::request_execute(&json).await
-            }
+            RequestAction::Execute { json } => commands::browser::request_execute(&json).await,
             RequestAction::Batch {
                 json,
                 concurrency,
                 delay,
-            } => {
-                commands::browser::request_batch(&json, concurrency, delay).await
-            }
+            } => commands::browser::request_batch(&json, concurrency, delay).await,
         },
 
         // ── Benchmark ───────────────────────────────────────────────
@@ -1371,9 +1362,7 @@ async fn main() {
             BenchAction::Run { iterations, module } => {
                 commands::browser::bench_run(iterations, module.as_deref()).await
             }
-            BenchAction::Report { format } => {
-                commands::browser::bench_report(&format).await
-            }
+            BenchAction::Report { format } => commands::browser::bench_report(&format).await,
         },
     }
 }

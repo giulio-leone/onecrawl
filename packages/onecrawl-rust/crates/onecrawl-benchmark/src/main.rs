@@ -7,11 +7,16 @@ use std::time::Instant;
 
 fn report_dir() -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent().unwrap()
-        .parent().unwrap()
-        .parent().unwrap()
-        .parent().unwrap()
-        .join("reports").join("benchmark");
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("reports")
+        .join("benchmark");
     fs::create_dir_all(&dir).unwrap();
     dir
 }
@@ -46,7 +51,10 @@ async fn run_chromiumoxide_benchmarks(results: &mut Vec<(String, String)>) {
 
     let page = match session.new_page("about:blank").await {
         Ok(p) => p,
-        Err(e) => { println!("  ❌ new_page: {e}"); return; }
+        Err(e) => {
+            println!("  ❌ new_page: {e}");
+            return;
+        }
     };
 
     // Navigate
@@ -57,7 +65,10 @@ async fn run_chromiumoxide_benchmarks(results: &mut Vec<(String, String)>) {
             println!("  ✅ Navigate to example.com: {ms}ms");
             results.push(("chromiumoxide_nav_ms".into(), format!("{ms}")));
         }
-        Err(e) => { println!("  ❌ Navigate: {e}"); return; }
+        Err(e) => {
+            println!("  ❌ Navigate: {e}");
+            return;
+        }
     }
 
     // Title
@@ -73,7 +84,10 @@ async fn run_chromiumoxide_benchmarks(results: &mut Vec<(String, String)>) {
             let ms = ss_start.elapsed().as_millis();
             println!("  ✅ Screenshot: {ms}ms ({} bytes)", bytes.len());
             results.push(("chromiumoxide_screenshot_ms".into(), format!("{ms}")));
-            results.push(("chromiumoxide_screenshot_bytes".into(), format!("{}", bytes.len())));
+            results.push((
+                "chromiumoxide_screenshot_bytes".into(),
+                format!("{}", bytes.len()),
+            ));
             fs::write(report_dir().join("chromiumoxide_example.png"), &bytes).unwrap();
         }
         Err(e) => println!("  ❌ Screenshot: {e}"),
@@ -83,7 +97,10 @@ async fn run_chromiumoxide_benchmarks(results: &mut Vec<(String, String)>) {
     println!("\n-- Stealth Patches --");
     let fp = generate_fingerprint();
     let script = get_stealth_init_script(&fp);
-    println!("  Fingerprint: platform={}, hw={}, mem={}GB", fp.platform, fp.hardware_concurrency, fp.device_memory);
+    println!(
+        "  Fingerprint: platform={}, hw={}, mem={}GB",
+        fp.platform, fp.hardware_concurrency, fp.device_memory
+    );
     println!("  Script: {} chars", script.len());
 
     let inject_start = Instant::now();
@@ -103,8 +120,14 @@ async fn run_chromiumoxide_benchmarks(results: &mut Vec<(String, String)>) {
         ("String(typeof window.chrome.runtime)", "object".into()),
         ("String(navigator.plugins.length > 0)", "true".into()),
         ("String(navigator.platform)", fp.platform.clone()),
-        ("String(navigator.hardwareConcurrency)", format!("{}", fp.hardware_concurrency)),
-        ("String(navigator.deviceMemory)", format!("{}", fp.device_memory)),
+        (
+            "String(navigator.hardwareConcurrency)",
+            format!("{}", fp.hardware_concurrency),
+        ),
+        (
+            "String(navigator.deviceMemory)",
+            format!("{}", fp.device_memory),
+        ),
     ];
 
     let mut stealth_pass = 0;
@@ -123,7 +146,10 @@ async fn run_chromiumoxide_benchmarks(results: &mut Vec<(String, String)>) {
             Err(e) => println!("    ❌ {expr}: {e}"),
         }
     }
-    results.push(("stealth_checks_passed".into(), format!("{stealth_pass}/{total}")));
+    results.push((
+        "stealth_checks_passed".into(),
+        format!("{stealth_pass}/{total}"),
+    ));
 
     // Stealth screenshot
     if let Ok(bytes) = screenshot::screenshot_full(&page).await {
@@ -153,21 +179,34 @@ async fn run_playwright_benchmarks(results: &mut Vec<(String, String)>) {
             Ok(session) => {
                 let launch_ms = start.elapsed().as_millis();
                 println!("  ✅ Launch: {launch_ms}ms");
-                results.push((format!("playwright_{}_launch_ms", name.to_lowercase()), format!("{launch_ms}")));
+                results.push((
+                    format!("playwright_{}_launch_ms", name.to_lowercase()),
+                    format!("{launch_ms}"),
+                ));
 
                 let nav_start = Instant::now();
                 if session.navigate("https://example.com").await.is_ok() {
                     let nav_ms = nav_start.elapsed().as_millis();
                     println!("  ✅ Navigate: {nav_ms}ms");
-                    results.push((format!("playwright_{}_nav_ms", name.to_lowercase()), format!("{nav_ms}")));
+                    results.push((
+                        format!("playwright_{}_nav_ms", name.to_lowercase()),
+                        format!("{nav_ms}"),
+                    ));
                 }
 
                 let ss_start = Instant::now();
                 if let Ok(bytes) = session.screenshot().await {
                     let ss_ms = ss_start.elapsed().as_millis();
                     println!("  ✅ Screenshot: {ss_ms}ms ({} bytes)", bytes.len());
-                    results.push((format!("playwright_{}_screenshot_ms", name.to_lowercase()), format!("{ss_ms}")));
-                    fs::write(report_dir().join(format!("playwright_{}.png", name.to_lowercase())), &bytes).unwrap();
+                    results.push((
+                        format!("playwright_{}_screenshot_ms", name.to_lowercase()),
+                        format!("{ss_ms}"),
+                    ));
+                    fs::write(
+                        report_dir().join(format!("playwright_{}.png", name.to_lowercase())),
+                        &bytes,
+                    )
+                    .unwrap();
                 }
 
                 if let Ok(html) = session.content().await {
@@ -191,8 +230,8 @@ async fn run_playwright_benchmarks(_results: &mut Vec<(String, String)>) {
 // ─── Crypto Benchmark ───
 
 async fn run_crypto_benchmarks(results: &mut Vec<(String, String)>) {
-    use onecrawl_crypto::{encrypt, decrypt, generate_pkce_challenge, generate_totp};
     use onecrawl_core::types::TotpConfig;
+    use onecrawl_crypto::{decrypt, encrypt, generate_pkce_challenge, generate_totp};
 
     println!("\n============================================================");
     println!("  CRYPTO BENCHMARKS");
@@ -228,7 +267,11 @@ async fn run_crypto_benchmarks(results: &mut Vec<(String, String)>) {
     let pkce_start = Instant::now();
     let challenge = generate_pkce_challenge().unwrap();
     let pkce_us = pkce_start.elapsed().as_micros();
-    println!("  ✅ PKCE: {pkce_us}μs (verifier={}, challenge={})", challenge.code_verifier.len(), challenge.code_challenge.len());
+    println!(
+        "  ✅ PKCE: {pkce_us}μs (verifier={}, challenge={})",
+        challenge.code_verifier.len(),
+        challenge.code_challenge.len()
+    );
     results.push(("crypto_pkce_us".into(), format!("{pkce_us}")));
 
     // TOTP
@@ -248,8 +291,8 @@ async fn run_crypto_benchmarks(results: &mut Vec<(String, String)>) {
 // ─── Parser Benchmark ───
 
 async fn run_parser_benchmarks(results: &mut Vec<(String, String)>) {
-    use onecrawl_parser::{get_accessibility_tree, query_selector, extract_text};
     use onecrawl_parser::extract::extract_links;
+    use onecrawl_parser::{extract_text, get_accessibility_tree, query_selector};
 
     println!("\n============================================================");
     println!("  PARSER BENCHMARKS");
@@ -274,14 +317,20 @@ async fn run_parser_benchmarks(results: &mut Vec<(String, String)>) {
     let qs_start = Instant::now();
     let items = query_selector(html, "li").unwrap();
     let qs_us = qs_start.elapsed().as_micros();
-    println!("  ✅ Query selector (li): {qs_us}μs ({} matches)", items.len());
+    println!(
+        "  ✅ Query selector (li): {qs_us}μs ({} matches)",
+        items.len()
+    );
     results.push(("parser_query_us".into(), format!("{qs_us}")));
 
     // Extract text
     let text_start = Instant::now();
     let texts = extract_text(html, "p").unwrap();
     let text_us = text_start.elapsed().as_micros();
-    println!("  ✅ Extract text (p): {text_us}μs ({} results)", texts.len());
+    println!(
+        "  ✅ Extract text (p): {text_us}μs ({} results)",
+        texts.len()
+    );
     results.push(("parser_text_us".into(), format!("{text_us}")));
 
     // Extract links
@@ -309,7 +358,12 @@ async fn run_storage_benchmarks(results: &mut Vec<(String, String)>) {
     // Write
     let start = Instant::now();
     for i in 0..iterations {
-        store.set(&format!("bench-key-{i}"), format!("value-{i}-{}", "x".repeat(100)).as_bytes()).unwrap();
+        store
+            .set(
+                &format!("bench-key-{i}"),
+                format!("value-{i}-{}", "x".repeat(100)).as_bytes(),
+            )
+            .unwrap();
     }
     let write_ms = start.elapsed().as_millis();
     let avg_write_us = start.elapsed().as_micros() / iterations as u128;
@@ -337,14 +391,21 @@ async fn run_storage_benchmarks(results: &mut Vec<(String, String)>) {
 fn generate_report(results: &[(String, String)]) {
     let dir = report_dir();
     let date = {
-        let out = std::process::Command::new("date").arg("+%Y-%m-%dT%H:%M:%S%z").output().unwrap();
+        let out = std::process::Command::new("date")
+            .arg("+%Y-%m-%dT%H:%M:%S%z")
+            .output()
+            .unwrap();
         String::from_utf8(out.stdout).unwrap().trim().to_string()
     };
 
     let mut md = String::new();
     md.push_str("# OneCrawl E2E Benchmark Report\n\n");
     md.push_str(&format!("**Date:** {date}\n"));
-    md.push_str(&format!("**Platform:** {} {}\n\n", std::env::consts::OS, std::env::consts::ARCH));
+    md.push_str(&format!(
+        "**Platform:** {} {}\n\n",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    ));
 
     md.push_str("## Results\n\n");
     md.push_str("| Metric | Value |\n|--------|-------|\n");
@@ -355,7 +416,10 @@ fn generate_report(results: &[(String, String)]) {
     md.push_str("\n## Screenshots\n\n");
     for (file, label) in [
         ("chromiumoxide_example.png", "Chromiumoxide — example.com"),
-        ("chromiumoxide_stealth.png", "Chromiumoxide — Stealth Patched"),
+        (
+            "chromiumoxide_stealth.png",
+            "Chromiumoxide — Stealth Patched",
+        ),
         ("playwright_chromium.png", "Playwright-rs — Chromium"),
         ("playwright_firefox.png", "Playwright-rs — Firefox"),
         ("playwright_webkit.png", "Playwright-rs — WebKit"),

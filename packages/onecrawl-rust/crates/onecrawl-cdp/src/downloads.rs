@@ -59,11 +59,8 @@ pub async fn get_downloads(page: &Page) -> Result<Vec<DownloadInfo>> {
         .evaluate("JSON.stringify(window.__onecrawl_downloads?.entries || [])")
         .await
         .map_err(|e| Error::Browser(format!("get_downloads failed: {e}")))?;
-    let json_str: String = val
-        .into_value()
-        .unwrap_or_else(|_| "[]".to_string());
-    let downloads: Vec<DownloadInfo> =
-        serde_json::from_str(&json_str).unwrap_or_default();
+    let json_str: String = val.into_value().unwrap_or_else(|_| "[]".to_string());
+    let downloads: Vec<DownloadInfo> = serde_json::from_str(&json_str).unwrap_or_default();
     Ok(downloads)
 }
 

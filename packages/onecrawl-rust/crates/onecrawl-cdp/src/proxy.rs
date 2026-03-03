@@ -40,7 +40,7 @@ impl ProxyPool {
     }
 
     /// Get the next proxy according to the rotation strategy.
-    pub fn next(&mut self) -> Option<&ProxyConfig> {
+    pub fn next_proxy(&mut self) -> Option<&ProxyConfig> {
         if self.proxies.is_empty() {
             return None;
         }

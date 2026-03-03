@@ -120,29 +120,48 @@ pub async fn block_resources(page: &Page, resource_types: &[ResourceType]) -> Re
         .map_err(|e| Error::Browser(format!("block_resources failed: {e}")))?;
 
     // Also set up Fetch-domain interception with patterns
-    let patterns: Vec<chromiumoxide::cdp::browser_protocol::fetch::RequestPattern> =
-        resource_types
-            .iter()
-            .map(|rt| {
-                let cdp_type = match rt {
-                    ResourceType::Document => chromiumoxide::cdp::browser_protocol::network::ResourceType::Document,
-                    ResourceType::Stylesheet => chromiumoxide::cdp::browser_protocol::network::ResourceType::Stylesheet,
-                    ResourceType::Image => chromiumoxide::cdp::browser_protocol::network::ResourceType::Image,
-                    ResourceType::Media => chromiumoxide::cdp::browser_protocol::network::ResourceType::Media,
-                    ResourceType::Font => chromiumoxide::cdp::browser_protocol::network::ResourceType::Font,
-                    ResourceType::Script => chromiumoxide::cdp::browser_protocol::network::ResourceType::Script,
-                    ResourceType::Xhr => chromiumoxide::cdp::browser_protocol::network::ResourceType::Xhr,
-                    ResourceType::Fetch => chromiumoxide::cdp::browser_protocol::network::ResourceType::Fetch,
-                    ResourceType::WebSocket => chromiumoxide::cdp::browser_protocol::network::ResourceType::WebSocket,
-                    ResourceType::Other => chromiumoxide::cdp::browser_protocol::network::ResourceType::Other,
-                };
-                chromiumoxide::cdp::browser_protocol::fetch::RequestPattern {
-                    url_pattern: Some("*".to_string()),
-                    resource_type: Some(cdp_type),
-                    request_stage: None,
+    let patterns: Vec<chromiumoxide::cdp::browser_protocol::fetch::RequestPattern> = resource_types
+        .iter()
+        .map(|rt| {
+            let cdp_type = match rt {
+                ResourceType::Document => {
+                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Document
                 }
-            })
-            .collect();
+                ResourceType::Stylesheet => {
+                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Stylesheet
+                }
+                ResourceType::Image => {
+                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Image
+                }
+                ResourceType::Media => {
+                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Media
+                }
+                ResourceType::Font => {
+                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Font
+                }
+                ResourceType::Script => {
+                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Script
+                }
+                ResourceType::Xhr => {
+                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Xhr
+                }
+                ResourceType::Fetch => {
+                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Fetch
+                }
+                ResourceType::WebSocket => {
+                    chromiumoxide::cdp::browser_protocol::network::ResourceType::WebSocket
+                }
+                ResourceType::Other => {
+                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Other
+                }
+            };
+            chromiumoxide::cdp::browser_protocol::fetch::RequestPattern {
+                url_pattern: Some("*".to_string()),
+                resource_type: Some(cdp_type),
+                request_stage: None,
+            }
+        })
+        .collect();
 
     let params = chromiumoxide::cdp::browser_protocol::fetch::EnableParams {
         patterns: Some(patterns),

@@ -26,12 +26,7 @@ pub async fn set_device_orientation(page: &Page, reading: SensorReading) -> Resu
             alpha: {}, beta: {}, gamma: {}
         }}));
     }})()"#,
-        reading.alpha,
-        reading.beta,
-        reading.gamma,
-        reading.alpha,
-        reading.beta,
-        reading.gamma
+        reading.alpha, reading.beta, reading.gamma, reading.alpha, reading.beta, reading.gamma
     );
     page.evaluate(js)
         .await

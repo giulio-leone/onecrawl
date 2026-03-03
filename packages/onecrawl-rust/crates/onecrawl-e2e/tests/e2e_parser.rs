@@ -37,7 +37,10 @@ fn e2e_full_page_analysis() {
     // 1. Build accessibility tree
     let tree = accessibility::get_accessibility_tree(COMPLEX_HTML).unwrap();
     let rendered = accessibility::render_tree(&tree, 0, false);
-    assert!(rendered.contains("Welcome"), "tree should contain heading text");
+    assert!(
+        rendered.contains("Welcome"),
+        "tree should contain heading text"
+    );
     assert!(
         rendered.contains("Article Title"),
         "tree should contain h2 text"
@@ -186,13 +189,17 @@ fn e2e_link_classification() {
     assert!(!external.is_empty(), "should have external links");
 
     // Verify specific links
-    assert!(links.iter().any(|(href, text)| href == "/" && text == "Home"));
-    assert!(links
-        .iter()
-        .any(|(href, text)| href == "/about" && text == "About"));
-    assert!(links
-        .iter()
-        .any(|(href, _)| href == "https://external.com"));
+    assert!(
+        links
+            .iter()
+            .any(|(href, text)| href == "/" && text == "Home")
+    );
+    assert!(
+        links
+            .iter()
+            .any(|(href, text)| href == "/about" && text == "About")
+    );
+    assert!(links.iter().any(|(href, _)| href == "https://external.com"));
 }
 
 #[test]

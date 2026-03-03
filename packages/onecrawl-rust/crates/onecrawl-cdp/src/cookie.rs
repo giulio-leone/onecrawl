@@ -66,17 +66,14 @@ pub async fn get_cookies(page: &Page) -> Result<Vec<Cookie>> {
         other => other.to_string(),
     };
 
-    let cookies: Vec<Cookie> =
-        serde_json::from_str(&cookies_str).unwrap_or_default();
+    let cookies: Vec<Cookie> = serde_json::from_str(&cookies_str).unwrap_or_default();
     Ok(cookies)
 }
 
 /// Get all cookies via CDP Network.getCookies (includes httpOnly cookies).
 pub async fn get_all_cookies(page: &Page) -> Result<Vec<Cookie>> {
     let val = page
-        .execute(
-            chromiumoxide::cdp::browser_protocol::network::GetCookiesParams::default(),
-        )
+        .execute(chromiumoxide::cdp::browser_protocol::network::GetCookiesParams::default())
         .await
         .map_err(|e| Error::Browser(format!("Network.getCookies failed: {e}")))?;
 
@@ -92,10 +89,7 @@ pub async fn get_all_cookies(page: &Page) -> Result<Vec<Cookie>> {
             expires: c.expires,
             http_only: c.http_only,
             secure: c.secure,
-            same_site: c
-                .same_site
-                .map(|s| format!("{s:?}"))
-                .unwrap_or_default(),
+            same_site: c.same_site.map(|s| format!("{s:?}")).unwrap_or_default(),
         })
         .collect();
 
@@ -106,10 +100,9 @@ pub async fn get_all_cookies(page: &Page) -> Result<Vec<Cookie>> {
 pub async fn set_cookie(page: &Page, params: &SetCookieParams) -> Result<()> {
     use chromiumoxide::cdp::browser_protocol::network::TimeSinceEpoch;
 
-    let mut builder =
-        chromiumoxide::cdp::browser_protocol::network::SetCookieParams::builder()
-            .name(&params.name)
-            .value(&params.value);
+    let mut builder = chromiumoxide::cdp::browser_protocol::network::SetCookieParams::builder()
+        .name(&params.name)
+        .value(&params.value);
 
     if let Some(ref domain) = params.domain {
         builder = builder.domain(domain);
@@ -149,8 +142,7 @@ pub async fn delete_cookies(
     path: Option<&str>,
 ) -> Result<()> {
     let mut builder =
-        chromiumoxide::cdp::browser_protocol::network::DeleteCookiesParams::builder()
-            .name(name);
+        chromiumoxide::cdp::browser_protocol::network::DeleteCookiesParams::builder().name(name);
 
     if let Some(d) = domain {
         builder = builder.domain(d);

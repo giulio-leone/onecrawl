@@ -32,7 +32,9 @@ pub struct BenchmarkSuite {
 pub async fn bench_async<F, Fut>(name: &str, iterations: u32, f: F) -> BenchmarkResult
 where
     F: Fn() -> Fut,
-    Fut: std::future::Future<Output = std::result::Result<(), Box<dyn std::error::Error + Send + Sync>>>,
+    Fut: std::future::Future<
+            Output = std::result::Result<(), Box<dyn std::error::Error + Send + Sync>>,
+        >,
 {
     let mut timings = Vec::with_capacity(iterations as usize);
 
@@ -78,11 +80,22 @@ where
     build_result(name, iterations, total, &timings)
 }
 
-fn build_result(name: &str, iterations: u32, total: Duration, timings: &[Duration]) -> BenchmarkResult {
+fn build_result(
+    name: &str,
+    iterations: u32,
+    total: Duration,
+    timings: &[Duration],
+) -> BenchmarkResult {
     let total_ms = total.as_secs_f64() * 1000.0;
     let avg_ms = total_ms / iterations as f64;
-    let min_ms = timings.first().map(|d| d.as_secs_f64() * 1000.0).unwrap_or(0.0);
-    let max_ms = timings.last().map(|d| d.as_secs_f64() * 1000.0).unwrap_or(0.0);
+    let min_ms = timings
+        .first()
+        .map(|d| d.as_secs_f64() * 1000.0)
+        .unwrap_or(0.0);
+    let max_ms = timings
+        .last()
+        .map(|d| d.as_secs_f64() * 1000.0)
+        .unwrap_or(0.0);
     let p50_ms = percentile(timings, 50.0);
     let p95_ms = percentile(timings, 95.0);
     let p99_ms = percentile(timings, 99.0);
@@ -143,10 +156,7 @@ pub fn format_results(suite: &BenchmarkSuite) -> String {
 }
 
 /// Run the full CDP benchmark suite against a live page.
-pub async fn run_cdp_benchmarks(
-    page: &chromiumoxide::Page,
-    iterations: u32,
-) -> BenchmarkSuite {
+pub async fn run_cdp_benchmarks(page: &chromiumoxide::Page, iterations: u32) -> BenchmarkSuite {
     let suite_start = Instant::now();
     let mut results = Vec::new();
 
@@ -187,7 +197,8 @@ pub async fn run_cdp_benchmarks(
     {
         let p = page.clone();
         // Ensure a page with elements
-        let _ = crate::navigation::goto(&p, "data:text/html,<h1 id='t'>hello</h1><p>world</p>").await;
+        let _ =
+            crate::navigation::goto(&p, "data:text/html,<h1 id='t'>hello</h1><p>world</p>").await;
         results.push(
             bench_async("element::get_text (h1)", iterations, || {
                 let p = p.clone();

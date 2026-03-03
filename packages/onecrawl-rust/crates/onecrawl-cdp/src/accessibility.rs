@@ -80,10 +80,7 @@ pub async fn get_accessibility_tree(page: &Page) -> Result<serde_json::Value> {
 }
 
 /// Get accessibility snapshot for a specific element.
-pub async fn get_element_accessibility(
-    page: &Page,
-    selector: &str,
-) -> Result<serde_json::Value> {
+pub async fn get_element_accessibility(page: &Page, selector: &str) -> Result<serde_json::Value> {
     let js = format!(
         r#"
         (() => {{
@@ -115,8 +112,7 @@ pub async fn get_element_accessibility(
             }};
         }})()
         "#,
-        sel = serde_json::to_string(selector)
-            .unwrap_or_else(|_| format!("\"{}\"", selector))
+        sel = serde_json::to_string(selector).unwrap_or_else(|_| format!("\"{}\"", selector))
     );
 
     let result = page

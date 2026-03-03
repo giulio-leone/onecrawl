@@ -93,7 +93,9 @@ impl OneCrawlMcp {
 
     // ── Crypto tools ──
 
-    #[tool(description = "Encrypt text with AES-256-GCM. Returns base64-encoded ciphertext (salt+nonce+ct).")]
+    #[tool(
+        description = "Encrypt text with AES-256-GCM. Returns base64-encoded ciphertext (salt+nonce+ct)."
+    )]
     fn encrypt(
         &self,
         Parameters(req): Parameters<EncryptRequest>,
@@ -101,8 +103,12 @@ impl OneCrawlMcp {
         let payload = onecrawl_crypto::encrypt(req.plaintext.as_bytes(), &req.password)
             .map_err(|e| mcp_err(e.to_string()))?;
 
-        let salt = B64.decode(&payload.salt).map_err(|e| mcp_err(e.to_string()))?;
-        let nonce = B64.decode(&payload.nonce).map_err(|e| mcp_err(e.to_string()))?;
+        let salt = B64
+            .decode(&payload.salt)
+            .map_err(|e| mcp_err(e.to_string()))?;
+        let nonce = B64
+            .decode(&payload.nonce)
+            .map_err(|e| mcp_err(e.to_string()))?;
         let ct = B64
             .decode(&payload.ciphertext)
             .map_err(|e| mcp_err(e.to_string()))?;
@@ -112,7 +118,9 @@ impl OneCrawlMcp {
         packed.extend_from_slice(&nonce);
         packed.extend_from_slice(&ct);
 
-        Ok(CallToolResult::success(vec![Content::text(B64.encode(&packed))]))
+        Ok(CallToolResult::success(vec![Content::text(
+            B64.encode(&packed),
+        )]))
     }
 
     #[tool(description = "Decrypt base64-encoded AES-256-GCM ciphertext (salt+nonce+ct).")]
@@ -136,11 +144,10 @@ impl OneCrawlMcp {
             ciphertext: B64.encode(&raw[28..]),
         };
 
-        let plaintext =
-            onecrawl_crypto::decrypt(&payload, &req.password).map_err(|e| mcp_err(e.to_string()))?;
+        let plaintext = onecrawl_crypto::decrypt(&payload, &req.password)
+            .map_err(|e| mcp_err(e.to_string()))?;
 
-        let text = String::from_utf8(plaintext)
-            .unwrap_or_else(|e| B64.encode(e.into_bytes()));
+        let text = String::from_utf8(plaintext).unwrap_or_else(|e| B64.encode(e.into_bytes()));
 
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
@@ -153,7 +160,9 @@ impl OneCrawlMcp {
             "code_verifier": challenge.code_verifier,
             "code_challenge": challenge.code_challenge,
         });
-        Ok(CallToolResult::success(vec![Content::text(json.to_string())]))
+        Ok(CallToolResult::success(vec![Content::text(
+            json.to_string(),
+        )]))
     }
 
     #[tool(description = "Generate a 6-digit TOTP code from a base32 secret.")]
@@ -177,13 +186,15 @@ impl OneCrawlMcp {
         &self,
         Parameters(req): Parameters<HtmlRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let tree =
-            onecrawl_parser::get_accessibility_tree(&req.html).map_err(|e| mcp_err(e.to_string()))?;
+        let tree = onecrawl_parser::get_accessibility_tree(&req.html)
+            .map_err(|e| mcp_err(e.to_string()))?;
         let rendered = onecrawl_parser::accessibility::render_tree(&tree, 0, false);
         Ok(CallToolResult::success(vec![Content::text(rendered)]))
     }
 
-    #[tool(description = "Query HTML with a CSS selector. Returns JSON array of matching elements.")]
+    #[tool(
+        description = "Query HTML with a CSS selector. Returns JSON array of matching elements."
+    )]
     fn query_selector(
         &self,
         Parameters(req): Parameters<SelectorRequest>,
@@ -201,21 +212,24 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let texts =
             onecrawl_parser::extract_text(&req.html, "body").map_err(|e| mcp_err(e.to_string()))?;
-        Ok(CallToolResult::success(vec![Content::text(texts.join("\n"))]))
+        Ok(CallToolResult::success(vec![Content::text(
+            texts.join("\n"),
+        )]))
     }
 
-    #[tool(description = "Extract all links from HTML. Returns JSON array with href, text, is_external.")]
+    #[tool(
+        description = "Extract all links from HTML. Returns JSON array with href, text, is_external."
+    )]
     fn extract_links(
         &self,
         Parameters(req): Parameters<HtmlRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let links =
-            onecrawl_parser::extract::extract_links(&req.html).map_err(|e| mcp_err(e.to_string()))?;
+        let links = onecrawl_parser::extract::extract_links(&req.html)
+            .map_err(|e| mcp_err(e.to_string()))?;
         let result: Vec<serde_json::Value> = links
             .into_iter()
             .map(|(href, text)| {
-                let is_external =
-                    href.starts_with("http://") || href.starts_with("https://");
+                let is_external = href.starts_with("http://") || href.starts_with("https://");
                 serde_json::json!({ "href": href, "text": text, "is_external": is_external })
             })
             .collect();
@@ -249,8 +263,7 @@ impl OneCrawlMcp {
         let value = store.get(&req.key).map_err(|e| mcp_err(e.to_string()))?;
         match value {
             Some(v) => {
-                let text = String::from_utf8(v)
-                    .unwrap_or_else(|e| B64.encode(e.into_bytes()));
+                let text = String::from_utf8(v).unwrap_or_else(|e| B64.encode(e.into_bytes()));
                 Ok(CallToolResult::success(vec![Content::text(text)]))
             }
             None => Ok(CallToolResult::success(vec![Content::text(format!(

@@ -21,7 +21,9 @@ pub async fn get_local_storage(page: &Page) -> Result<serde_json::Value> {
         .await
         .map_err(|e| onecrawl_core::Error::Browser(format!("get_local_storage failed: {e}")))?;
 
-    let val: serde_json::Value = result.into_value().unwrap_or(serde_json::Value::Object(Default::default()));
+    let val: serde_json::Value = result
+        .into_value()
+        .unwrap_or(serde_json::Value::Object(Default::default()));
     Ok(val)
 }
 
@@ -64,7 +66,9 @@ pub async fn get_session_storage(page: &Page) -> Result<serde_json::Value> {
         .await
         .map_err(|e| onecrawl_core::Error::Browser(format!("get_session_storage failed: {e}")))?;
 
-    let val: serde_json::Value = result.into_value().unwrap_or(serde_json::Value::Object(Default::default()));
+    let val: serde_json::Value = result
+        .into_value()
+        .unwrap_or(serde_json::Value::Object(Default::default()));
     Ok(val)
 }
 
@@ -106,12 +110,11 @@ pub async fn get_indexeddb_databases(page: &Page) -> Result<Vec<String>> {
             "#,
         )
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("get_indexeddb_databases failed: {e}")))?;
+        .map_err(|e| {
+            onecrawl_core::Error::Browser(format!("get_indexeddb_databases failed: {e}"))
+        })?;
 
-    let names: Vec<String> = match result.into_value() {
-        Ok(v) => v,
-        Err(_) => Vec::new(),
-    };
+    let names: Vec<String> = result.into_value().unwrap_or_default();
     Ok(names)
 }
 

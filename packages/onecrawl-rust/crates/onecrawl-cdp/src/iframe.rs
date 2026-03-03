@@ -38,10 +38,7 @@ pub async fn list_iframes(page: &Page) -> Result<Vec<IframeInfo>> {
         .await
         .map_err(|e| onecrawl_core::Error::Browser(format!("list_iframes failed: {e}")))?;
 
-    let iframes: Vec<IframeInfo> = match result.into_value() {
-        Ok(v) => v,
-        Err(_) => Vec::new(),
-    };
+    let iframes: Vec<IframeInfo> = result.into_value().unwrap_or_default();
 
     Ok(iframes)
 }

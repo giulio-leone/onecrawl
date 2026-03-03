@@ -66,7 +66,11 @@ mod tests {
         let html = r#"<html><body><a href="/page" title="Go">Link</a></body></html>"#;
         let results = query_selector(html, "a").unwrap();
         assert_eq!(results.len(), 1);
-        let attrs: Vec<&str> = results[0].attributes.iter().map(|(k, _)| k.as_str()).collect();
+        let attrs: Vec<&str> = results[0]
+            .attributes
+            .iter()
+            .map(|(k, _)| k.as_str())
+            .collect();
         assert!(attrs.contains(&"href"));
         assert!(attrs.contains(&"title"));
     }

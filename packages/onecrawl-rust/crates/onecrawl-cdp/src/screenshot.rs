@@ -6,16 +6,12 @@ use serde::{Deserialize, Serialize};
 /// Supported screenshot image formats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum ImageFormat {
+    #[default]
     Png,
     Jpeg,
     Webp,
-}
-
-impl Default for ImageFormat {
-    fn default() -> Self {
-        Self::Png
-    }
 }
 
 /// Options for taking a screenshot.

@@ -89,10 +89,7 @@ pub async fn drain_console_entries(page: &Page) -> Result<Vec<ConsoleEntry>> {
         .await
         .map_err(|e| onecrawl_core::Error::Browser(format!("drain_console_entries failed: {e}")))?;
 
-    let entries: Vec<ConsoleEntry> = match result.into_value() {
-        Ok(v) => v,
-        Err(_) => Vec::new(),
-    };
+    let entries: Vec<ConsoleEntry> = result.into_value().unwrap_or_default();
 
     Ok(entries)
 }

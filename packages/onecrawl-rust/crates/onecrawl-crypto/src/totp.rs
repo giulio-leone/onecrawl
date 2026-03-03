@@ -68,7 +68,10 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
         return false;
     }
     // Constant-time comparison to prevent timing attacks
-    a.iter().zip(b.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    a.iter()
+        .zip(b.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
 }
 
 /// Generate a random base32-encoded TOTP secret (20 bytes = 160 bits).

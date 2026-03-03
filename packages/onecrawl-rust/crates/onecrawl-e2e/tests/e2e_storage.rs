@@ -95,14 +95,8 @@ fn e2e_storage_bulk_operations() {
     assert_eq!(keys.len(), 100);
 
     // Verify specific entries
-    assert_eq!(
-        store.get("key-000").unwrap().unwrap(),
-        b"value-0"
-    );
-    assert_eq!(
-        store.get("key-099").unwrap().unwrap(),
-        b"value-99"
-    );
+    assert_eq!(store.get("key-000").unwrap().unwrap(), b"value-0");
+    assert_eq!(store.get("key-099").unwrap().unwrap(), b"value-99");
 
     // Delete first 50
     for i in 0..50 {
@@ -118,10 +112,7 @@ fn e2e_storage_bulk_operations() {
 
     // Verify remaining entries still exist
     assert!(store.contains("key-050").unwrap());
-    assert_eq!(
-        store.get("key-050").unwrap().unwrap(),
-        b"value-50"
-    );
+    assert_eq!(store.get("key-050").unwrap().unwrap(), b"value-50");
 }
 
 // ────────────────────── Key Prefix Listing ──────────────────────
@@ -209,7 +200,12 @@ fn e2e_storage_binary_value() {
 #[test]
 fn e2e_storage_special_key_chars() {
     let store = EncryptedStore::open_temp("pw").unwrap();
-    let keys = ["key/with/slashes", "key:with:colons", "key.with.dots", "key-with-dashes"];
+    let keys = [
+        "key/with/slashes",
+        "key:with:colons",
+        "key.with.dots",
+        "key-with-dashes",
+    ];
 
     for key in keys {
         store.set(key, key.as_bytes()).unwrap();
