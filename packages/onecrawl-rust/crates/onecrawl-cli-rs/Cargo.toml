@@ -1,0 +1,28 @@
+[package]
+name = "onecrawl-cli-rs"
+description = "Native CLI for OneCrawl browser automation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "onecrawl"
+path = "src/main.rs"
+
+[dependencies]
+onecrawl-core = { path = "../onecrawl-core" }
+onecrawl-crypto = { path = "../onecrawl-crypto" }
+onecrawl-parser = { path = "../onecrawl-parser" }
+onecrawl-storage = { path = "../onecrawl-storage" }
+onecrawl-cdp = { path = "../onecrawl-cdp" }
+clap = { workspace = true }
+colored = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+hex = { workspace = true }
+[dev-dependencies]
+pretty_assertions = { workspace = true }

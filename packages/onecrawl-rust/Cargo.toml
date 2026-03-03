@@ -5,6 +5,8 @@ members = [
     "crates/onecrawl-crypto",
     "crates/onecrawl-parser",
     "crates/onecrawl-storage",
+    "crates/onecrawl-cdp",
+    "crates/onecrawl-cli-rs",
 ]
 
 [workspace.package]
@@ -35,6 +37,15 @@ scraper = "0.22"
 
 # Storage
 sled = "0.34"
+
+# Browser (CDP)
+chromiumoxide = { version = "0.8", features = ["tokio-runtime"] }
+futures = "0.3"
+
+# CLI
+clap = { version = "4", features = ["derive", "env", "color"] }
+colored = "3"
+hex = "0.4"
 
 # Testing
 pretty_assertions = "1"

@@ -1,0 +1,20 @@
+[package]
+name = "onecrawl-cdp"
+description = "Chrome DevTools Protocol browser automation for OneCrawl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+onecrawl-core = { path = "../onecrawl-core" }
+chromiumoxide = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
