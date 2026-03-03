@@ -561,7 +561,115 @@ const cliWaitForFunction: McpToolDef = {
 };
 
 // ---------------------------------------------------------------------------
-// Export all 41 generated tools
+// M13 — Agent-Browser Parity (7 tools)
+// ---------------------------------------------------------------------------
+
+const cliSnapshot: McpToolDef = {
+  name: "cli_snapshot",
+  description:
+    "Get the page accessibility tree with element refs — the key AI-agent command for compact, token-efficient page understanding.",
+  inputSchema: z.object({
+    interactive: z
+      .boolean()
+      .optional()
+      .describe("Show only interactive elements (buttons, links, inputs)"),
+    compact: z.boolean().optional().describe("Compact single-line output"),
+    depth: z
+      .number()
+      .optional()
+      .describe("Max tree depth to traverse"),
+    selector: z
+      .string()
+      .optional()
+      .describe("CSS selector to scope the snapshot subtree"),
+    json: z.boolean().optional().describe("Output as JSON instead of text"),
+  }),
+  handler: makeHandler("cli_snapshot"),
+};
+
+const cliDblclick: McpToolDef = {
+  name: "cli_dblclick",
+  description: "Double-click an element by ref number or CSS selector.",
+  inputSchema: z.object({
+    ref: z
+      .string()
+      .describe("Element ref number or CSS selector to double-click"),
+    force: z.boolean().optional().describe("Force the double-click"),
+  }),
+  handler: makeHandler("cli_dblclick"),
+};
+
+const cliFocus: McpToolDef = {
+  name: "cli_focus",
+  description: "Focus an element by ref number or CSS selector.",
+  inputSchema: z.object({
+    ref: z
+      .string()
+      .describe("Element ref number or CSS selector to focus"),
+  }),
+  handler: makeHandler("cli_focus"),
+};
+
+const cliCheck: McpToolDef = {
+  name: "cli_check",
+  description:
+    "Check or uncheck a checkbox/radio element by ref number or CSS selector.",
+  inputSchema: z.object({
+    ref: z
+      .string()
+      .describe("Element ref number or CSS selector"),
+    uncheck: z
+      .boolean()
+      .optional()
+      .describe("Uncheck instead of check"),
+  }),
+  handler: makeHandler("cli_check"),
+};
+
+const cliScrollintoview: McpToolDef = {
+  name: "cli_scrollintoview",
+  description:
+    "Scroll an element into the visible viewport by ref number or CSS selector.",
+  inputSchema: z.object({
+    ref: z
+      .string()
+      .describe("Element ref number or CSS selector to scroll into view"),
+  }),
+  handler: makeHandler("cli_scrollintoview"),
+};
+
+const cliConnect: McpToolDef = {
+  name: "cli_connect",
+  description:
+    "Connect to a browser via Chrome DevTools Protocol port for remote automation.",
+  inputSchema: z.object({
+    port: z.number().describe("CDP port number (1-65535)"),
+  }),
+  handler: makeHandler("cli_connect"),
+};
+
+const cliHighlight: McpToolDef = {
+  name: "cli_highlight",
+  description:
+    "Visually highlight an element with a colored border and overlay for debugging.",
+  inputSchema: z.object({
+    ref: z
+      .string()
+      .describe("Element ref number or CSS selector to highlight"),
+    color: z
+      .string()
+      .optional()
+      .describe("Highlight color (default: red)"),
+    duration: z
+      .number()
+      .optional()
+      .describe("Duration in ms before removing highlight (default: 2000)"),
+  }),
+  handler: makeHandler("cli_highlight"),
+};
+
+// ---------------------------------------------------------------------------
+// Export all 48 generated tools
 // ---------------------------------------------------------------------------
 
 export const generatedCliTools: McpToolDef[] = [
@@ -612,4 +720,12 @@ export const generatedCliTools: McpToolDef[] = [
   cliGetStyles,
   cliGetBox,
   cliWaitForFunction,
+  // M13 — Agent-Browser Parity (7)
+  cliSnapshot,
+  cliDblclick,
+  cliFocus,
+  cliCheck,
+  cliScrollintoview,
+  cliConnect,
+  cliHighlight,
 ];

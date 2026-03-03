@@ -19,10 +19,13 @@ const EXPECTED_COMMANDS = [
   'add-style',
   'assert',
   'auth',
+  'check',
   'click',
   'clipboard',
+  'connect',
   'console',
   'cookie',
+  'dblclick',
   'device',
   'dialog',
   'diff-screenshot',
@@ -32,6 +35,7 @@ const EXPECTED_COMMANDS = [
   'emulate-media',
   'extract',
   'find',
+  'focus',
   'forms',
   'frame',
   'geolocation',
@@ -41,6 +45,7 @@ const EXPECTED_COMMANDS = [
   'har',
   'headers',
   'health-check',
+  'highlight',
   'hover',
   'http-credentials',
   'is',
@@ -60,10 +65,12 @@ const EXPECTED_COMMANDS = [
   'screencast',
   'screenshot-annotate',
   'scroll',
+  'scrollintoview',
   'select',
   'session',
   'session-info',
   'set-content',
+  'snapshot',
   'storage',
   'storage-state',
   'tab',
@@ -107,7 +114,7 @@ test('each command file exports register()', () => {
 
 // ── Test 3: Registry discovers all 63 commands ──────────────────────────────
 
-test('registry discovers all 63 commands', () => {
+test('registry discovers all 70 commands', () => {
   // Clear require cache for commands/index.js to get a fresh registry
   const indexPath = path.join(COMMANDS_DIR, 'index.js');
   delete require.cache[indexPath];
@@ -117,8 +124,8 @@ test('registry discovers all 63 commands', () => {
 
   assert.strictEqual(
     registry.all().length,
-    63,
-    `Expected 63 commands, got ${registry.all().length}: [${registry.all().map(c => c.name).join(', ')}]`
+    70,
+    `Expected 70 commands, got ${registry.all().length}: [${registry.all().map(c => c.name).join(', ')}]`
   );
 });
 
