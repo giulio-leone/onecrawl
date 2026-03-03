@@ -5,7 +5,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 const config: Config = {
   title: 'OneCrawl',
   tagline: 'High-performance browser automation engine in Rust',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/logo.svg',
 
   future: {
     v4: true,
@@ -41,6 +41,7 @@ const config: Config = {
   ],
 
   themeConfig: {
+    image: 'img/social-card.svg',
     colorMode: {
       respectPrefersColorScheme: true,
     },

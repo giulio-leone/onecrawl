@@ -18,28 +18,28 @@ OneCrawl replaces an entire stack of browser automation tools with a single, lig
 | **Binary size** | ~5.8 MB | ~250 MB | ~170 MB (with Chromium) |
 | **Startup time** | &lt;100ms | ~2s | ~1.5s |
 | **Memory (idle)** | ~15 MB | ~80 MB | ~60 MB |
-| **Stealth built-in** | ✅ Native | ❌ Plugin needed | ❌ Plugin needed |
-| **MCP support** | ✅ 51 tools | ❌ | ❌ |
-| **HTTP API server** | ✅ Multi-instance | ❌ | ❌ |
+| **Stealth built-in** | Native | Plugin needed | Plugin needed |
+| **MCP support** | 51 tools | — | — |
+| **HTTP API server** | Multi-instance | — | — |
 | **Language** | Rust (native) | JS/TS | JS/TS |
 | **CLI commands** | 200+ | ~10 | N/A |
-| **Anti-bot bypass** | ✅ Built-in | ❌ | ❌ |
-| **Accessibility refs** | ✅ Snapshot-based | Locators | Selectors |
+| **Anti-bot bypass** | Built-in | — | — |
+| **Accessibility refs** | Snapshot-based | Locators | Selectors |
 
 ## Features at a Glance
 
-- 🚀 **Blazing fast** — Native Rust binary, sub-100ms startup
-- 🕵️ **Stealth mode** — Fingerprint spoofing, anti-bot bypass, CAPTCHA detection
-- 🤖 **AI-native** — 51 MCP tools for seamless AI agent integration
-- 🌐 **HTTP API** — Multi-instance Chrome management with REST endpoints
-- 📸 **Screenshots & PDF** — Full-page capture, element capture, visual diff
-- 🕷️ **Spider & Crawl** — Site-wide crawling with configurable depth and concurrency
-- ♿ **Accessibility** — Built-in a11y auditing and accessibility tree snapshots
-- 🔑 **Auth & Passkeys** — Native passkey support for modern authentication flows
-- 📊 **HAR & Network** — Full network logging, HAR export, request interception
-- 🧩 **Multi-SDK** — Node.js and Python bindings alongside the CLI
-- 📦 **Single binary** — No external dependencies, just Chrome on `$PATH`
-- 🔄 **Pipelines** — Chain commands via YAML/JSON pipeline files
+- **Blazing fast** — Native Rust binary, sub-100ms startup
+- **Stealth mode** — Fingerprint spoofing, anti-bot bypass, CAPTCHA detection
+- **AI-native** — 51 MCP tools for seamless AI agent integration
+- **HTTP API** — Multi-instance Chrome management with REST endpoints
+- **Screenshots & PDF** — Full-page capture, element capture, visual diff
+- **Spider & Crawl** — Site-wide crawling with configurable depth and concurrency
+- **Accessibility** — Built-in a11y auditing and accessibility tree snapshots
+- **Auth & Passkeys** — Native passkey support for modern authentication flows
+- **HAR & Network** — Full network logging, HAR export, request interception
+- **Multi-SDK** — Node.js and Python bindings alongside the CLI
+- **Single binary** — No external dependencies, just Chrome on `$PATH`
+- **Pipelines** — Chain commands via YAML/JSON pipeline files
 
 ## Prerequisites
 
