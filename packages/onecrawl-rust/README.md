@@ -12,7 +12,7 @@ with first-class Node.js and Python bindings.*
 [![Python](https://img.shields.io/badge/Python-PyO3-3776AB?style=flat-square&logo=python&logoColor=white)](https://pyo3.rs/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-**42 CDP Modules** · **144+ Node.js Methods** · **178+ Python Methods** · **152+ CLI Commands** · **116 Rust Tests**
+**59 CDP Modules** · **258 Node.js Methods** · **260 Python Methods** · **200+ CLI Commands** · **146 Rust Tests**
 
 Linux x86_64 · macOS x86_64 · macOS ARM (Apple Silicon)
 
@@ -24,9 +24,9 @@ Linux x86_64 · macOS x86_64 · macOS ARM (Apple Silicon)
 
 OneCrawl is a **Rust-native browser automation and web scraping framework** built on top of [chromiumoxide](https://github.com/nickel-org/chromiumoxide) and the Chrome DevTools Protocol (CDP). It provides a unified API across three interfaces:
 
-- **NAPI-RS** — 144+ methods for Node.js, compiled to native addons
-- **PyO3** — 178+ methods for Python, distributed as maturin-built wheels
-- **CLI** — 152+ commands for shell scripting and automation pipelines
+- **NAPI-RS** — 258 methods for Node.js, compiled to native addons
+- **PyO3** — 260 methods for Python, distributed as maturin-built wheels
+- **CLI** — 200+ commands for shell scripting and automation pipelines
 
 Everything runs in a single Rust process — no child process spawning, no bridge overhead, no separate browser driver. CDP commands are dispatched directly over WebSocket with zero-copy serialization where possible.
 
@@ -63,6 +63,19 @@ Extract content in multiple formats:
 - **Markdown** — Structured markdown conversion
 - **JSON** — Structured data extraction with CSS selectors
 - **Metadata** — Page title, description, OpenGraph, JSON-LD
+- **Streaming** — Schema-based extraction with automatic pagination
+- **Structured Data** — JSON-LD, OpenGraph, and Twitter Card parsing
+
+### 📝 Form Filling
+- Auto-fill forms with fuzzy field matching
+- Intelligent field detection and value mapping
+
+### 🕷️ Crawling & Discovery
+- Spider framework with pause/resume support
+- Link graph analysis and visualization
+- Robots.txt parsing and compliance
+- XML sitemap generation and parsing
+- DOM snapshot capture with diff comparison
 
 ### 📸 Screenshot & PDF
 - Full-page and element-level screenshots (PNG/JPEG/WebP)
@@ -76,11 +89,19 @@ Full network layer control:
 - Network activity logging with filters
 - HAR recording and export
 - WebSocket frame capture
+- Browser-session HTTP client (fetch with browser cookies/TLS)
 - Request queue with configurable retry and concurrency
+
+### 🛡️ Anti-Bot & Safety
+- Sliding-window rate limiter with 4 presets
+- Retry queue with exponential backoff
+- Domain blocker with 5 blocklist categories
+- Request queue with concurrency control
 
 ### 🥷 Stealth & Anti-Detection
 - Browser fingerprint injection (WebGL, Canvas, AudioContext, fonts)
-- TLS fingerprint impersonation
+- TLS fingerprint impersonation (6 browser profiles)
+- 12 stealth patches with 3 detection profiles
 - Stealth patches (navigator overrides, permission spoofing, plugin emulation)
 - Rebrowser-compatible patch pipeline
 
@@ -124,6 +145,11 @@ Full network layer control:
 - Proxy pool management
 - Rotation strategies: **Round-Robin**, **Random**, **Sticky**
 - Per-request proxy assignment
+
+### 📊 Data Processing
+- Filter, transform, deduplicate, and sort pipelines
+- Element fingerprinting with adaptive relocation
+- Persistent cookie jar across sessions
 
 ### ⚙️ Workers & Iframes
 - Service Worker lifecycle management (register, unregister, inspect)
@@ -217,14 +243,14 @@ onecrawl-rust/
 │   ├── onecrawl-crypto/      # AES-256-GCM, PKCE, TOTP, PBKDF2
 │   ├── onecrawl-parser/      # lol_html + scraper: streaming HTML parsing
 │   ├── onecrawl-storage/     # sled-based encrypted key-value store
-│   ├── onecrawl-cdp/         # 42 CDP modules (browser automation engine)
-│   ├── onecrawl-cli-rs/      # 152+ CLI commands (clap v4)
+│   ├── onecrawl-cdp/         # 59 CDP modules (browser automation engine)
+│   ├── onecrawl-cli-rs/      # 200+ CLI commands (clap v4)
 │   ├── onecrawl-mcp-rs/      # MCP server (stdio + SSE transport)
 │   ├── onecrawl-benchmark/   # Benchmark harness
 │   └── onecrawl-e2e/         # End-to-end integration tests
 ├── bindings/
-│   ├── napi/                 # Node.js bindings (144+ NAPI-RS methods)
-│   └── python/               # Python bindings (178+ PyO3 methods)
+│   ├── napi/                 # Node.js bindings (258 NAPI-RS methods)
+│   └── python/               # Python bindings (260 PyO3 methods)
 ├── scripts/                  # Build & release automation
 ├── Cargo.toml                # Workspace manifest
 └── Makefile                  # Build orchestration
@@ -245,54 +271,91 @@ bindings/python ──┘         │                                      ▲
 
 ## Module Reference
 
-All 42 CDP modules in `crates/onecrawl-cdp/src/`:
+All 59 CDP modules in `crates/onecrawl-cdp/src/`:
 
-| # | Module | Functions | Category | Description |
-|---|--------|-----------|----------|-------------|
-| 1 | `accessibility` | 3 | Accessibility | A11y tree extraction, WCAG audit, element properties |
-| 2 | `advanced_emulation` | 7 | Emulation | Battery, orientation, permissions, CPU/memory pressure |
-| 3 | `benchmark` | 4 | Performance | Benchmark suite with percentile reporting |
-| 4 | `bridge` | 4 | Core | CDP bridge and raw command dispatch |
-| 5 | `browser` | 7 | Core | Session lifecycle, launch, connect, close |
-| 6 | `console` | 3 | Monitoring | Console message interception and filtering |
-| 7 | `cookie` | 5 | Storage | Get, set, delete cookies per domain |
-| 8 | `cookie_jar` | 6 | Storage | Encrypted cookie persistence across sessions |
-| 9 | `coverage` | 4 | Monitoring | JS and CSS code coverage collection |
-| 10 | `dialog` | 3 | Monitoring | Alert, confirm, prompt, beforeunload handling |
-| 11 | `dom_nav` | 8 | DOM | Parent, children, siblings, above, below traversal |
-| 12 | `dom_observer` | 4 | DOM | MutationObserver-based DOM change tracking |
-| 13 | `downloads` | 5 | Browser | Download management, path control, wait-for-download |
-| 14 | `element` | 12 | Interaction | Click, type, fill, clear, focus, hover, scroll-into-view |
-| 15 | `emulation` | 10 | Emulation | Viewport, device presets, geolocation (8 cities) |
-| 16 | `events` | 10 | Core | Event subscription, lifecycle hooks, custom events |
-| 17 | `extract` | 4 | Extraction | Text, HTML, Markdown, JSON content extraction |
-| 18 | `geofencing` | 5 | Emulation | Geofencing simulation and boundary events |
-| 19 | `har` | 8 | Network | HAR recording, export, request/response capture |
-| 20 | `iframe` | 3 | Iframes | List frames, eval in frame, get frame content |
-| 21 | `input` | 4 | Interaction | Mouse events, touch events, drag-and-drop |
-| 22 | `intercept` | 3 | Network | Request interception, modification, blocking |
-| 23 | `keyboard` | 5 | Interaction | Key press, key combos, text input, IME simulation |
-| 24 | `navigation` | 9 | Navigation | Navigate, reload, back, forward, wait-for-navigation |
-| 25 | `network` | 8 | Network | Request/response inspection, headers, status codes |
-| 26 | `network_log` | 5 | Network | Network activity logging with filters and export |
-| 27 | `page` | 3 | Core | Page HTML, evaluate JS, page metrics |
-| 28 | `page_watcher` | 4 | Monitoring | URL and content change detection polling |
-| 29 | `playwright_backend` | 7 | Core | Playwright-compatible backend adapter |
-| 30 | `print` | 2 | PDF | PDF generation with 14 configurable options |
-| 31 | `proxy` | 5 | Proxy | Pool management, rotation (RoundRobin/Random/Sticky) |
-| 32 | `request_queue` | 4 | Network | Request queue with retry, concurrency, backoff |
-| 33 | `screenshot` | 6 | Screenshot | Full-page, element, viewport capture (PNG/JPEG/WebP) |
-| 34 | `screenshot_diff` | 3 | Screenshot | Visual regression with pixel diff and threshold |
-| 35 | `selectors` | 5 | Selectors | CSS ::text/::attr, XPath, text, regex, find-similar |
-| 36 | `tabs` | 5 | Core | Multi-tab management, create, switch, close |
-| 37 | `throttle` | 4 | Emulation | Network throttling profiles (3G, 4G, custom) |
-| 38 | `tracing_cdp` | 5 | Performance | Chrome tracing with category filters and export |
-| 39 | `web_storage` | 8 | Storage | localStorage, sessionStorage, IndexedDB, clear data |
-| 40 | `webauthn` | 6 | Auth | WebAuthn/FIDO2 virtual authenticator and passkeys |
-| 41 | `websocket` | 9 | Network | WebSocket frame capture, send, close, inspect |
-| 42 | `workers` | 3 | Workers | Service Worker register, unregister, inspect |
+| # | Module | Category | Description |
+|---|--------|----------|-------------|
+| | **Core Browser Control** | | |
+| 1 | `browser` | Core | Session lifecycle, launch, connect, close |
+| 2 | `page` | Core | Page HTML, evaluate JS, page metrics |
+| 3 | `navigation` | Navigation | Navigate, reload, back, forward, wait-for-navigation |
+| 4 | `element` | Interaction | Click, type, fill, clear, focus, hover, scroll-into-view |
+| 5 | `input` | Interaction | Mouse events, touch events, drag-and-drop |
+| 6 | `keyboard` | Interaction | Key press, key combos, text input, IME simulation |
+| 7 | `tabs` | Core | Multi-tab management, create, switch, close |
+| | **Stealth & Anti-Detection** | | |
+| 8 | `antibot` | Stealth | 12 stealth patches, 3 detection profiles |
+| 9 | `tls_fingerprint` | Stealth | TLS fingerprint impersonation (6 browser profiles) |
+| 10 | `advanced_emulation` | Emulation | Battery, orientation, permissions, CPU/memory pressure |
+| | **Scraping & Extraction** | | |
+| 11 | `selectors` | Selectors | CSS ::text/::attr, XPath, text, regex, find-similar |
+| 12 | `dom_nav` | DOM | Parent, children, siblings, above, below traversal |
+| 13 | `extract` | Extraction | Text, HTML, Markdown, JSON content extraction |
+| 14 | `streaming` | Extraction | Schema-based extraction with automatic pagination |
+| 15 | `structured_data` | Extraction | JSON-LD, OpenGraph, Twitter Card parsing |
+| 16 | `form_filler` | Interaction | Auto-fill forms with fuzzy field matching |
+| | **Crawling & Discovery** | | |
+| 17 | `spider` | Crawling | Crawler framework with pause/resume support |
+| 18 | `link_graph` | Crawling | Link graph analysis and visualization |
+| 19 | `robots` | Crawling | Robots.txt parser and compliance checker |
+| 20 | `sitemap` | Crawling | XML sitemap generation and parsing |
+| 21 | `snapshot` | Crawling | DOM snapshot capture with diff comparison |
+| | **Network & HTTP** | | |
+| 22 | `network` | Network | Request/response inspection, headers, status codes |
+| 23 | `http_client` | Network | Browser-session fetch (cookies/TLS preserved) |
+| 24 | `intercept` | Network | Request interception, modification, blocking |
+| 25 | `har` | Network | HAR recording, export, request/response capture |
+| 26 | `websocket` | Network | WebSocket frame capture, send, close, inspect |
+| 27 | `network_log` | Network | Network activity logging with filters and export |
+| 28 | `throttle` | Emulation | Network throttling profiles (3G, 4G, custom) |
+| 29 | `proxy` | Proxy | Pool management, rotation (RoundRobin/Random/Sticky) |
+| | **Anti-Bot & Safety** | | |
+| 30 | `rate_limiter` | Safety | Sliding-window rate limiter with 4 presets |
+| 31 | `retry_queue` | Safety | Retry queue with exponential backoff |
+| 32 | `domain_blocker` | Safety | Domain blocker with 5 blocklist categories |
+| 33 | `request_queue` | Network | Request queue with retry, concurrency, backoff |
+| | **Data Processing** | | |
+| 34 | `data_pipeline` | Processing | Filter, transform, deduplicate, sort pipelines |
+| 35 | `cookie_jar` | Storage | Encrypted cookie persistence across sessions |
+| 36 | `adaptive` | Processing | Element fingerprinting with adaptive relocation |
+| | **Monitoring & Testing** | | |
+| 37 | `coverage` | Monitoring | JS and CSS code coverage collection |
+| 38 | `benchmark` | Performance | Benchmark suite with percentile reporting |
+| 39 | `screenshot_diff` | Screenshot | Visual regression with pixel diff and threshold |
+| 40 | `tracing_cdp` | Performance | Chrome tracing with category filters and export |
+| 41 | `page_watcher` | Monitoring | URL and content change detection polling |
+| 42 | `console` | Monitoring | Console message interception and filtering |
+| 43 | `dialog` | Monitoring | Alert, confirm, prompt, beforeunload handling |
+| | **Infrastructure** | | |
+| 44 | `events` | Core | Event subscription, lifecycle hooks, custom events |
+| 45 | `downloads` | Browser | Download management, path control, wait-for-download |
+| 46 | `iframe` | Iframes | List frames, eval in frame, get frame content |
+| 47 | `print` | PDF | PDF generation with 14 configurable options |
+| 48 | `web_storage` | Storage | localStorage, sessionStorage, IndexedDB, clear data |
+| 49 | `webauthn` | Auth | WebAuthn/FIDO2 virtual authenticator and passkeys |
+| 50 | `dom_observer` | DOM | MutationObserver-based DOM change tracking |
+| 51 | `workers` | Workers | Service Worker register, unregister, inspect |
+| 52 | `geofencing` | Emulation | Geofencing simulation and boundary events |
+| 53 | `shell` | Infrastructure | Shell command execution and process management |
+| | **Bindings** | | |
+| 54 | `bridge` | Core | CDP bridge and raw command dispatch |
+| 55 | `playwright_backend` | Core | Playwright-compatible backend adapter |
+| 56 | `accessibility` | Accessibility | A11y tree extraction, WCAG audit, element properties |
+| 57 | `cookie` | Storage | Get, set, delete cookies per domain |
+| 58 | `emulation` | Emulation | Viewport, device presets, geolocation (8 cities) |
+| 59 | `screenshot` | Screenshot | Full-page, element, viewport capture (PNG/JPEG/WebP) |
 
-> **Total: 228 public functions across 42 modules**
+### Grand Totals
+
+| Metric | Count |
+|--------|-------|
+| CDP modules | 59 |
+| NAPI methods | 258 |
+| PyO3 methods | 260 |
+| CLI commands | 200+ |
+| Rust unit tests | 146 |
+| NAPI test files | 31 |
+| PyO3 test files | 28 |
 
 ---
 
@@ -354,7 +417,7 @@ make install
 ## Testing
 
 ```bash
-# Run all Rust tests (116 tests)
+# Run all Rust tests (146 tests)
 cargo test --workspace
 
 # Run with output
