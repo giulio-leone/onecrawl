@@ -440,7 +440,17 @@ mod tests {
 
     #[test]
     fn test_detection_all_types_deserialize() {
-        for captcha_type in &["recaptcha_v2", "recaptcha_v3", "hcaptcha", "cloudflare_turnstile", "funcaptcha", "text", "image", "unknown", "none"] {
+        for captcha_type in &[
+            "recaptcha_v2",
+            "recaptcha_v3",
+            "hcaptcha",
+            "cloudflare_turnstile",
+            "funcaptcha",
+            "text",
+            "image",
+            "unknown",
+            "none",
+        ] {
             let json = format!(
                 r#"{{"detected":true,"captcha_type":"{}","provider":"test","selector":null,"sitekey":null,"confidence":0.5}}"#,
                 captcha_type
