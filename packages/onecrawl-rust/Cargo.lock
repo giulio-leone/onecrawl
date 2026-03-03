@@ -1145,6 +1145,7 @@ dependencies = [
  "futures",
  "onecrawl-core",
  "pretty_assertions",
+ "rand 0.9.2",
  "serde",
  "serde_json",
  "tokio",
