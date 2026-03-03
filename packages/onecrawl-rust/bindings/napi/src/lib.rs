@@ -227,7 +227,7 @@ impl NativeStore {
 // ──────────────────────────── Browser (CDP) ────────────────────────────
 
 use std::sync::Arc;
-use tokio::sync::Mutex as TokioMutex;
+use tokio::sync::{Mutex as TokioMutex, MutexGuard as TokioMutexGuard};
 
 /// Stealth fingerprint configuration.
 #[napi(object)]
@@ -251,6 +251,8 @@ pub struct NativeBrowser {
     session: Arc<onecrawl_cdp::BrowserSession>,
     page: Arc<TokioMutex<Option<onecrawl_cdp::Page>>>,
     event_stream: Arc<TokioMutex<Option<onecrawl_cdp::EventStream>>>,
+    har_recorder: Arc<TokioMutex<Option<onecrawl_cdp::HarRecorder>>>,
+    ws_recorder: Arc<TokioMutex<Option<onecrawl_cdp::WsRecorder>>>,
 }
 
 #[napi]
@@ -275,6 +277,8 @@ impl NativeBrowser {
             session: Arc::new(session),
             page: Arc::new(TokioMutex::new(Some(page))),
             event_stream: Arc::new(TokioMutex::new(None)),
+            har_recorder: Arc::new(TokioMutex::new(None)),
+            ws_recorder: Arc::new(TokioMutex::new(None)),
         })
     }
 
@@ -294,6 +298,8 @@ impl NativeBrowser {
             session: Arc::new(session),
             page: Arc::new(TokioMutex::new(Some(page))),
             event_stream: Arc::new(TokioMutex::new(None)),
+            har_recorder: Arc::new(TokioMutex::new(None)),
+            ws_recorder: Arc::new(TokioMutex::new(None)),
         })
     }
 
@@ -990,5 +996,147 @@ impl NativeBrowser {
             .unwrap_or(serde_json::Value::String(data));
         onecrawl_cdp::events::emit_custom(&tx, &name, json_data)
             .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── HAR Recording ──────────────────────────────────────────────
+
+    /// Start HAR (HTTP Archive) recording on the current page.
+    #[napi]
+    pub async fn start_har_recording(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let recorder = onecrawl_cdp::HarRecorder::new();
+        onecrawl_cdp::har::start_har_recording(page, &recorder)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let mut hr = self.har_recorder.lock().await;
+        *hr = Some(recorder);
+        Ok(())
+    }
+
+    /// Drain new HAR entries from the page. Returns the number of new entries.
+    #[napi]
+    pub async fn drain_har_entries(&self) -> Result<u32> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let hr = self.har_recorder.lock().await;
+        let recorder = hr.as_ref().ok_or_else(|| Error::from_reason("HAR recording not started"))?;
+        let count = onecrawl_cdp::har::drain_har_entries(page, recorder)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(count as u32)
+    }
+
+    /// Export all HAR entries as HAR 1.2 JSON string.
+    #[napi]
+    pub async fn export_har(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page_url = if let Some(page) = guard.as_ref() {
+            page.url().await.unwrap_or(None).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        let hr = self.har_recorder.lock().await;
+        let recorder = hr.as_ref().ok_or_else(|| Error::from_reason("HAR recording not started"))?;
+        let har = onecrawl_cdp::har::export_har(recorder, &page_url)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(har.to_string())
+    }
+
+    // ── WebSocket Recording ────────────────────────────────────────
+
+    /// Start WebSocket frame interception on the current page.
+    #[napi]
+    pub async fn start_ws_recording(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let recorder = onecrawl_cdp::WsRecorder::new();
+        onecrawl_cdp::websocket::start_ws_recording(page, &recorder)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let mut wr = self.ws_recorder.lock().await;
+        *wr = Some(recorder);
+        Ok(())
+    }
+
+    /// Drain new WebSocket frames from the page. Returns the number of new frames.
+    #[napi]
+    pub async fn drain_ws_frames(&self) -> Result<u32> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let wr = self.ws_recorder.lock().await;
+        let recorder = wr.as_ref().ok_or_else(|| Error::from_reason("WS recording not started"))?;
+        let count = onecrawl_cdp::websocket::drain_ws_frames(page, recorder)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(count as u32)
+    }
+
+    /// Export all captured WebSocket frames as JSON string.
+    #[napi]
+    pub async fn export_ws_frames(&self) -> Result<String> {
+        let wr = self.ws_recorder.lock().await;
+        let recorder = wr.as_ref().ok_or_else(|| Error::from_reason("WS recording not started"))?;
+        let frames = onecrawl_cdp::websocket::export_ws_frames(recorder)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(frames.to_string())
+    }
+
+    /// Get the count of active WebSocket connections.
+    #[napi]
+    pub async fn active_ws_connections(&self) -> Result<u32> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let count = onecrawl_cdp::websocket::active_ws_connections(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(count as u32)
+    }
+
+    // ── Code Coverage ──────────────────────────────────────────────
+
+    /// Start JavaScript code coverage collection via CDP Profiler.
+    #[napi]
+    pub async fn start_js_coverage(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::coverage::start_js_coverage(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Stop JavaScript code coverage and return the report as JSON string.
+    #[napi]
+    pub async fn stop_js_coverage(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let report = onecrawl_cdp::coverage::stop_js_coverage(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&report)
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Start CSS coverage collection.
+    #[napi]
+    pub async fn start_css_coverage(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::coverage::start_css_coverage(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get CSS coverage summary as JSON string.
+    #[napi]
+    pub async fn get_css_coverage(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let report = onecrawl_cdp::coverage::get_css_coverage(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(report.to_string())
     }
 }

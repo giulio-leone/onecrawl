@@ -215,6 +215,8 @@ struct Browser {
     session: Arc<onecrawl_cdp::BrowserSession>,
     page: Arc<std::sync::Mutex<Option<onecrawl_cdp::Page>>>,
     event_stream: Arc<std::sync::Mutex<Option<onecrawl_cdp::EventStream>>>,
+    har_recorder: Arc<std::sync::Mutex<Option<onecrawl_cdp::HarRecorder>>>,
+    ws_recorder: Arc<std::sync::Mutex<Option<onecrawl_cdp::WsRecorder>>>,
 }
 
 fn py_err(e: impl std::fmt::Display) -> PyErr {
@@ -241,6 +243,8 @@ impl Browser {
             session: Arc::new(session),
             page: Arc::new(std::sync::Mutex::new(Some(page))),
             event_stream: Arc::new(std::sync::Mutex::new(None)),
+            har_recorder: Arc::new(std::sync::Mutex::new(None)),
+            ws_recorder: Arc::new(std::sync::Mutex::new(None)),
         })
     }
 
@@ -255,6 +259,8 @@ impl Browser {
             session: Arc::new(session),
             page: Arc::new(std::sync::Mutex::new(Some(page))),
             event_stream: Arc::new(std::sync::Mutex::new(None)),
+            har_recorder: Arc::new(std::sync::Mutex::new(None)),
+            ws_recorder: Arc::new(std::sync::Mutex::new(None)),
         })
     }
 
@@ -747,6 +753,111 @@ impl Browser {
         let json_data: serde_json::Value = serde_json::from_str(data)
             .unwrap_or(serde_json::Value::String(data.to_string()));
         onecrawl_cdp::events::emit_custom(&tx, name, json_data).map_err(py_err)
+    }
+
+    // ── HAR Recording ──────────────────────────────────────────────
+
+    /// Start HAR (HTTP Archive) recording on the current page.
+    fn start_har_recording(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let recorder = onecrawl_cdp::HarRecorder::new();
+        self.rt.block_on(onecrawl_cdp::har::start_har_recording(page, &recorder)).map_err(py_err)?;
+        let mut hr = self.har_recorder.lock().map_err(py_err)?;
+        *hr = Some(recorder);
+        Ok(())
+    }
+
+    /// Drain new HAR entries from the page. Returns the number of new entries.
+    fn drain_har_entries(&self) -> PyResult<usize> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let hr = self.har_recorder.lock().map_err(py_err)?;
+        let recorder = hr.as_ref().ok_or_else(|| py_err("HAR recording not started"))?;
+        self.rt.block_on(onecrawl_cdp::har::drain_har_entries(page, recorder)).map_err(py_err)
+    }
+
+    /// Export all HAR entries as HAR 1.2 JSON string.
+    fn export_har(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page_url = if let Some(page) = guard.as_ref() {
+            self.rt.block_on(page.url()).unwrap_or(None).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        let hr = self.har_recorder.lock().map_err(py_err)?;
+        let recorder = hr.as_ref().ok_or_else(|| py_err("HAR recording not started"))?;
+        let har = self.rt.block_on(onecrawl_cdp::har::export_har(recorder, &page_url)).map_err(py_err)?;
+        Ok(har.to_string())
+    }
+
+    // ── WebSocket Recording ────────────────────────────────────────
+
+    /// Start WebSocket frame interception on the current page.
+    fn start_ws_recording(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let recorder = onecrawl_cdp::WsRecorder::new();
+        self.rt.block_on(onecrawl_cdp::websocket::start_ws_recording(page, &recorder)).map_err(py_err)?;
+        let mut wr = self.ws_recorder.lock().map_err(py_err)?;
+        *wr = Some(recorder);
+        Ok(())
+    }
+
+    /// Drain new WebSocket frames from the page. Returns the number of new frames.
+    fn drain_ws_frames(&self) -> PyResult<usize> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let wr = self.ws_recorder.lock().map_err(py_err)?;
+        let recorder = wr.as_ref().ok_or_else(|| py_err("WS recording not started"))?;
+        self.rt.block_on(onecrawl_cdp::websocket::drain_ws_frames(page, recorder)).map_err(py_err)
+    }
+
+    /// Export all captured WebSocket frames as JSON string.
+    fn export_ws_frames(&self) -> PyResult<String> {
+        let wr = self.ws_recorder.lock().map_err(py_err)?;
+        let recorder = wr.as_ref().ok_or_else(|| py_err("WS recording not started"))?;
+        let frames = self.rt.block_on(onecrawl_cdp::websocket::export_ws_frames(recorder)).map_err(py_err)?;
+        Ok(frames.to_string())
+    }
+
+    /// Get the count of active WebSocket connections.
+    fn active_ws_connections(&self) -> PyResult<usize> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::websocket::active_ws_connections(page)).map_err(py_err)
+    }
+
+    // ── Code Coverage ──────────────────────────────────────────────
+
+    /// Start JavaScript code coverage collection via CDP Profiler.
+    fn start_js_coverage(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::coverage::start_js_coverage(page)).map_err(py_err)
+    }
+
+    /// Stop JavaScript code coverage and return the report as JSON string.
+    fn stop_js_coverage(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let report = self.rt.block_on(onecrawl_cdp::coverage::stop_js_coverage(page)).map_err(py_err)?;
+        serde_json::to_string(&report).map_err(py_err)
+    }
+
+    /// Start CSS coverage collection.
+    fn start_css_coverage(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::coverage::start_css_coverage(page)).map_err(py_err)
+    }
+
+    /// Get CSS coverage summary as JSON string.
+    fn get_css_coverage(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let report = self.rt.block_on(onecrawl_cdp::coverage::get_css_coverage(page)).map_err(py_err)?;
+        Ok(report.to_string())
     }
 }
 

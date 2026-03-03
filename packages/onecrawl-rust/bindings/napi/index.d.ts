@@ -133,6 +133,28 @@ export declare class NativeBrowser {
   drainEvents(): Promise<string>
   /** Emit a custom event into the stream. */
   emitEvent(name: string, data: string): Promise<void>
+  /** Start HAR (HTTP Archive) recording on the current page. */
+  startHarRecording(): Promise<void>
+  /** Drain new HAR entries from the page. Returns the number of new entries. */
+  drainHarEntries(): Promise<number>
+  /** Export all HAR entries as HAR 1.2 JSON string. */
+  exportHar(): Promise<string>
+  /** Start WebSocket frame interception on the current page. */
+  startWsRecording(): Promise<void>
+  /** Drain new WebSocket frames from the page. Returns the number of new frames. */
+  drainWsFrames(): Promise<number>
+  /** Export all captured WebSocket frames as JSON string. */
+  exportWsFrames(): Promise<string>
+  /** Get the count of active WebSocket connections. */
+  activeWsConnections(): Promise<number>
+  /** Start JavaScript code coverage collection via CDP Profiler. */
+  startJsCoverage(): Promise<void>
+  /** Stop JavaScript code coverage and return the report as JSON string. */
+  stopJsCoverage(): Promise<string>
+  /** Start CSS coverage collection. */
+  startCssCoverage(): Promise<void>
+  /** Get CSS coverage summary as JSON string. */
+  getCssCoverage(): Promise<string>
 }
 
 /** Encrypted key-value store backed by sled + AES-256-GCM. */
