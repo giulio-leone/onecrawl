@@ -7,7 +7,7 @@ Native TypeScript web crawler and scraper. Zero Python dependencies.
 | Package | Description | Version |
 |---------|-------------|---------|
 | [`@giulio-leone/onecrawl`](./packages/onecrawl) | Core crawler library | 2.1.0 |
-| [`@giulio-leone/onecrawl-cli`](./packages/onecrawl-cli) | Stealth CLI with AI-first commands | 0.7.0 |
+| [`@giulio-leone/onecrawl-cli`](./packages/onecrawl-cli) | Stealth CLI with AI-first commands | 0.8.0 |
 | [`@giulio-leone/onecrawl-client`](./packages/onecrawl-client) | HTTP client for OneCrawl server (zero-dep) | 1.0.1 |
 | [`@giulio-leone/onecrawl-mcp`](./packages/onecrawl-mcp) | MCP server for AI agent integration | 1.1.0 |
 
