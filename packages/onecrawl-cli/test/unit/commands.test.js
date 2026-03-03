@@ -53,6 +53,7 @@ const EXPECTED_COMMANDS = [
   'pdf',
   'permissions',
   'profiler',
+  'ptc',
   'recording',
   'requests',
   'route',
@@ -104,9 +105,9 @@ test('each command file exports register()', () => {
   }
 });
 
-// ── Test 3: Registry discovers all 62 commands ──────────────────────────────
+// ── Test 3: Registry discovers all 63 commands ──────────────────────────────
 
-test('registry discovers all 62 commands', () => {
+test('registry discovers all 63 commands', () => {
   // Clear require cache for commands/index.js to get a fresh registry
   const indexPath = path.join(COMMANDS_DIR, 'index.js');
   delete require.cache[indexPath];
@@ -116,8 +117,8 @@ test('registry discovers all 62 commands', () => {
 
   assert.strictEqual(
     registry.all().length,
-    62,
-    `Expected 62 commands, got ${registry.all().length}: [${registry.all().map(c => c.name).join(', ')}]`
+    63,
+    `Expected 63 commands, got ${registry.all().length}: [${registry.all().map(c => c.name).join(', ')}]`
   );
 });
 

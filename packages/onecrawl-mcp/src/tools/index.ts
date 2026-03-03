@@ -13,3 +13,5 @@ export { browserAuthStatusTool } from "./browser-auth-status.js";
 export { browserHealthCheckTool } from "./browser-health-check.js";
 export { generatedCliTools } from "./generated-cli-tools.js";
 export type { McpToolDef } from "./generated-cli-tools.js";
+export { ptcGenerateTool } from "./ptc-generate.js";
+export { ptcRunTool } from "./ptc-run.js";
