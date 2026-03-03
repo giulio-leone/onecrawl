@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 0.2.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Configure git
+        run: |
+          git config user.name "giulio-leone"
+          git config user.email "giulio-leone@users.noreply.github.com"
+      - name: Update versions
+        run: |
+          VERSION="${{ inputs.version }}"
+          # Update workspace Cargo.toml
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" packages/onecrawl-rust/Cargo.toml
+          # Update npm package
+          cd packages/onecrawl-rust/bindings/napi
+          npm version $VERSION --no-git-tag-version
+          cd ../../../..
+          # Update pyproject.toml
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" packages/onecrawl-rust/bindings/python/pyproject.toml
+      - name: Commit and tag
+        run: |
+          VERSION="${{ inputs.version }}"
+          git add -A
+          git commit -m "chore: release v$VERSION"
+          git tag "v$VERSION"
+          git push origin main --tags
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          generate_release_notes: true

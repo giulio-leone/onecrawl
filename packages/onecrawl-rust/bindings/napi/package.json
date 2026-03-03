@@ -1,11 +1,36 @@
 {
   "name": "@onecrawl/native",
   "version": "0.1.0",
+  "description": "High-performance browser automation — Rust core via NAPI-RS",
   "main": "index.js",
   "types": "index.d.ts",
+  "author": "Giulio Leone",
+  "license": "MIT",
+  "homepage": "https://github.com/giulio-leone/onecrawl",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/giulio-leone/onecrawl.git"
+  },
+  "keywords": [
+    "browser",
+    "automation",
+    "cdp",
+    "scraping",
+    "stealth",
+    "onecrawl",
+    "napi"
+  ],
+  "engines": {
+    "node": ">= 18"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/",
+    "access": "public"
+  },
   "scripts": {
     "build": "napi build --release --platform",
     "build:debug": "napi build",
+    "prepublishOnly": "napi prepublish -t npm",
     "test": "node --test test/"
   },
   "devDependencies": {
@@ -26,6 +51,7 @@
   },
   "files": [
     "index.js",
-    "index.d.ts"
+    "index.d.ts",
+    "*.node"
   ]
 }
