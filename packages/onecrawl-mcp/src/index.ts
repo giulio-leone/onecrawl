@@ -1,7 +1,8 @@
 /**
  * @giulio-leone/onecrawl-mcp
  *
- * MCP tools server for OneCrawl browser automation — 13 tools for AI agents.
+ * MCP tools server for OneCrawl browser automation — 54 tools for AI agents.
+ * 13 existing browser tools + 41 generated CLI tools (M4–M9).
  * Connects to an onecrawl-server instance via HTTP using @giulio-leone/onecrawl-client.
  */
 
@@ -22,9 +23,10 @@ import {
   browserHumanClickTool,
   browserAuthStatusTool,
   browserHealthCheckTool,
+  generatedCliTools,
 } from "./tools/index.js";
 
-const allTools = [
+const existingTools = [
   browserNavigateTool,
   browserClickTool,
   browserTypeTool,
@@ -46,7 +48,8 @@ export interface CreateServerOptions {
 }
 
 /**
- * Create an MCP server with all 13 OneCrawl browser automation tools registered.
+ * Create an MCP server with all 54 OneCrawl tools registered
+ * (13 existing browser tools + 41 generated CLI tools).
  */
 export function createServer(options: CreateServerOptions = {}): McpServer {
   const url =
@@ -61,12 +64,23 @@ export function createServer(options: CreateServerOptions = {}): McpServer {
     version: "1.0.0",
   });
 
-  for (const tool of allTools) {
+  // Register the 13 existing browser tools
+  for (const tool of existingTools) {
     server.tool(
       tool.name,
       tool.description,
       tool.inputSchema.shape,
       async (args: Record<string, unknown>) => tool.handler(args as never, client),
+    );
+  }
+
+  // Register the 41 generated CLI tools
+  for (const tool of generatedCliTools) {
+    server.tool(
+      tool.name,
+      tool.description,
+      tool.inputSchema.shape,
+      async (args: Record<string, unknown>) => tool.handler(args, client),
     );
   }
 

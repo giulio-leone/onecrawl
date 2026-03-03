@@ -11,3 +11,5 @@ export { browserUploadTool } from "./browser-upload.js";
 export { browserHumanClickTool } from "./browser-human-click.js";
 export { browserAuthStatusTool } from "./browser-auth-status.js";
 export { browserHealthCheckTool } from "./browser-health-check.js";
+export { generatedCliTools } from "./generated-cli-tools.js";
+export type { McpToolDef } from "./generated-cli-tools.js";
