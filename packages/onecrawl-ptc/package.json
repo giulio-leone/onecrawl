@@ -1,12 +1,12 @@
 {
-  "name": "@giulio-leone/onecrawl-mcp",
-  "version": "2.0.0",
-  "description": "MCP tools server for OneCrawl browser automation — 11 tools for AI agents",
+  "name": "@giulio-leone/onecrawl-ptc",
+  "version": "1.0.0",
+  "description": "Programmatic Tool Calling engine for OneCrawl — model-agnostic, self-healing",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "onecrawl-mcp": "dist/cli.js"
+    "onecrawl-ptc": "dist/cli.js"
   },
   "exports": {
     ".": {
@@ -21,18 +21,17 @@
   "scripts": {
     "build": "tsup src/index.ts src/cli.ts --format esm,cjs --dts",
     "typecheck": "tsc --noEmit",
-    "dev": "tsx src/cli.ts"
+    "test": "vitest run"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
-    "@giulio-leone/onecrawl-client": "workspace:*",
-    "zod": "^3.24.0"
+    "@giulio-leone/onecrawl-client": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsup": "^8.3.5",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vitest": "^4.0.17"
   },
   "engines": {
     "node": ">=18"
@@ -42,7 +41,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/giulio-leone/onecrawl",
-    "directory": "packages/onecrawl-mcp"
-  }
+    "url": "https://github.com/giulio-leone/onecrawl.git",
+    "directory": "packages/onecrawl-ptc"
+  },
+  "license": "MIT"
 }

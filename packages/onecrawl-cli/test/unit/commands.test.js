@@ -14,27 +14,69 @@ const COMMAND_FILES = fs.readdirSync(COMMANDS_DIR)
   .sort();
 
 const EXPECTED_COMMANDS = [
+  'add-init-script',
+  'add-script',
+  'add-style',
   'assert',
   'auth',
   'click',
+  'clipboard',
+  'console',
   'cookie',
+  'device',
+  'dialog',
+  'diff-screenshot',
+  'diff-snapshot',
+  'diff-url',
   'drag',
+  'emulate-media',
   'extract',
   'find',
   'forms',
+  'frame',
+  'geolocation',
   'get',
+  'get-box',
+  'get-styles',
+  'har',
+  'headers',
   'health-check',
   'hover',
+  'http-credentials',
   'is',
+  'js-errors',
+  'keyboard',
   'links',
+  'locale',
+  'mainframe',
+  'offline',
+  'pdf',
+  'permissions',
+  'profiler',
+  'ptc',
+  'recording',
+  'requests',
+  'route',
+  'screencast',
   'screenshot-annotate',
   'scroll',
   'select',
   'session',
   'session-info',
+  'set-content',
+  'storage',
+  'storage-state',
+  'tab',
   'table',
+  'tap',
+  'timezone',
+  'trace',
   'type',
+  'unroute',
+  'user-agent',
+  'viewport',
   'wait-for',
+  'wait-for-function',
 ];
 
 // ── Test 1: All command files load without error ────────────────────────────
@@ -63,9 +105,9 @@ test('each command file exports register()', () => {
   }
 });
 
-// ── Test 3: Registry discovers all 21 commands ──────────────────────────────
+// ── Test 3: Registry discovers all 63 commands ──────────────────────────────
 
-test('registry discovers all 21 commands', () => {
+test('registry discovers all 63 commands', () => {
   // Clear require cache for commands/index.js to get a fresh registry
   const indexPath = path.join(COMMANDS_DIR, 'index.js');
   delete require.cache[indexPath];
@@ -75,8 +117,8 @@ test('registry discovers all 21 commands', () => {
 
   assert.strictEqual(
     registry.all().length,
-    21,
-    `Expected 21 commands, got ${registry.all().length}: [${registry.all().map(c => c.name).join(', ')}]`
+    63,
+    `Expected 63 commands, got ${registry.all().length}: [${registry.all().map(c => c.name).join(', ')}]`
   );
 });
 

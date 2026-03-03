@@ -8,14 +8,14 @@ allowed-tools: Bash(onecrawl:*)
 
 OneCrawl CLI wraps Microsoft's playwright-cli with **three layers** of anti-detection stealth,
 applied at runtime via `Module._load` hooks (zero files modified on disk).
-On top of every Playwright built-in command it adds **21 custom commands** designed for
+On top of every Playwright built-in command it adds **63 custom commands** designed for
 AI-agent workflows: element discovery, browser interaction, data extraction, session management,
 property extraction, state checks, assertions, smart scrolling, annotated screenshots,
 session diagnostics, and auth management.
 
 > **Backward compatibility**: All standard Playwright CLI commands (`open`, `goto`, `click`,
 > `fill`, `snapshot`, `screenshot`, `eval`, `cookie-*`, `tab-*`, etc.) work unchanged.
-> The 10 custom commands extend — never replace — the built-in set.
+> The 63 custom commands extend — never replace — the built-in set.
 
 ## Stealth Layers
 
@@ -63,7 +63,7 @@ Bezier-curve mouse movement simulation injected as browser initScript:
 
 ---
 
-## Custom OneCrawl Commands (21)
+## Custom OneCrawl Commands (63)
 
 ### scroll — scroll the page
 
@@ -327,6 +327,342 @@ onecrawl cookie export cookies.json           # export to file
 onecrawl cookie import cookies.json           # import from file
 onecrawl cookie clear                         # clear all
 onecrawl cookie clear --domain=linkedin.com   # clear specific domain
+```
+
+---
+
+## Browser Emulation (9 commands)
+
+### viewport — set browser viewport size
+
+```bash
+onecrawl viewport 1920 1080
+onecrawl viewport 390 844              # mobile dimensions
+```
+
+### device — emulate a device profile
+
+```bash
+onecrawl device "iPhone 14"
+onecrawl device "Pixel 7"
+```
+
+### emulate-media — override CSS media features
+
+```bash
+onecrawl emulate-media color-scheme dark
+onecrawl emulate-media reduced-motion reduce
+onecrawl emulate-media print             # emulate print media type
+```
+
+### timezone — set browser timezone
+
+```bash
+onecrawl timezone "America/New_York"
+onecrawl timezone "Europe/Rome"
+```
+
+### locale — set browser locale
+
+```bash
+onecrawl locale en-US
+onecrawl locale it-IT
+```
+
+### user-agent — override user agent string
+
+```bash
+onecrawl user-agent "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ..."
+onecrawl user-agent --reset               # restore default
+```
+
+### offline — toggle offline mode
+
+```bash
+onecrawl offline on
+onecrawl offline off
+```
+
+### geolocation — set geolocation coordinates
+
+```bash
+onecrawl geolocation 41.9028 12.4964      # Rome
+onecrawl geolocation --clear
+```
+
+### permissions — grant or deny browser permissions
+
+```bash
+onecrawl permissions grant geolocation
+onecrawl permissions deny notifications
+onecrawl permissions reset
+```
+
+---
+
+## Network & Performance (10 commands)
+
+### route — intercept and mock network requests
+
+```bash
+onecrawl route "**\/api/*" --status=200 --body='{"ok":true}'
+onecrawl route "**\/analytics" --abort     # block requests
+```
+
+### unroute — remove a route intercept
+
+```bash
+onecrawl unroute "**\/api/*"
+onecrawl unroute --all
+```
+
+### requests — list captured network requests
+
+```bash
+onecrawl requests                          # all captured requests
+onecrawl requests --filter="api"           # filter by URL pattern
+onecrawl requests --method=POST            # filter by HTTP method
+```
+
+### headers — set extra HTTP headers
+
+```bash
+onecrawl headers "Authorization: Bearer tok_xxx"
+onecrawl headers "X-Custom: value" "Accept-Language: en"
+onecrawl headers --clear
+```
+
+### http-credentials — set HTTP authentication credentials
+
+```bash
+onecrawl http-credentials user password
+onecrawl http-credentials --clear
+```
+
+### har — capture HTTP archive
+
+```bash
+onecrawl har start traffic.har
+onecrawl har stop
+```
+
+### trace — start/stop Playwright trace recording
+
+```bash
+onecrawl trace start --screenshots --snapshots
+onecrawl trace stop trace.zip
+```
+
+### profiler — CPU/memory profiling
+
+```bash
+onecrawl profiler start
+onecrawl profiler stop profile.json
+```
+
+### console — stream browser console output
+
+```bash
+onecrawl console                           # stream all console messages
+onecrawl console --level=error             # errors only
+```
+
+### js-errors — capture JavaScript errors
+
+```bash
+onecrawl js-errors                         # list uncaught errors
+onecrawl js-errors --clear                 # clear error buffer
+```
+
+---
+
+## Frame/Tab (4 commands)
+
+### frame — switch to an iframe context
+
+```bash
+onecrawl frame "iframe-name"
+onecrawl frame --url="**/embedded*"
+onecrawl frame --index=0
+```
+
+### mainframe — switch back to the main frame
+
+```bash
+onecrawl mainframe
+```
+
+### tab — advanced tab management
+
+```bash
+onecrawl tab list
+onecrawl tab new https://example.com
+onecrawl tab select 2
+onecrawl tab close 3
+```
+
+### dialog — handle browser dialogs
+
+```bash
+onecrawl dialog accept
+onecrawl dialog dismiss
+onecrawl dialog accept "prompt response"
+```
+
+---
+
+## Diff Tools (3 commands)
+
+### diff-snapshot — compare accessibility snapshots
+
+```bash
+onecrawl diff-snapshot baseline.txt        # diff current snapshot vs baseline
+onecrawl diff-snapshot before.txt after.txt
+```
+
+### diff-screenshot — compare screenshots pixel-by-pixel
+
+```bash
+onecrawl diff-screenshot baseline.png      # diff current page vs baseline
+onecrawl diff-screenshot a.png b.png --threshold=0.1
+```
+
+### diff-url — compare two URLs side-by-side
+
+```bash
+onecrawl diff-url https://staging.example.com https://prod.example.com
+onecrawl diff-url https://v1.app.com https://v2.app.com --full-page
+```
+
+---
+
+## Content Injection (9 commands)
+
+### set-content — set page HTML content directly
+
+```bash
+onecrawl set-content "<h1>Hello</h1><p>Test page</p>"
+onecrawl set-content --file=page.html
+```
+
+### add-script — inject a script tag into the page
+
+```bash
+onecrawl add-script "window.__TEST = true;"
+onecrawl add-script --url=https://cdn.example.com/lib.js
+```
+
+### add-style — inject CSS into the page
+
+```bash
+onecrawl add-style "body { background: red; }"
+onecrawl add-style --url=https://cdn.example.com/style.css
+```
+
+### add-init-script — add a script that runs on every navigation
+
+```bash
+onecrawl add-init-script "delete navigator.__proto__.webdriver"
+onecrawl add-init-script --file=inject.js
+```
+
+### pdf — export page as PDF
+
+```bash
+onecrawl pdf output.pdf
+onecrawl pdf report.pdf --format=A4 --landscape
+```
+
+### recording — start/stop video recording
+
+```bash
+onecrawl recording start
+onecrawl recording stop recording.webm
+```
+
+### screencast — capture page screenshots at interval
+
+```bash
+onecrawl screencast start --interval=1000  # every 1s
+onecrawl screencast stop output-dir/
+```
+
+### storage — manage localStorage and sessionStorage
+
+```bash
+onecrawl storage get localStorage myKey
+onecrawl storage set localStorage myKey "value"
+onecrawl storage clear sessionStorage
+onecrawl storage list localStorage
+```
+
+### storage-state — save/load full browser storage state
+
+```bash
+onecrawl storage-state save state.json
+onecrawl storage-state load state.json
+```
+
+---
+
+## Enhanced Input (6 commands)
+
+### keyboard — advanced keyboard input
+
+```bash
+onecrawl keyboard type "Hello world" --delay=50
+onecrawl keyboard press Control+A
+onecrawl keyboard down Shift
+onecrawl keyboard up Shift
+```
+
+### tap — touch/tap an element (mobile emulation)
+
+```bash
+onecrawl tap 1                             # tap ref 1
+onecrawl tap ".button"                     # tap by CSS
+```
+
+### clipboard — read/write system clipboard
+
+```bash
+onecrawl clipboard read
+onecrawl clipboard write "copied text"
+```
+
+### get-styles — get computed CSS styles of an element
+
+```bash
+onecrawl get-styles 1                      # all computed styles for ref 1
+onecrawl get-styles 1 color font-size      # specific properties
+```
+
+### get-box — get bounding box of an element
+
+```bash
+onecrawl get-box 1                         # {x, y, width, height}
+onecrawl get-box ".hero-banner"
+```
+
+### wait-for-function — wait for a JS expression to return truthy
+
+```bash
+onecrawl wait-for-function "document.querySelector('.loaded')"
+onecrawl wait-for-function "window.__DATA_READY === true" 10000
+```
+
+---
+
+## PTC — Playwright Test Compiler (1 command)
+
+### ptc — generate and run Playwright tests from natural language
+
+Converts natural language descriptions into Playwright test code, or runs existing compiled tests.
+
+```bash
+onecrawl ptc run tests/login.spec.ts       # run a compiled test
+onecrawl ptc generate "login with valid credentials and verify dashboard"
+onecrawl ptc generate --file=scenarios.txt  # batch generate from file
 ```
 
 ---
