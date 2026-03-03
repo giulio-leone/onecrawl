@@ -9,6 +9,7 @@ members = [
     "crates/onecrawl-cli-rs",
     "crates/onecrawl-mcp-rs",
     "crates/onecrawl-e2e",
+    "crates/onecrawl-benchmark",
     "bindings/napi",
 ]
 exclude = ["bindings/python"]  # Python bindings require maturin (build with: cd bindings/python && maturin develop)

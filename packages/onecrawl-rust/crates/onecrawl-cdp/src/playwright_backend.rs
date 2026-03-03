@@ -5,7 +5,7 @@
 //! via a Node.js driver, providing Chromium, Firefox, and WebKit automation.
 
 use playwright::api::LaunchOptions;
-use playwright::{Browser, BrowserContext, Page, Playwright};
+use playwright::{Browser, Page, Playwright};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -20,7 +20,6 @@ pub enum BrowserEngine {
 pub struct PlaywrightSession {
     _playwright: Playwright,
     browser: Browser,
-    _context: BrowserContext,
     page: Arc<Mutex<Page>>,
 }
 
@@ -35,7 +34,7 @@ impl PlaywrightSession {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let playwright = Playwright::launch().await?;
 
-        let options = LaunchOptions::builder().headless(headless).build();
+        let options = LaunchOptions::new().headless(headless);
 
         let browser = match engine {
             BrowserEngine::Chromium => {
@@ -49,13 +48,11 @@ impl PlaywrightSession {
             }
         };
 
-        let context = browser.new_context().await?;
-        let page = context.new_page().await?;
+        let page = browser.new_page().await?;
 
         Ok(Self {
             _playwright: playwright,
             browser,
-            _context: context,
             page: Arc::new(Mutex::new(page)),
         })
     }
