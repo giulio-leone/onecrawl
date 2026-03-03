@@ -2777,6 +2777,165 @@ impl NativeBrowser {
             .map_err(|e| Error::from_reason(e.to_string()))?;
         serde_json::to_string(&h).map_err(|e| Error::from_reason(e.to_string()))
     }
+
+    // ── Streaming Extractor ───────────────────────────────────────
+
+    /// Extract structured items from the page using a JSON schema. Returns JSON ExtractionResult.
+    #[napi(js_name = "extractItems")]
+    pub async fn extract_items(&self, schema_json: String) -> Result<String> {
+        let schema: onecrawl_cdp::ExtractionSchema =
+            serde_json::from_str(&schema_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::streaming::extract_items(page, &schema)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Extract items with pagination. Returns JSON ExtractionResult.
+    #[napi(js_name = "extractWithPagination")]
+    pub async fn extract_with_pagination(&self, schema_json: String) -> Result<String> {
+        let schema: onecrawl_cdp::ExtractionSchema =
+            serde_json::from_str(&schema_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::streaming::extract_with_pagination(page, &schema)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Extract a single item from the page (no item_selector). Returns JSON object.
+    #[napi(js_name = "extractSingle")]
+    pub async fn extract_single(&self, rules_json: String) -> Result<String> {
+        let rules: Vec<onecrawl_cdp::ExtractionRule> =
+            serde_json::from_str(&rules_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::streaming::extract_single(page, &rules)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Export extracted items as CSV. Returns number of items written.
+    #[napi(js_name = "exportCsv")]
+    pub fn export_csv(&self, items_json: String, path: String) -> Result<u32> {
+        let items: Vec<onecrawl_cdp::ExtractedItem> =
+            serde_json::from_str(&items_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let count = onecrawl_cdp::streaming::export_csv(&items, std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(count as u32)
+    }
+
+    /// Export extracted items as JSON file. Returns number of items written.
+    #[napi(js_name = "exportJson")]
+    pub fn export_json(&self, items_json: String, path: String) -> Result<u32> {
+        let items: Vec<onecrawl_cdp::ExtractedItem> =
+            serde_json::from_str(&items_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let count = onecrawl_cdp::streaming::export_json(&items, std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(count as u32)
+    }
+
+    // ── HTTP Client ───────────────────────────────────────────────
+
+    /// Execute an HTTP request via browser fetch. Returns JSON HttpResponse.
+    #[napi(js_name = "httpFetch")]
+    pub async fn http_fetch(&self, request_json: String) -> Result<String> {
+        let request: onecrawl_cdp::HttpRequest =
+            serde_json::from_str(&request_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let resp = onecrawl_cdp::http_client::fetch(page, &request)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&resp).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// HTTP GET via browser fetch. Returns JSON HttpResponse.
+    #[napi(js_name = "httpGet")]
+    pub async fn http_get(
+        &self,
+        url: String,
+        headers_json: Option<String>,
+    ) -> Result<String> {
+        let headers: Option<std::collections::HashMap<String, String>> = match headers_json {
+            Some(h) => Some(
+                serde_json::from_str(&h).map_err(|e| Error::from_reason(e.to_string()))?,
+            ),
+            None => None,
+        };
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let resp = onecrawl_cdp::http_client::get(page, &url, headers)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&resp).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// HTTP POST via browser fetch. Returns JSON HttpResponse.
+    #[napi(js_name = "httpPost")]
+    pub async fn http_post(
+        &self,
+        url: String,
+        body: String,
+        content_type: Option<String>,
+        headers_json: Option<String>,
+    ) -> Result<String> {
+        let headers: Option<std::collections::HashMap<String, String>> = match headers_json {
+            Some(h) => Some(
+                serde_json::from_str(&h).map_err(|e| Error::from_reason(e.to_string()))?,
+            ),
+            None => None,
+        };
+        let ct = content_type.as_deref().unwrap_or("application/json");
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let resp = onecrawl_cdp::http_client::post(page, &url, &body, ct, headers)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&resp).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// HTTP HEAD via browser fetch. Returns JSON HttpResponse.
+    #[napi(js_name = "httpHead")]
+    pub async fn http_head(&self, url: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let resp = onecrawl_cdp::http_client::head(page, &url)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&resp).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Fetch a URL and parse as JSON. Returns the parsed JSON value.
+    #[napi(js_name = "httpFetchJson")]
+    pub async fn http_fetch_json(&self, url: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let val = onecrawl_cdp::http_client::fetch_json(page, &url)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&val).map_err(|e| Error::from_reason(e.to_string()))
+    }
 }
 
 fn parse_network_profile(name: &str) -> std::result::Result<onecrawl_cdp::NetworkProfile, String> {

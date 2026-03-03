@@ -498,6 +498,35 @@ enum Commands {
         #[command(subcommand)]
         action: DomainAction,
     },
+
+    // ── Streaming Extractor ────────────────────────────────────────
+    /// Extract structured items from the page using CSS selectors
+    StreamExtract {
+        /// CSS selector for each item container
+        item_selector: String,
+        /// Field definitions: name:css:selector:extract (e.g. "title:css:h2:text")
+        #[arg(short, long)]
+        field: Vec<String>,
+        /// Paginate: CSS selector for "next page" button
+        #[arg(long)]
+        paginate: Option<String>,
+        /// Maximum pages to scrape (with --paginate)
+        #[arg(long, default_value = "10")]
+        max_pages: usize,
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<String>,
+        /// Output format: csv or json
+        #[arg(long, default_value = "json")]
+        format: String,
+    },
+
+    // ── HTTP Client ────────────────────────────────────────────────
+    /// Execute HTTP requests via the browser's fetch API
+    Http {
+        #[command(subcommand)]
+        action: HttpAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -520,6 +549,36 @@ enum DomainAction {
     List,
     /// Show available block categories
     Categories,
+}
+
+#[derive(Subcommand)]
+enum HttpAction {
+    /// HTTP GET request
+    Get {
+        /// URL to fetch
+        url: String,
+    },
+    /// HTTP POST request
+    Post {
+        /// URL to post to
+        url: String,
+        /// Request body
+        #[arg(long)]
+        body: String,
+        /// Content-Type header
+        #[arg(long, default_value = "application/json")]
+        content_type: String,
+    },
+    /// HTTP HEAD request
+    Head {
+        /// URL to check
+        url: String,
+    },
+    /// Execute a full JSON HttpRequest
+    Fetch {
+        /// JSON HttpRequest object
+        json: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1835,6 +1894,38 @@ async fn main() {
             DomainAction::Stats => commands::browser::domain_stats().await,
             DomainAction::List => commands::browser::domain_list().await,
             DomainAction::Categories => commands::browser::domain_categories(),
+        },
+
+        // ── Streaming Extractor ────────────────────────────────────
+        Commands::StreamExtract {
+            item_selector,
+            field,
+            paginate,
+            max_pages,
+            output,
+            format,
+        } => {
+            commands::browser::stream_extract(
+                &item_selector,
+                &field,
+                paginate.as_deref(),
+                max_pages,
+                output.as_deref(),
+                &format,
+            )
+            .await
+        }
+
+        // ── HTTP Client ────────────────────────────────────────────
+        Commands::Http { action } => match action {
+            HttpAction::Get { url } => commands::browser::http_get(&url).await,
+            HttpAction::Post {
+                url,
+                body,
+                content_type,
+            } => commands::browser::http_post(&url, &body, &content_type).await,
+            HttpAction::Head { url } => commands::browser::http_head(&url).await,
+            HttpAction::Fetch { json } => commands::browser::http_fetch(&json).await,
         },
     }
 }

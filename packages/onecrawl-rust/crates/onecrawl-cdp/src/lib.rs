@@ -23,6 +23,8 @@ pub mod emulation;
 pub mod events;
 pub mod extract;
 pub mod geofencing;
+pub mod http_client;
+
 pub mod har;
 pub mod iframe;
 pub mod input;
@@ -34,6 +36,7 @@ pub mod network_log;
 pub mod page;
 pub mod page_watcher;
 pub mod spider;
+pub mod streaming;
 #[cfg(feature = "playwright")]
 pub mod playwright_backend;
 pub mod print;
@@ -92,6 +95,10 @@ pub use page_watcher::PageChange;
 pub use shell::{ShellCommand, ShellHistory};
 pub use domain_blocker::{BlockedDomain, BlockStats};
 pub use spider::{CrawlResult, CrawlState, CrawlSummary, SpiderConfig};
+pub use streaming::{
+    ExtractionRule, ExtractionSchema, PaginationConfig, ExtractedItem, ExtractionResult,
+};
+pub use http_client::{HttpRequest, HttpResponse};
 pub use tabs::TabInfo;
 
 // Re-export chromiumoxide::Page for downstream consumers

@@ -2931,3 +2931,150 @@ pub fn domain_categories() {
         println!("  {:<12} {} domains", name.cyan(), count);
     }
 }
+
+// ---------------------------------------------------------------------------
+// Streaming Extractor
+// ---------------------------------------------------------------------------
+
+pub async fn stream_extract(
+    item_selector: &str,
+    fields: &[String],
+    paginate: Option<&str>,
+    max_pages: usize,
+    output: Option<&str>,
+    format: &str,
+) {
+    let fields = fields.to_vec();
+    let item_selector = item_selector.to_string();
+    let paginate = paginate.map(String::from);
+    let output = output.map(String::from);
+    let format = format.to_string();
+
+    with_page(|page| async move {
+        let rules: Vec<onecrawl_cdp::ExtractionRule> = fields
+            .iter()
+            .map(|f| {
+                onecrawl_cdp::streaming::parse_field_spec(f)
+                    .map_err(|e| e.to_string())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let pagination = paginate.map(|sel| onecrawl_cdp::PaginationConfig {
+            next_selector: sel,
+            max_pages,
+            delay_ms: 1000,
+        });
+
+        let schema = onecrawl_cdp::ExtractionSchema {
+            item_selector,
+            fields: rules,
+            pagination,
+        };
+
+        let result = onecrawl_cdp::streaming::extract_with_pagination(&page, &schema)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if let Some(path) = output {
+            let count = match format.as_str() {
+                "csv" => onecrawl_cdp::streaming::export_csv(
+                    &result.items,
+                    std::path::Path::new(&path),
+                )
+                .map_err(|e| e.to_string())?,
+                _ => onecrawl_cdp::streaming::export_json(
+                    &result.items,
+                    std::path::Path::new(&path),
+                )
+                .map_err(|e| e.to_string())?,
+            };
+            println!(
+                "{} Exported {} items to {}",
+                "✓".green(),
+                count,
+                path
+            );
+        } else {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&result).unwrap_or_default()
+            );
+        }
+
+        if !result.errors.is_empty() {
+            for err in &result.errors {
+                eprintln!("{} {}", "⚠".yellow(), err);
+            }
+        }
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// HTTP Client
+// ---------------------------------------------------------------------------
+
+pub async fn http_get(url: &str) {
+    let url = url.to_string();
+    with_page(|page| async move {
+        let resp = onecrawl_cdp::http_client::get(&page, &url, None)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&resp).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn http_post(url: &str, body: &str, content_type: &str) {
+    let url = url.to_string();
+    let body = body.to_string();
+    let content_type = content_type.to_string();
+    with_page(|page| async move {
+        let resp = onecrawl_cdp::http_client::post(&page, &url, &body, &content_type, None)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&resp).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn http_head(url: &str) {
+    let url = url.to_string();
+    with_page(|page| async move {
+        let resp = onecrawl_cdp::http_client::head(&page, &url)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&resp).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn http_fetch(json: &str) {
+    let json = json.to_string();
+    with_page(|page| async move {
+        let request: onecrawl_cdp::HttpRequest =
+            serde_json::from_str(&json).map_err(|e| e.to_string())?;
+        let resp = onecrawl_cdp::http_client::fetch(&page, &request)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&resp).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}

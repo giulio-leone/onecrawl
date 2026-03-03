@@ -2303,6 +2303,137 @@ impl Browser {
             onecrawl_cdp::shell::load_history(std::path::Path::new(path)).map_err(py_err)?;
         serde_json::to_string(&h).map_err(py_err)
     }
+
+    // ── Streaming Extractor ───────────────────────────────────────
+
+    /// Extract structured items using a JSON schema. Returns JSON ExtractionResult.
+    fn extract_items(&self, schema_json: &str) -> PyResult<String> {
+        let schema: onecrawl_cdp::ExtractionSchema =
+            serde_json::from_str(schema_json).map_err(py_err)?;
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::streaming::extract_items(page, &schema))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Extract items with pagination. Returns JSON ExtractionResult.
+    fn extract_with_pagination(&self, schema_json: &str) -> PyResult<String> {
+        let schema: onecrawl_cdp::ExtractionSchema =
+            serde_json::from_str(schema_json).map_err(py_err)?;
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::streaming::extract_with_pagination(page, &schema))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Extract a single item (no item_selector). Returns JSON object.
+    fn extract_single(&self, rules_json: &str) -> PyResult<String> {
+        let rules: Vec<onecrawl_cdp::ExtractionRule> =
+            serde_json::from_str(rules_json).map_err(py_err)?;
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::streaming::extract_single(page, &rules))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Export extracted items as CSV. Returns number of items written.
+    fn export_csv(&self, items_json: &str, path: &str) -> PyResult<usize> {
+        let items: Vec<onecrawl_cdp::ExtractedItem> =
+            serde_json::from_str(items_json).map_err(py_err)?;
+        onecrawl_cdp::streaming::export_csv(&items, std::path::Path::new(path)).map_err(py_err)
+    }
+
+    /// Export extracted items as JSON file. Returns number of items written.
+    fn export_json_file(&self, items_json: &str, path: &str) -> PyResult<usize> {
+        let items: Vec<onecrawl_cdp::ExtractedItem> =
+            serde_json::from_str(items_json).map_err(py_err)?;
+        onecrawl_cdp::streaming::export_json(&items, std::path::Path::new(path)).map_err(py_err)
+    }
+
+    // ── HTTP Client ───────────────────────────────────────────────
+
+    /// Execute an HTTP request via browser fetch. Returns JSON HttpResponse.
+    fn http_fetch(&self, request_json: &str) -> PyResult<String> {
+        let request: onecrawl_cdp::HttpRequest =
+            serde_json::from_str(request_json).map_err(py_err)?;
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let resp = self
+            .rt
+            .block_on(onecrawl_cdp::http_client::fetch(page, &request))
+            .map_err(py_err)?;
+        serde_json::to_string(&resp).map_err(py_err)
+    }
+
+    /// HTTP GET via browser fetch. Returns JSON HttpResponse.
+    #[pyo3(signature = (url, headers_json=None))]
+    fn http_get(&self, url: &str, headers_json: Option<&str>) -> PyResult<String> {
+        let headers: Option<std::collections::HashMap<String, String>> = match headers_json {
+            Some(h) => Some(serde_json::from_str(h).map_err(py_err)?),
+            None => None,
+        };
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let resp = self
+            .rt
+            .block_on(onecrawl_cdp::http_client::get(page, url, headers))
+            .map_err(py_err)?;
+        serde_json::to_string(&resp).map_err(py_err)
+    }
+
+    /// HTTP POST via browser fetch. Returns JSON HttpResponse.
+    #[pyo3(signature = (url, body, content_type=None, headers_json=None))]
+    fn http_post(
+        &self,
+        url: &str,
+        body: &str,
+        content_type: Option<&str>,
+        headers_json: Option<&str>,
+    ) -> PyResult<String> {
+        let headers: Option<std::collections::HashMap<String, String>> = match headers_json {
+            Some(h) => Some(serde_json::from_str(h).map_err(py_err)?),
+            None => None,
+        };
+        let ct = content_type.unwrap_or("application/json");
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let resp = self
+            .rt
+            .block_on(onecrawl_cdp::http_client::post(page, url, body, ct, headers))
+            .map_err(py_err)?;
+        serde_json::to_string(&resp).map_err(py_err)
+    }
+
+    /// HTTP HEAD via browser fetch. Returns JSON HttpResponse.
+    fn http_head(&self, url: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let resp = self
+            .rt
+            .block_on(onecrawl_cdp::http_client::head(page, url))
+            .map_err(py_err)?;
+        serde_json::to_string(&resp).map_err(py_err)
+    }
+
+    /// Fetch a URL and parse response as JSON.
+    fn http_fetch_json(&self, url: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let val = self
+            .rt
+            .block_on(onecrawl_cdp::http_client::fetch_json(page, url))
+            .map_err(py_err)?;
+        serde_json::to_string(&val).map_err(py_err)
+    }
 }
 
 // ──────────────────────────── Module ────────────────────────────
