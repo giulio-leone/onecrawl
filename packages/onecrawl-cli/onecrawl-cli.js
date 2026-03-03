@@ -99,10 +99,80 @@ if (!hasUserConfig) {
   }
 }
 
-// ── Delegate to the standard Playwright CLI ──────────────────────────────────
+// ── Load custom OneCrawl commands ─────────────────────────────────────────────
 
-const { program } = require('playwright/lib/cli/client/program');
-program().catch((err) => {
-  console.error(err.message);
-  process.exitCode = 1;
-});
+const { loadAllCommands, formatCustomHelp } = require('./lib/commands');
+const customCommands = loadAllCommands();
+
+// ── Route: custom command or Playwright CLI ──────────────────────────────────
+
+// Extract the command name from argv, skipping flag values.
+// Global flags that consume the next arg: -s/--session, --browser, --config, --profile, --extension
+const _valueFlagSet = new Set(['-s', '--session', '--browser', '--config', '--profile', '--extension']);
+let _cmdName = null;
+for (let _i = 2; _i < process.argv.length; _i++) {
+  const _a = process.argv[_i];
+  if (_a.startsWith('-')) {
+    // Skip the next arg if this flag consumes a value (and isn't --flag=val form)
+    if (_valueFlagSet.has(_a) && !_a.includes('=')) _i++;
+    continue;
+  }
+  _cmdName = _a;
+  break;
+}
+
+if (_cmdName && customCommands.has(_cmdName)) {
+  // Lightweight argv parser (avoids external minimist dependency)
+  const _argv = process.argv.slice(2);
+  const args = { _: [] };
+  for (let i = 0; i < _argv.length; i++) {
+    const a = _argv[i];
+    if (a.startsWith('--') && a.includes('=')) {
+      const [k, ...v] = a.slice(2).split('=');
+      args[k] = v.join('=');
+    } else if (a.startsWith('--no-')) {
+      args[a.slice(5)] = false;
+    } else if (a.startsWith('--')) {
+      const next = _argv[i + 1];
+      if (next && !next.startsWith('-')) { args[a.slice(2)] = next; i++; }
+      else args[a.slice(2)] = true;
+    } else if (a.startsWith('-') && a.length === 2) {
+      const next = _argv[i + 1];
+      if (next && !next.startsWith('-')) { args[a.slice(1)] = next; i++; }
+      else args[a.slice(1)] = true;
+    } else {
+      args._.push(a);
+    }
+  }
+  if (args.s) { args.session = args.s; delete args.s; }
+
+  const cmd = customCommands.get(_cmdName);
+  cmd.action(args).catch((err) => {
+    console.error(`onecrawl: ${err.message}`);
+    process.exitCode = 1;
+  });
+} else {
+  // Inject custom help lines when --help is used without a specific command
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    const helpBlock = formatCustomHelp(customCommands);
+    if (helpBlock) {
+      // Monkey-patch console.log once to append custom commands to global help
+      const _origLog = console.log;
+      let _patched = false;
+      console.log = function (...logArgs) {
+        _origLog.apply(console, logArgs);
+        if (!_patched && typeof logArgs[0] === 'string' && logArgs[0].includes('Global options:')) {
+          _patched = true;
+          _origLog(helpBlock);
+          console.log = _origLog;
+        }
+      };
+    }
+  }
+
+  const { program } = require('playwright/lib/cli/client/program');
+  program().catch((err) => {
+    console.error(err.message);
+    process.exitCode = 1;
+  });
+}

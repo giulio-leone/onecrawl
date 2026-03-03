@@ -1,6 +1,6 @@
 {
   "name": "@giulio-leone/onecrawl-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MCP tools server for OneCrawl browser automation — 11 tools for AI agents",
   "type": "module",
   "main": "dist/index.js",
@@ -15,7 +15,9 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup src/index.ts src/cli.ts --format esm,cjs --dts",
     "typecheck": "tsc --noEmit",
@@ -32,7 +34,9 @@
     "tsx": "^4.19.2",
     "typescript": "^5.7.3"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   },

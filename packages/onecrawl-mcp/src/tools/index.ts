@@ -9,3 +9,5 @@ export { browserWaitTool } from "./browser-wait.js";
 export { browserPressKeyTool } from "./browser-press-key.js";
 export { browserUploadTool } from "./browser-upload.js";
 export { browserHumanClickTool } from "./browser-human-click.js";
+export { browserAuthStatusTool } from "./browser-auth-status.js";
+export { browserHealthCheckTool } from "./browser-health-check.js";

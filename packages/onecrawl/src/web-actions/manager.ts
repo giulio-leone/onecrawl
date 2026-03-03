@@ -15,6 +15,8 @@ import { homedir } from "node:os";
 import { readFileSync } from "node:fs";
 import { applyStealthToContext, CHROME_UA } from "./stealth.js";
 import { createHumanCursor, type HumanCursor } from "./human-behavior.js";
+import { PasskeyStore } from "../auth/passkey-store.js";
+import { WebAuthnManager } from "../auth/webauthn-manager.js";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +29,8 @@ export type WebSession = {
   lastActivity: number;
   /** If connected via CDP, we hold a Browser ref for cleanup. */
   cdpBrowser?: Browser;
+  /** WebAuthn manager for passkey auth, if configured. */
+  webAuthnManager?: WebAuthnManager;
 };
 
 export type WebActionError = {
@@ -60,9 +64,19 @@ function debugLog(msg: string): void {
 
 // ── Manager ──────────────────────────────────────────────────────────────────
 
+export interface WebActionManagerConfig {
+  /** Path to the encrypted passkey store. When set, sessions auto-inject virtual authenticator. */
+  passkeyStorePath?: string;
+}
+
 export class WebActionManager {
   private sessions = new Map<string, WebSession>();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+  private readonly passkeyStorePath?: string;
+
+  constructor(config?: WebActionManagerConfig) {
+    this.passkeyStorePath = config?.passkeyStorePath;
+  }
 
   /** Start the idle-session cleanup loop. */
   start(): void {
@@ -138,6 +152,7 @@ export class WebActionManager {
     };
 
     this.sessions.set(profileId, session);
+    await this.setupPasskeys(session);
     return session;
   }
 
@@ -194,6 +209,7 @@ export class WebActionManager {
     };
 
     this.sessions.set(profileId, session);
+    await this.setupPasskeys(session);
     return session;
   }
 
@@ -267,6 +283,12 @@ export class WebActionManager {
     }));
   }
 
+  /** Check whether passkey auth is active for a session. */
+  getPasskeyStatus(profileId: string): { active: boolean; profileId: string } {
+    const session = this.sessions.get(profileId);
+    return { profileId, active: session?.webAuthnManager != null };
+  }
+
   /** Get page for a profile (throws WebActionError if not found). */
   async getPage(
     profileId: string,
@@ -307,6 +329,28 @@ export class WebActionManager {
   }
 
   // ── Private ──────────────────────────────────────────────────────────────
+
+  private async setupPasskeys(session: WebSession): Promise<void> {
+    if (!this.passkeyStorePath) return;
+    try {
+      const store = new PasskeyStore({ storagePath: this.passkeyStorePath });
+      const credentials = await store.getCredentials();
+      if (credentials.length === 0) {
+        debugLog(`[web-actions] no passkey credentials at ${this.passkeyStorePath}`);
+        return;
+      }
+
+      const cdpSession = await session.context.newCDPSession(session.page);
+      const manager = new WebAuthnManager(cdpSession);
+      await manager.injectCredentials(credentials);
+      session.webAuthnManager = manager;
+      debugLog(`[web-actions] passkey injected for ${session.profileId} (${credentials.length} creds)`);
+    } catch (err) {
+      console.warn(
+        `[web-actions] passkey setup failed for ${session.profileId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
 
   private async cleanupIdle(): Promise<void> {
     const now = Date.now();
