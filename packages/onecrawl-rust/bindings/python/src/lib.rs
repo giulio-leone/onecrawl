@@ -223,6 +223,17 @@ fn py_err(e: impl std::fmt::Display) -> PyErr {
     pyo3::exceptions::PyRuntimeError::new_err(e.to_string())
 }
 
+fn py_parse_network_profile(name: &str) -> PyResult<onecrawl_cdp::NetworkProfile> {
+    match name.to_lowercase().as_str() {
+        "fast3g" | "fast-3g" => Ok(onecrawl_cdp::NetworkProfile::Fast3G),
+        "slow3g" | "slow-3g" => Ok(onecrawl_cdp::NetworkProfile::Slow3G),
+        "offline" => Ok(onecrawl_cdp::NetworkProfile::Offline),
+        "regular4g" | "4g" => Ok(onecrawl_cdp::NetworkProfile::Regular4G),
+        "wifi" => Ok(onecrawl_cdp::NetworkProfile::WiFi),
+        _ => Err(py_err(format!("Unknown profile: {name}. Use: fast3g, slow3g, offline, regular4g, wifi"))),
+    }
+}
+
 #[pymethods]
 impl Browser {
     /// Launch a new browser. `headless` defaults to True.
@@ -858,6 +869,98 @@ impl Browser {
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
         let report = self.rt.block_on(onecrawl_cdp::coverage::get_css_coverage(page)).map_err(py_err)?;
         Ok(report.to_string())
+    }
+
+    // ── Accessibility ──────────────────────────────────────────────
+
+    /// Get the full accessibility tree as JSON.
+    fn get_accessibility_tree(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self.rt.block_on(onecrawl_cdp::accessibility::get_accessibility_tree(page)).map_err(py_err)?;
+        Ok(result.to_string())
+    }
+
+    /// Get accessibility info for a specific element.
+    fn get_element_accessibility(&self, selector: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self.rt.block_on(onecrawl_cdp::accessibility::get_element_accessibility(page, selector)).map_err(py_err)?;
+        Ok(result.to_string())
+    }
+
+    /// Run an accessibility audit and return the report as JSON.
+    fn audit_accessibility(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self.rt.block_on(onecrawl_cdp::accessibility::audit_accessibility(page)).map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ── Network Throttling ─────────────────────────────────────────
+
+    /// Set network throttling to a named profile.
+    fn set_network_throttle(&self, profile: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let p = py_parse_network_profile(profile)?;
+        self.rt.block_on(onecrawl_cdp::throttle::set_network_conditions(page, p)).map_err(py_err)
+    }
+
+    /// Set custom network throttling conditions.
+    fn set_network_throttle_custom(&self, download_kbps: f64, upload_kbps: f64, latency_ms: f64) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let profile = onecrawl_cdp::NetworkProfile::Custom { download_kbps, upload_kbps, latency_ms };
+        self.rt.block_on(onecrawl_cdp::throttle::set_network_conditions(page, profile)).map_err(py_err)
+    }
+
+    /// Clear network throttling.
+    fn clear_network_throttle(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::throttle::clear_network_conditions(page)).map_err(py_err)
+    }
+
+    // ── Performance Tracing ────────────────────────────────────────
+
+    /// Start performance tracing.
+    fn start_tracing(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::tracing_cdp::start_tracing(page)).map_err(py_err)
+    }
+
+    /// Stop tracing and return trace data as JSON.
+    fn stop_tracing(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self.rt.block_on(onecrawl_cdp::tracing_cdp::stop_tracing(page)).map_err(py_err)?;
+        Ok(result.to_string())
+    }
+
+    /// Get performance metrics as JSON.
+    fn get_performance_metrics(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self.rt.block_on(onecrawl_cdp::tracing_cdp::get_performance_metrics(page)).map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Get navigation timing data as JSON.
+    fn get_navigation_timing(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self.rt.block_on(onecrawl_cdp::tracing_cdp::get_navigation_timing(page)).map_err(py_err)?;
+        Ok(result.to_string())
+    }
+
+    /// Get resource timing entries as JSON.
+    fn get_resource_timing(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self.rt.block_on(onecrawl_cdp::tracing_cdp::get_resource_timing(page)).map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
     }
 }
 

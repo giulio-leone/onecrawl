@@ -231,6 +231,28 @@ enum Commands {
         action: CoverageAction,
     },
 
+    // ── Accessibility ───────────────────────────────────────────────
+    /// Accessibility operations
+    #[command(name = "a11y")]
+    Accessibility {
+        #[command(subcommand)]
+        action: AccessibilityAction,
+    },
+
+    // ── Throttle ────────────────────────────────────────────────────
+    /// Network throttling
+    Throttle {
+        #[command(subcommand)]
+        action: ThrottleAction,
+    },
+
+    // ── Performance ─────────────────────────────────────────────────
+    /// Performance tracing and metrics
+    Perf {
+        #[command(subcommand)]
+        action: PerfAction,
+    },
+
     // ── Stealth ─────────────────────────────────────────────────────
     /// Stealth operations
     Stealth {
@@ -425,6 +447,53 @@ enum StealthAction {
     Inject,
 }
 
+#[derive(Subcommand)]
+enum AccessibilityAction {
+    /// Get the full accessibility tree
+    Tree,
+    /// Get accessibility info for an element
+    Element {
+        /// CSS selector
+        selector: String,
+    },
+    /// Run an accessibility audit
+    Audit,
+}
+
+#[derive(Subcommand)]
+enum ThrottleAction {
+    /// Set a named throttling profile (fast3g, slow3g, offline, regular4g, wifi)
+    Set {
+        /// Profile name
+        profile: String,
+    },
+    /// Set custom throttling conditions
+    Custom {
+        /// Download speed in kbps
+        download_kbps: f64,
+        /// Upload speed in kbps
+        upload_kbps: f64,
+        /// Latency in ms
+        latency_ms: f64,
+    },
+    /// Clear network throttling
+    Clear,
+}
+
+#[derive(Subcommand)]
+enum PerfAction {
+    /// Start performance tracing
+    TraceStart,
+    /// Stop tracing and print trace data
+    TraceStop,
+    /// Get performance metrics
+    Metrics,
+    /// Get navigation timing
+    Timing,
+    /// Get resource timing entries
+    Resources,
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -584,6 +653,40 @@ async fn main() {
             CoverageAction::JsStop => commands::browser::coverage_js_stop().await,
             CoverageAction::CssStart => commands::browser::coverage_css_start().await,
             CoverageAction::CssReport => commands::browser::coverage_css_report().await,
+        },
+
+        // ── Accessibility ───────────────────────────────────────────
+        Commands::Accessibility { action } => match action {
+            AccessibilityAction::Tree => commands::browser::a11y_tree().await,
+            AccessibilityAction::Element { selector } => {
+                commands::browser::a11y_element(&selector).await
+            }
+            AccessibilityAction::Audit => commands::browser::a11y_audit().await,
+        },
+
+        // ── Throttle ────────────────────────────────────────────────
+        Commands::Throttle { action } => match action {
+            ThrottleAction::Set { profile } => {
+                commands::browser::throttle_set(&profile).await
+            }
+            ThrottleAction::Custom {
+                download_kbps,
+                upload_kbps,
+                latency_ms,
+            } => {
+                commands::browser::throttle_custom(download_kbps, upload_kbps, latency_ms)
+                    .await
+            }
+            ThrottleAction::Clear => commands::browser::throttle_clear().await,
+        },
+
+        // ── Performance ─────────────────────────────────────────────
+        Commands::Perf { action } => match action {
+            PerfAction::TraceStart => commands::browser::perf_trace_start().await,
+            PerfAction::TraceStop => commands::browser::perf_trace_stop().await,
+            PerfAction::Metrics => commands::browser::perf_metrics().await,
+            PerfAction::Timing => commands::browser::perf_timing().await,
+            PerfAction::Resources => commands::browser::perf_resources().await,
         },
 
         // ── Stealth ─────────────────────────────────────────────────

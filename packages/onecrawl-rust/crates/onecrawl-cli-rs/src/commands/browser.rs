@@ -873,6 +873,191 @@ pub async fn coverage_css_report() {
 }
 
 // ---------------------------------------------------------------------------
+// Accessibility
+// ---------------------------------------------------------------------------
+
+pub async fn a11y_tree() {
+    with_page(|page| async move {
+        let result = onecrawl_cdp::accessibility::get_accessibility_tree(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn a11y_element(selector: &str) {
+    let sel = selector.to_string();
+    with_page(|page| async move {
+        let result = onecrawl_cdp::accessibility::get_element_accessibility(&page, &sel)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn a11y_audit() {
+    with_page(|page| async move {
+        let result = onecrawl_cdp::accessibility::audit_accessibility(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Network Throttling
+// ---------------------------------------------------------------------------
+
+fn cli_parse_network_profile(name: &str) -> Result<onecrawl_cdp::NetworkProfile, String> {
+    match name.to_lowercase().as_str() {
+        "fast3g" | "fast-3g" => Ok(onecrawl_cdp::NetworkProfile::Fast3G),
+        "slow3g" | "slow-3g" => Ok(onecrawl_cdp::NetworkProfile::Slow3G),
+        "offline" => Ok(onecrawl_cdp::NetworkProfile::Offline),
+        "regular4g" | "4g" => Ok(onecrawl_cdp::NetworkProfile::Regular4G),
+        "wifi" => Ok(onecrawl_cdp::NetworkProfile::WiFi),
+        _ => Err(format!("Unknown profile: {name}. Use: fast3g, slow3g, offline, regular4g, wifi")),
+    }
+}
+
+pub async fn throttle_set(profile: &str) {
+    let p = match cli_parse_network_profile(profile) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{} {e}", "✗".red());
+            std::process::exit(1);
+        }
+    };
+    let desc = onecrawl_cdp::throttle::describe_profile(&p);
+    with_page(|page| async move {
+        onecrawl_cdp::throttle::set_network_conditions(&page, p)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Network throttle set: {}", "✓".green(), desc);
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn throttle_custom(download_kbps: f64, upload_kbps: f64, latency_ms: f64) {
+    let profile = onecrawl_cdp::NetworkProfile::Custom {
+        download_kbps,
+        upload_kbps,
+        latency_ms,
+    };
+    with_page(|page| async move {
+        onecrawl_cdp::throttle::set_network_conditions(&page, profile)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{} Custom throttle set: ↓{}kbps ↑{}kbps ~{}ms",
+            "✓".green(),
+            download_kbps,
+            upload_kbps,
+            latency_ms
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn throttle_clear() {
+    with_page(|page| async move {
+        onecrawl_cdp::throttle::clear_network_conditions(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Network throttle cleared", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Performance Tracing
+// ---------------------------------------------------------------------------
+
+pub async fn perf_trace_start() {
+    with_page(|page| async move {
+        onecrawl_cdp::tracing_cdp::start_tracing(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Tracing started", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn perf_trace_stop() {
+    with_page(|page| async move {
+        let result = onecrawl_cdp::tracing_cdp::stop_tracing(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn perf_metrics() {
+    with_page(|page| async move {
+        let result = onecrawl_cdp::tracing_cdp::get_performance_metrics(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn perf_timing() {
+    with_page(|page| async move {
+        let result = onecrawl_cdp::tracing_cdp::get_navigation_timing(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn perf_resources() {
+    with_page(|page| async move {
+        let result = onecrawl_cdp::tracing_cdp::get_resource_timing(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
 // Stealth
 // ---------------------------------------------------------------------------
 

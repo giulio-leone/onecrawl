@@ -155,6 +155,28 @@ export declare class NativeBrowser {
   startCssCoverage(): Promise<void>
   /** Get CSS coverage summary as JSON string. */
   getCssCoverage(): Promise<string>
+  /** Get the full accessibility tree of the current page as JSON. */
+  getAccessibilityTree(): Promise<string>
+  /** Get accessibility info for a specific element by CSS selector. */
+  getElementAccessibility(selector: string): Promise<string>
+  /** Run an accessibility audit on the current page and return the report as JSON. */
+  auditAccessibility(): Promise<string>
+  /** Set network throttling to a named profile (fast3g, slow3g, offline, regular4g, wifi). */
+  setNetworkThrottle(profile: string): Promise<void>
+  /** Set custom network throttling conditions. */
+  setNetworkThrottleCustom(downloadKbps: number, uploadKbps: number, latencyMs: number): Promise<void>
+  /** Clear network throttling. */
+  clearNetworkThrottle(): Promise<void>
+  /** Start performance tracing on the current page. */
+  startTracing(): Promise<void>
+  /** Stop tracing and return the trace data as JSON. */
+  stopTracing(): Promise<string>
+  /** Get performance metrics from the current page as JSON. */
+  getPerformanceMetrics(): Promise<string>
+  /** Get navigation timing data as JSON. */
+  getNavigationTiming(): Promise<string>
+  /** Get resource timing entries as JSON. */
+  getResourceTiming(): Promise<string>
 }
 
 /** Encrypted key-value store backed by sled + AES-256-GCM. */

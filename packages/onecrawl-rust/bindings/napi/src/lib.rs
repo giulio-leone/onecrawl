@@ -1139,4 +1139,149 @@ impl NativeBrowser {
             .map_err(|e| Error::from_reason(e.to_string()))?;
         Ok(report.to_string())
     }
+
+    // ── Accessibility ──────────────────────────────────────────────
+
+    /// Get the full accessibility tree of the current page as JSON.
+    #[napi]
+    pub async fn get_accessibility_tree(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::accessibility::get_accessibility_tree(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(result.to_string())
+    }
+
+    /// Get accessibility info for a specific element by CSS selector.
+    #[napi]
+    pub async fn get_element_accessibility(&self, selector: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::accessibility::get_element_accessibility(page, &selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(result.to_string())
+    }
+
+    /// Run an accessibility audit on the current page and return the report as JSON.
+    #[napi]
+    pub async fn audit_accessibility(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::accessibility::audit_accessibility(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Network Throttling ─────────────────────────────────────────
+
+    /// Set network throttling to a named profile (fast3g, slow3g, offline, regular4g, wifi).
+    #[napi]
+    pub async fn set_network_throttle(&self, profile: String) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let p = parse_network_profile(&profile).map_err(Error::from_reason)?;
+        onecrawl_cdp::throttle::set_network_conditions(page, p)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Set custom network throttling conditions.
+    #[napi]
+    pub async fn set_network_throttle_custom(
+        &self,
+        download_kbps: f64,
+        upload_kbps: f64,
+        latency_ms: f64,
+    ) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let profile = onecrawl_cdp::NetworkProfile::Custom {
+            download_kbps,
+            upload_kbps,
+            latency_ms,
+        };
+        onecrawl_cdp::throttle::set_network_conditions(page, profile)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Clear network throttling.
+    #[napi]
+    pub async fn clear_network_throttle(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::throttle::clear_network_conditions(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Performance Tracing ────────────────────────────────────────
+
+    /// Start performance tracing on the current page.
+    #[napi]
+    pub async fn start_tracing(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::tracing_cdp::start_tracing(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Stop tracing and return the trace data as JSON.
+    #[napi]
+    pub async fn stop_tracing(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::tracing_cdp::stop_tracing(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(result.to_string())
+    }
+
+    /// Get performance metrics from the current page as JSON.
+    #[napi]
+    pub async fn get_performance_metrics(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::tracing_cdp::get_performance_metrics(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get navigation timing data as JSON.
+    #[napi]
+    pub async fn get_navigation_timing(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::tracing_cdp::get_navigation_timing(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(result.to_string())
+    }
+
+    /// Get resource timing entries as JSON.
+    #[napi]
+    pub async fn get_resource_timing(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::tracing_cdp::get_resource_timing(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+}
+
+fn parse_network_profile(name: &str) -> std::result::Result<onecrawl_cdp::NetworkProfile, String> {
+    match name.to_lowercase().as_str() {
+        "fast3g" | "fast-3g" => Ok(onecrawl_cdp::NetworkProfile::Fast3G),
+        "slow3g" | "slow-3g" => Ok(onecrawl_cdp::NetworkProfile::Slow3G),
+        "offline" => Ok(onecrawl_cdp::NetworkProfile::Offline),
+        "regular4g" | "4g" => Ok(onecrawl_cdp::NetworkProfile::Regular4G),
+        "wifi" => Ok(onecrawl_cdp::NetworkProfile::WiFi),
+        _ => Err(format!("Unknown profile: {name}. Use: fast3g, slow3g, offline, regular4g, wifi")),
+    }
 }
