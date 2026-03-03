@@ -49,7 +49,7 @@ pub async fn set_download_path(page: &Page, download_path: &Path) -> Result<()> 
     );
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("set_download_path failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("set_download_path failed: {e}")))?;
     Ok(())
 }
 
@@ -58,7 +58,7 @@ pub async fn get_downloads(page: &Page) -> Result<Vec<DownloadInfo>> {
     let val = page
         .evaluate("JSON.stringify(window.__onecrawl_downloads?.entries || [])")
         .await
-        .map_err(|e| Error::Browser(format!("get_downloads failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("get_downloads failed: {e}")))?;
     let json_str: String = val.into_value().unwrap_or_else(|_| "[]".to_string());
     let downloads: Vec<DownloadInfo> = serde_json::from_str(&json_str).unwrap_or_default();
     Ok(downloads)
@@ -84,7 +84,7 @@ pub async fn download_file(page: &Page, url: &str) -> Result<String> {
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("download_file failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("download_file failed: {e}")))?;
     let b64: String = val.into_value().unwrap_or_default();
     Ok(b64)
 }
@@ -108,6 +108,6 @@ pub async fn wait_for_download(page: &Page, timeout_ms: u64) -> Result<Option<Do
 pub async fn clear_downloads(page: &Page) -> Result<()> {
     page.evaluate("if (window.__onecrawl_downloads) { window.__onecrawl_downloads.entries = []; }")
         .await
-        .map_err(|e| Error::Browser(format!("clear_downloads failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("clear_downloads failed: {e}")))?;
     Ok(())
 }

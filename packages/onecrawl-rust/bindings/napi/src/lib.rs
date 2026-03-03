@@ -3945,3 +3945,32 @@ fn parse_network_profile(name: &str) -> std::result::Result<onecrawl_cdp::Networ
         )),
     }
 }
+
+// ──────────────────────────── Server ────────────────────────────
+
+/// Server configuration info.
+#[napi(object)]
+pub struct ServerInfo {
+    pub default_port: u16,
+    pub endpoints: u16,
+    pub version: String,
+}
+
+/// Get server configuration info.
+#[napi]
+pub fn get_server_info() -> ServerInfo {
+    ServerInfo {
+        default_port: 9867,
+        endpoints: 18,
+        version: env!("CARGO_PKG_VERSION").to_string(),
+    }
+}
+
+/// Start the OneCrawl HTTP server for multi-instance browser management.
+#[napi]
+pub async fn start_server(port: Option<u16>) -> napi::Result<()> {
+    let port = port.unwrap_or(9867);
+    onecrawl_server::serve::start_server(port)
+        .await
+        .map_err(|e| napi::Error::from_reason(e.to_string()))
+}

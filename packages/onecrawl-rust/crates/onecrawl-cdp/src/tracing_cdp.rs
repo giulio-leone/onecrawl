@@ -18,7 +18,7 @@ pub async fn start_tracing(page: &Page) -> Result<()> {
     let params = StartParams::default();
     page.execute(params)
         .await
-        .map_err(|e| Error::Browser(format!("Tracing.start failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("Tracing.start failed: {e}")))?;
 
     Ok(())
 }
@@ -35,7 +35,7 @@ pub async fn stop_tracing(page: &Page) -> Result<serde_json::Value> {
 
     page.execute(EndParams::default())
         .await
-        .map_err(|e| Error::Browser(format!("Tracing.end failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("Tracing.end failed: {e}")))?;
 
     // Since trace data comes via events and not the response,
     // collect a performance summary via JS as a practical fallback.
@@ -58,7 +58,7 @@ pub async fn stop_tracing(page: &Page) -> Result<serde_json::Value> {
     let result = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("stop_tracing JS fallback failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("stop_tracing JS fallback failed: {e}")))?;
 
     match result.into_value::<serde_json::Value>() {
         Ok(v) => Ok(v),
@@ -74,12 +74,12 @@ pub async fn get_performance_metrics(page: &Page) -> Result<Vec<PerformanceMetri
 
     page.execute(EnableParams::default())
         .await
-        .map_err(|e| Error::Browser(format!("Performance.enable failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("Performance.enable failed: {e}")))?;
 
     let resp = page
         .execute(GetMetricsParams::default())
         .await
-        .map_err(|e| Error::Browser(format!("Performance.getMetrics failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("Performance.getMetrics failed: {e}")))?;
     let result: &GetMetricsReturns = &resp;
 
     let metrics = result
@@ -133,7 +133,7 @@ pub async fn get_navigation_timing(page: &Page) -> Result<serde_json::Value> {
     let result = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("get_navigation_timing failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("get_navigation_timing failed: {e}")))?;
 
     match result.into_value::<serde_json::Value>() {
         Ok(v) => Ok(v),
@@ -163,7 +163,7 @@ pub async fn get_resource_timing(page: &Page) -> Result<Vec<serde_json::Value>> 
     let result = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("get_resource_timing failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("get_resource_timing failed: {e}")))?;
 
     match result.into_value::<Vec<serde_json::Value>>() {
         Ok(v) => Ok(v),

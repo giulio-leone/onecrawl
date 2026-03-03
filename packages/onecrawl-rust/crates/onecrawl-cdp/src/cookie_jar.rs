@@ -30,7 +30,7 @@ pub async fn export_cookies(page: &Page) -> Result<CookieJar> {
     let resp = page
         .execute(chromiumoxide::cdp::browser_protocol::network::GetCookiesParams::default())
         .await
-        .map_err(|e| Error::Browser(format!("export_cookies failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("export_cookies failed: {e}")))?;
 
     let cookies: Vec<StoredCookie> = resp
         .result
@@ -73,10 +73,10 @@ pub async fn import_cookies(page: &Page, jar: &CookieJar) -> Result<usize> {
             .http_only(cookie.http_only)
             .secure(cookie.secure)
             .build()
-            .map_err(|e| Error::Browser(format!("SetCookieParams build failed: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("SetCookieParams build failed: {e}")))?;
         page.execute(params)
             .await
-            .map_err(|e| Error::Browser(format!("import cookie '{}' failed: {e}", cookie.name)))?;
+            .map_err(|e| Error::Cdp(format!("import cookie '{}' failed: {e}", cookie.name)))?;
         count += 1;
     }
     Ok(count)
@@ -86,18 +86,18 @@ pub async fn import_cookies(page: &Page, jar: &CookieJar) -> Result<usize> {
 pub async fn save_cookies_to_file(page: &Page, path: &Path) -> Result<usize> {
     let jar = export_cookies(page).await?;
     let json = serde_json::to_string_pretty(&jar)
-        .map_err(|e| Error::Browser(format!("serialize cookies failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("serialize cookies failed: {e}")))?;
     std::fs::write(path, json)
-        .map_err(|e| Error::Browser(format!("write cookies file failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("write cookies file failed: {e}")))?;
     Ok(jar.cookies.len())
 }
 
 /// Load cookie jar from a JSON file and import.
 pub async fn load_cookies_from_file(page: &Page, path: &Path) -> Result<usize> {
     let json = std::fs::read_to_string(path)
-        .map_err(|e| Error::Browser(format!("read cookies file failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("read cookies file failed: {e}")))?;
     let jar: CookieJar = serde_json::from_str(&json)
-        .map_err(|e| Error::Browser(format!("parse cookies file failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("parse cookies file failed: {e}")))?;
     import_cookies(page, &jar).await
 }
 
@@ -112,6 +112,6 @@ pub async fn clear_all_cookies(page: &Page) -> Result<()> {
         chromiumoxide::cdp::browser_protocol::network::ClearBrowserCookiesParams::default(),
     )
     .await
-    .map_err(|e| Error::Browser(format!("clear_all_cookies failed: {e}")))?;
+    .map_err(|e| Error::Cdp(format!("clear_all_cookies failed: {e}")))?;
     Ok(())
 }

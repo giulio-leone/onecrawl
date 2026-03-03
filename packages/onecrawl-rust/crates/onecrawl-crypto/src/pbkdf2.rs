@@ -11,10 +11,10 @@ const KEY_LEN: usize = 32; // AES-256
 /// The caller is responsible for zeroizing the key after use.
 pub fn derive_key(passphrase: &str, salt: &[u8]) -> Result<[u8; KEY_LEN]> {
     if passphrase.is_empty() {
-        return Err(Error::InvalidInput("passphrase cannot be empty".into()));
+        return Err(Error::Config("passphrase cannot be empty".into()));
     }
     if salt.len() < 8 {
-        return Err(Error::InvalidInput("salt must be at least 8 bytes".into()));
+        return Err(Error::Config("salt must be at least 8 bytes".into()));
     }
 
     let mut key = [0u8; KEY_LEN];

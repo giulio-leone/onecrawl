@@ -1,31 +1,52 @@
 use thiserror::Error;
 
 /// Unified error type for all OneCrawl operations.
+///
+/// Each variant maps to a subsystem so callers can match on the error source
+/// and present actionable diagnostics.
 #[derive(Error, Debug)]
-pub enum Error {
-    #[error("crypto error: {0}")]
+pub enum OneCrawlError {
+    /// Chrome DevTools Protocol / browser-automation failure.
+    #[error("CDP error: {0}")]
+    Cdp(String),
+
+    /// Cryptographic operation failure (AES-GCM, PBKDF2, TOTP, …).
+    #[error("Crypto error: {0}")]
     Crypto(String),
 
-    #[error("storage error: {0}")]
-    Storage(String),
-
-    #[error("parser error: {0}")]
+    /// HTML parsing or DOM extraction failure.
+    #[error("Parser error: {0}")]
     Parser(String),
 
-    #[error("browser error: {0}")]
-    Browser(String),
+    /// Persistent storage (sled) failure.
+    #[error("Storage error: {0}")]
+    Storage(String),
 
-    #[error("invalid input: {0}")]
-    InvalidInput(String),
+    /// HTTP server (axum / routes) failure.
+    #[error("Server error: {0}")]
+    Server(String),
 
-    #[error("not found: {0}")]
+    /// Configuration or invalid-input error.
+    #[error("Config error: {0}")]
+    Config(String),
+
+    /// A requested resource was not found.
+    #[error("Not found: {0}")]
     NotFound(String),
 
-    #[error("io error: {0}")]
+    /// Generic I/O error.
+    #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
-    #[error("serialization error: {0}")]
+    /// JSON serialisation / deserialisation error.
+    #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+// Backward-compatible alias so existing `use onecrawl_core::Error` keeps working.
+pub type Error = OneCrawlError;
+
+pub type Result<T> = std::result::Result<T, OneCrawlError>;
+
+/// Explicit full-name alias for public API consumers.
+pub type OneCrawlResult<T> = std::result::Result<T, OneCrawlError>;

@@ -39,7 +39,7 @@ pub async fn enable_virtual_authenticator(
     config: &VirtualAuthenticator,
 ) -> Result<()> {
     let config_json = serde_json::to_string(config)
-        .map_err(|e| onecrawl_core::Error::Browser(format!("serialize config: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("serialize config: {e}")))?;
     let js = format!(
         r#"
         (() => {{
@@ -176,14 +176,14 @@ pub async fn enable_virtual_authenticator(
     );
     page.evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("enable_virtual_authenticator: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("enable_virtual_authenticator: {e}")))?;
     Ok(())
 }
 
 /// Add a pre-existing credential to the virtual authenticator.
 pub async fn add_virtual_credential(page: &Page, credential: &VirtualCredential) -> Result<()> {
     let cred_json = serde_json::to_string(credential)
-        .map_err(|e| onecrawl_core::Error::Browser(format!("serialize credential: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("serialize credential: {e}")))?;
     let js = format!(
         r#"
         (() => {{
@@ -195,7 +195,7 @@ pub async fn add_virtual_credential(page: &Page, credential: &VirtualCredential)
     );
     page.evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("add_virtual_credential: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("add_virtual_credential: {e}")))?;
     Ok(())
 }
 
@@ -204,7 +204,7 @@ pub async fn get_virtual_credentials(page: &Page) -> Result<Vec<VirtualCredentia
     let val = page
         .evaluate("window.__onecrawl_webauthn?.credentials || []")
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("get_virtual_credentials: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("get_virtual_credentials: {e}")))?;
     let creds: Vec<VirtualCredential> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))
             .unwrap_or_default();
@@ -216,7 +216,7 @@ pub async fn get_webauthn_log(page: &Page) -> Result<Vec<serde_json::Value>> {
     let val = page
         .evaluate("window.__onecrawl_webauthn?.log || []")
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("get_webauthn_log: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("get_webauthn_log: {e}")))?;
     let log: Vec<serde_json::Value> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))
             .unwrap_or_default();
@@ -233,7 +233,7 @@ pub async fn disable_virtual_authenticator(page: &Page) -> Result<()> {
     "#,
     )
     .await
-    .map_err(|e| onecrawl_core::Error::Browser(format!("disable_virtual_authenticator: {e}")))?;
+    .map_err(|e| onecrawl_core::Error::Cdp(format!("disable_virtual_authenticator: {e}")))?;
     Ok(())
 }
 
@@ -253,7 +253,7 @@ pub async fn remove_virtual_credential(page: &Page, credential_id: &str) -> Resu
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("remove_virtual_credential: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("remove_virtual_credential: {e}")))?;
     Ok(val
         .into_value::<serde_json::Value>()
         .ok()

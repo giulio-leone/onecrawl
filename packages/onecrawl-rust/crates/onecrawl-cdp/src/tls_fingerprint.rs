@@ -144,7 +144,7 @@ pub fn browser_profiles() -> Vec<BrowserFingerprint> {
 /// Apply a browser fingerprint profile to the page via `Object.defineProperty` overrides.
 pub async fn apply_fingerprint(page: &Page, fp: &BrowserFingerprint) -> Result<Vec<String>> {
     let langs_json = serde_json::to_string(&fp.languages)
-        .map_err(|e| Error::Browser(format!("serialize languages: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("serialize languages: {e}")))?;
 
     let js = format!(
         r#"(() => {{
@@ -201,7 +201,7 @@ return ['userAgent','platform','vendor','appVersion','oscpu','languages','hardwa
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("apply_fingerprint failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("apply_fingerprint failed: {e}")))?;
 
     let overridden: Vec<String> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))
@@ -214,7 +214,7 @@ return ['userAgent','platform','vendor','appVersion','oscpu','languages','hardwa
         );
     page.execute(ua_params)
         .await
-        .map_err(|e| Error::Browser(format!("SetUserAgentOverride failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("SetUserAgentOverride failed: {e}")))?;
 
     Ok(overridden)
 }
@@ -286,14 +286,14 @@ return JSON.stringify({
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("detect_fingerprint failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("detect_fingerprint failed: {e}")))?;
 
     let json_str: String =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!("")))
             .unwrap_or_default();
 
     let mut fp: BrowserFingerprint = serde_json::from_str(&json_str)
-        .map_err(|e| Error::Browser(format!("parse fingerprint: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("parse fingerprint: {e}")))?;
     fp.name = "detected".into();
     Ok(fp)
 }

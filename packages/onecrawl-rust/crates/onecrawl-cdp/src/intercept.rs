@@ -36,7 +36,7 @@ pub enum InterceptAction {
 /// Register interception rules by monkey-patching `window.fetch` and `XMLHttpRequest`.
 pub async fn set_intercept_rules(page: &Page, rules: Vec<InterceptRule>) -> Result<()> {
     let rules_json =
-        serde_json::to_string(&rules).map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?;
+        serde_json::to_string(&rules).map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?;
 
     let js = format!(
         r#"(() => {{
@@ -119,7 +119,7 @@ pub async fn set_intercept_rules(page: &Page, rules: Vec<InterceptRule>) -> Resu
 
     page.evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("set_intercept_rules: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("set_intercept_rules: {e}")))?;
     Ok(())
 }
 
@@ -128,7 +128,7 @@ pub async fn get_intercepted_requests(page: &Page) -> Result<Vec<serde_json::Val
     let val = page
         .evaluate("JSON.stringify(window.__onecrawl_intercepted_log || [])")
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("get_intercepted_requests: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("get_intercepted_requests: {e}")))?;
 
     let raw = val
         .into_value::<String>()
@@ -157,6 +157,6 @@ pub async fn clear_intercept_rules(page: &Page) -> Result<()> {
 
     page.evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("clear_intercept_rules: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("clear_intercept_rules: {e}")))?;
     Ok(())
 }

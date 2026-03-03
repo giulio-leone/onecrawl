@@ -69,7 +69,7 @@ pub async fn start_console_capture(page: &Page) -> Result<()> {
 
     page.evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("start_console_capture failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("start_console_capture failed: {e}")))?;
 
     Ok(())
 }
@@ -87,7 +87,7 @@ pub async fn drain_console_entries(page: &Page) -> Result<Vec<ConsoleEntry>> {
             "#,
         )
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("drain_console_entries failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("drain_console_entries failed: {e}")))?;
 
     let entries: Vec<ConsoleEntry> = result.into_value().unwrap_or_default();
 
@@ -98,7 +98,7 @@ pub async fn drain_console_entries(page: &Page) -> Result<Vec<ConsoleEntry>> {
 pub async fn clear_console(page: &Page) -> Result<()> {
     page.evaluate("window.__onecrawl_console_entries = []")
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("clear_console failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("clear_console failed: {e}")))?;
 
     Ok(())
 }

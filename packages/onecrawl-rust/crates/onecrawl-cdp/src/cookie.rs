@@ -57,9 +57,9 @@ pub async fn get_cookies(page: &Page) -> Result<Vec<Cookie>> {
             "#,
         )
         .await
-        .map_err(|e| Error::Browser(format!("get_cookies eval failed: {e}")))?
+        .map_err(|e| Error::Cdp(format!("get_cookies eval failed: {e}")))?
         .into_value::<serde_json::Value>()
-        .map_err(|e| Error::Browser(format!("get_cookies parse failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("get_cookies parse failed: {e}")))?;
 
     let cookies_str = match val {
         serde_json::Value::String(s) => s,
@@ -75,7 +75,7 @@ pub async fn get_all_cookies(page: &Page) -> Result<Vec<Cookie>> {
     let val = page
         .execute(chromiumoxide::cdp::browser_protocol::network::GetCookiesParams::default())
         .await
-        .map_err(|e| Error::Browser(format!("Network.getCookies failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("Network.getCookies failed: {e}")))?;
 
     let cookies: Vec<Cookie> = val
         .result
@@ -125,11 +125,11 @@ pub async fn set_cookie(page: &Page, params: &SetCookieParams) -> Result<()> {
 
     let cdp_params = builder
         .build()
-        .map_err(|e| Error::Browser(format!("SetCookieParams build failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("SetCookieParams build failed: {e}")))?;
 
     page.execute(cdp_params)
         .await
-        .map_err(|e| Error::Browser(format!("Network.setCookie failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("Network.setCookie failed: {e}")))?;
 
     Ok(())
 }
@@ -153,11 +153,11 @@ pub async fn delete_cookies(
 
     let cdp_params = builder
         .build()
-        .map_err(|e| Error::Browser(format!("DeleteCookiesParams build failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("DeleteCookiesParams build failed: {e}")))?;
 
     page.execute(cdp_params)
         .await
-        .map_err(|e| Error::Browser(format!("Network.deleteCookies failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("Network.deleteCookies failed: {e}")))?;
 
     Ok(())
 }
@@ -168,6 +168,6 @@ pub async fn clear_cookies(page: &Page) -> Result<()> {
         chromiumoxide::cdp::browser_protocol::network::ClearBrowserCookiesParams::default(),
     )
     .await
-    .map_err(|e| Error::Browser(format!("Network.clearBrowserCookies failed: {e}")))?;
+    .map_err(|e| Error::Cdp(format!("Network.clearBrowserCookies failed: {e}")))?;
     Ok(())
 }

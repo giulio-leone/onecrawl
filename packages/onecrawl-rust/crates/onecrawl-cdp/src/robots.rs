@@ -199,7 +199,7 @@ pub async fn fetch_robots(page: &Page, base_url: &str) -> Result<RobotsTxt> {
     let body = page
         .evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("fetch_robots failed: {e}")))?
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("fetch_robots failed: {e}")))?
         .into_value::<String>()
         .unwrap_or_default();
     Ok(parse_robots(&body))

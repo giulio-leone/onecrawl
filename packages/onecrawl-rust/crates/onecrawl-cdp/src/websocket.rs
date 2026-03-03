@@ -122,7 +122,7 @@ pub async fn start_ws_recording(page: &Page, _recorder: &WsRecorder) -> Result<(
 
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("start_ws_recording failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("start_ws_recording failed: {e}")))?;
 
     Ok(())
 }
@@ -140,7 +140,7 @@ pub async fn drain_ws_frames(page: &Page, recorder: &WsRecorder) -> Result<usize
             "#,
         )
         .await
-        .map_err(|e| Error::Browser(format!("drain_ws_frames failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("drain_ws_frames failed: {e}")))?;
 
     let frames: Vec<WsFrame> = match result.into_value() {
         Ok(v) => v,
@@ -159,7 +159,7 @@ pub async fn active_ws_connections(page: &Page) -> Result<usize> {
     let result = page
         .evaluate("(window.__onecrawl_ws_connections || new Map()).size")
         .await
-        .map_err(|e| Error::Browser(format!("active_ws_connections: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("active_ws_connections: {e}")))?;
 
     let count: usize = result.into_value().unwrap_or(0);
     Ok(count)
@@ -168,5 +168,5 @@ pub async fn active_ws_connections(page: &Page) -> Result<usize> {
 /// Export all captured frames as JSON.
 pub async fn export_ws_frames(recorder: &WsRecorder) -> Result<serde_json::Value> {
     let frames = recorder.frames.lock().await;
-    serde_json::to_value(&*frames).map_err(|e| Error::Browser(format!("export_ws_frames: {e}")))
+    serde_json::to_value(&*frames).map_err(|e| Error::Cdp(format!("export_ws_frames: {e}")))
 }

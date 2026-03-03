@@ -68,7 +68,7 @@ pub async fn screenshot_full(page: &Page) -> Result<Vec<u8>> {
                 .build(),
         )
         .await
-        .map_err(|e| Error::Browser(format!("screenshot failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("screenshot failed: {e}")))?;
     Ok(bytes)
 }
 
@@ -77,7 +77,7 @@ pub async fn screenshot_viewport(page: &Page) -> Result<Vec<u8>> {
     let bytes = page
         .screenshot(chromiumoxide::page::ScreenshotParams::builder().build())
         .await
-        .map_err(|e| Error::Browser(format!("screenshot failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("screenshot failed: {e}")))?;
     Ok(bytes)
 }
 
@@ -100,7 +100,7 @@ pub async fn screenshot_with_options(page: &Page, opts: &ScreenshotOptions) -> R
     let bytes = page
         .screenshot(builder.build())
         .await
-        .map_err(|e| Error::Browser(format!("screenshot failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("screenshot failed: {e}")))?;
     Ok(bytes)
 }
 
@@ -111,11 +111,11 @@ pub async fn screenshot_element(page: &Page, selector: &str) -> Result<Vec<u8>> 
     let el = page
         .find_element(selector)
         .await
-        .map_err(|e| Error::Browser(format!("element not found: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("element not found: {e}")))?;
     let bytes = el
         .screenshot(CaptureScreenshotFormat::Png)
         .await
-        .map_err(|e| Error::Browser(format!("element screenshot failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("element screenshot failed: {e}")))?;
     Ok(bytes)
 }
 
@@ -124,7 +124,7 @@ pub async fn pdf(page: &Page) -> Result<Vec<u8>> {
     let bytes = page
         .pdf(Default::default())
         .await
-        .map_err(|e| Error::Browser(format!("pdf failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("pdf failed: {e}")))?;
     Ok(bytes)
 }
 
@@ -139,6 +139,6 @@ pub async fn pdf_with_options(page: &Page, opts: &PdfOptions) -> Result<Vec<u8>>
     let bytes = page
         .pdf(params)
         .await
-        .map_err(|e| Error::Browser(format!("pdf failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("pdf failed: {e}")))?;
     Ok(bytes)
 }

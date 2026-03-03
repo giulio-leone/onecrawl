@@ -180,7 +180,7 @@ pub async fn start_network_log(page: &Page) -> Result<()> {
 
     page.evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("start_network_log failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("start_network_log failed: {e}")))?;
 
     Ok(())
 }
@@ -202,7 +202,7 @@ pub async fn drain_network_log(page: &Page) -> Result<Vec<NetworkEntry>> {
             "#,
         )
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("drain_network_log failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("drain_network_log failed: {e}")))?;
 
     let entries: Vec<NetworkEntry> = result.into_value().unwrap_or_default();
     Ok(entries)
@@ -248,7 +248,7 @@ pub async fn get_network_summary(page: &Page) -> Result<NetworkSummary> {
             "#,
         )
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("get_network_summary failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("get_network_summary failed: {e}")))?;
 
     let summary: NetworkSummary = result.into_value().unwrap_or(NetworkSummary {
         total_requests: 0,
@@ -284,7 +284,7 @@ pub async fn stop_network_log(page: &Page) -> Result<()> {
         "#,
     )
     .await
-    .map_err(|e| onecrawl_core::Error::Browser(format!("stop_network_log failed: {e}")))?;
+    .map_err(|e| onecrawl_core::Error::Cdp(format!("stop_network_log failed: {e}")))?;
 
     Ok(())
 }
@@ -293,7 +293,7 @@ pub async fn stop_network_log(page: &Page) -> Result<()> {
 pub async fn export_network_log(page: &Page, path: &str) -> Result<()> {
     let entries = drain_network_log(page).await?;
     let json = serde_json::to_string_pretty(&entries)
-        .map_err(|e| onecrawl_core::Error::Browser(format!("serialize network log: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("serialize network log: {e}")))?;
     std::fs::write(path, json)?;
     Ok(())
 }

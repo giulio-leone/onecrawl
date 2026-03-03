@@ -78,13 +78,13 @@ return JSON.stringify({
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("take_snapshot failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("take_snapshot failed: {e}")))?;
 
     let json_str: String =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!("")))
             .unwrap_or_default();
 
-    serde_json::from_str(&json_str).map_err(|e| Error::Browser(format!("parse snapshot: {e}")))
+    serde_json::from_str(&json_str).map_err(|e| Error::Cdp(format!("parse snapshot: {e}")))
 }
 
 /// Compute Jaccard word similarity between two text strings.
@@ -166,17 +166,17 @@ pub fn compare_snapshots(before: &DomSnapshot, after: &DomSnapshot) -> SnapshotD
 /// Save a snapshot to a JSON file.
 pub fn save_snapshot(snapshot: &DomSnapshot, path: &Path) -> Result<()> {
     let json = serde_json::to_string_pretty(snapshot)
-        .map_err(|e| Error::Browser(format!("serialize snapshot: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("serialize snapshot: {e}")))?;
     std::fs::write(path, json)
-        .map_err(|e| Error::Browser(format!("write snapshot to {}: {e}", path.display())))
+        .map_err(|e| Error::Cdp(format!("write snapshot to {}: {e}", path.display())))
 }
 
 /// Load a snapshot from a JSON file.
 pub fn load_snapshot(path: &Path) -> Result<DomSnapshot> {
     let data = std::fs::read_to_string(path)
-        .map_err(|e| Error::Browser(format!("read snapshot from {}: {e}", path.display())))?;
+        .map_err(|e| Error::Cdp(format!("read snapshot from {}: {e}", path.display())))?;
     serde_json::from_str(&data)
-        .map_err(|e| Error::Browser(format!("parse snapshot from {}: {e}", path.display())))
+        .map_err(|e| Error::Cdp(format!("parse snapshot from {}: {e}", path.display())))
 }
 
 /// Take snapshots at regular intervals and return the diffs.
@@ -200,7 +200,7 @@ pub async fn watch_for_changes(
         );
         page.evaluate(wait_js)
             .await
-            .map_err(|e| Error::Browser(format!("selector wait failed: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("selector wait failed: {e}")))?;
     }
 
     let mut prev = take_snapshot(page).await?;

@@ -127,7 +127,7 @@ pub async fn start_page_watcher(page: &Page) -> Result<()> {
 
     page.evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("start_page_watcher failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("start_page_watcher failed: {e}")))?;
 
     Ok(())
 }
@@ -145,7 +145,7 @@ pub async fn drain_page_changes(page: &Page) -> Result<Vec<PageChange>> {
             "#,
         )
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("drain_page_changes failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("drain_page_changes failed: {e}")))?;
 
     let changes: Vec<PageChange> = result.into_value().unwrap_or_default();
     Ok(changes)
@@ -173,7 +173,7 @@ pub async fn stop_page_watcher(page: &Page) -> Result<()> {
         "#,
     )
     .await
-    .map_err(|e| onecrawl_core::Error::Browser(format!("stop_page_watcher failed: {e}")))?;
+    .map_err(|e| onecrawl_core::Error::Cdp(format!("stop_page_watcher failed: {e}")))?;
 
     Ok(())
 }
@@ -213,7 +213,7 @@ pub async fn get_page_state(page: &Page) -> Result<serde_json::Value> {
             "#,
         )
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("get_page_state failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("get_page_state failed: {e}")))?;
 
     let state: serde_json::Value = result.into_value().unwrap_or_default();
     Ok(state)

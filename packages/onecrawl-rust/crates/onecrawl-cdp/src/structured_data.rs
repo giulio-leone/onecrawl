@@ -124,9 +124,9 @@ return JSON.stringify(results);
     let raw: String = page
         .evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?
+        .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?
         .into_value()
-        .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?;
 
     let items: Vec<JsonLdData> = serde_json::from_str(&raw).unwrap_or_default();
     Ok(items)
@@ -147,9 +147,9 @@ return JSON.stringify(tags);
     let raw: String = page
         .evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?
+        .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?
         .into_value()
-        .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?;
 
     let tags: HashMap<String, String> = serde_json::from_str(&raw).unwrap_or_default();
 
@@ -194,9 +194,9 @@ return JSON.stringify(tags);
     let raw: String = page
         .evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?
+        .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?
         .into_value()
-        .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?;
 
     let tags: HashMap<String, String> = serde_json::from_str(&raw).unwrap_or_default();
 
@@ -243,9 +243,9 @@ return JSON.stringify({
     let raw: String = page
         .evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?
+        .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?
         .into_value()
-        .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?;
 
     let m: HashMap<String, String> = serde_json::from_str(&raw).unwrap_or_default();
 

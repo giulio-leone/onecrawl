@@ -74,7 +74,7 @@ pub async fn extract_links(page: &Page, base_url: &str) -> Result<Vec<LinkEdge>>
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("extract_links failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("extract_links failed: {e}")))?;
 
     #[derive(Deserialize)]
     struct RawLink {

@@ -21,7 +21,7 @@ pub async fn press_key(page: &Page, key: &str) -> Result<()> {
     );
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("press_key failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("press_key failed: {e}")))?;
     Ok(())
 }
 
@@ -30,7 +30,7 @@ pub async fn press_key(page: &Page, key: &str) -> Result<()> {
 pub async fn keyboard_shortcut(page: &Page, shortcut: &str) -> Result<()> {
     let parts: Vec<&str> = shortcut.split('+').collect();
     if parts.is_empty() {
-        return Err(Error::Browser("empty shortcut".into()));
+        return Err(Error::Cdp("empty shortcut".into()));
     }
 
     let key = parts.last().unwrap();
@@ -67,7 +67,7 @@ pub async fn keyboard_shortcut(page: &Page, shortcut: &str) -> Result<()> {
     );
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("keyboard_shortcut failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("keyboard_shortcut failed: {e}")))?;
     Ok(())
 }
 
@@ -86,7 +86,7 @@ pub async fn key_down(page: &Page, key: &str) -> Result<()> {
     );
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("key_down failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("key_down failed: {e}")))?;
     Ok(())
 }
 
@@ -105,7 +105,7 @@ pub async fn key_up(page: &Page, key: &str) -> Result<()> {
     );
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("key_up failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("key_up failed: {e}")))?;
     Ok(())
 }
 
@@ -129,6 +129,6 @@ pub async fn fill(page: &Page, selector: &str, value: &str) -> Result<()> {
     );
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("fill failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("fill failed: {e}")))?;
     Ok(())
 }

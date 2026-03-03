@@ -16,7 +16,7 @@ pub async fn list_tabs(browser: &CrBrowser) -> Result<Vec<TabInfo>> {
     let pages = browser
         .pages()
         .await
-        .map_err(|e| Error::Browser(format!("list_tabs failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("list_tabs failed: {e}")))?;
     let mut tabs = Vec::new();
     for (i, page) in pages.iter().enumerate() {
         let url = page.url().await.ok().flatten().unwrap_or_default();
@@ -42,7 +42,7 @@ pub async fn new_tab(browser: &CrBrowser, url: &str) -> Result<Page> {
     browser
         .new_page(url)
         .await
-        .map_err(|e| Error::Browser(format!("new_tab failed: {e}")))
+        .map_err(|e| Error::Cdp(format!("new_tab failed: {e}")))
 }
 
 /// Close a tab by index (0-based). The page is consumed.
@@ -50,9 +50,9 @@ pub async fn close_tab(browser: &CrBrowser, index: usize) -> Result<()> {
     let pages = browser
         .pages()
         .await
-        .map_err(|e| Error::Browser(format!("close_tab list failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("close_tab list failed: {e}")))?;
     if index >= pages.len() {
-        return Err(Error::Browser(format!(
+        return Err(Error::Cdp(format!(
             "Tab index {} out of bounds ({})",
             index,
             pages.len()
@@ -62,7 +62,7 @@ pub async fn close_tab(browser: &CrBrowser, index: usize) -> Result<()> {
     let page = pages.into_iter().nth(index).unwrap();
     page.close()
         .await
-        .map_err(|e| Error::Browser(format!("close_tab failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("close_tab failed: {e}")))?;
     Ok(())
 }
 
@@ -71,9 +71,9 @@ pub async fn get_tab(browser: &CrBrowser, index: usize) -> Result<Page> {
     let pages = browser
         .pages()
         .await
-        .map_err(|e| Error::Browser(format!("get_tab list failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("get_tab list failed: {e}")))?;
     if index >= pages.len() {
-        return Err(Error::Browser(format!(
+        return Err(Error::Cdp(format!(
             "Tab index {} out of bounds ({})",
             index,
             pages.len()
@@ -87,6 +87,6 @@ pub async fn tab_count(browser: &CrBrowser) -> Result<usize> {
     let pages = browser
         .pages()
         .await
-        .map_err(|e| Error::Browser(format!("tab_count failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("tab_count failed: {e}")))?;
     Ok(pages.len())
 }

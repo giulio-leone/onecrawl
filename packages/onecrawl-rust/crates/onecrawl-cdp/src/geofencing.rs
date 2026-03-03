@@ -159,7 +159,7 @@ pub async fn apply_geo_profile(page: &Page, profile: &GeoProfile) -> Result<()> 
     );
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("apply_geo_profile failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("apply_geo_profile failed: {e}")))?;
     Ok(())
 }
 
@@ -196,6 +196,6 @@ pub async fn get_current_geo(page: &Page) -> Result<serde_json::Value> {
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("get_current_geo failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("get_current_geo failed: {e}")))?;
     Ok(val.into_value().unwrap_or(serde_json::json!({})))
 }

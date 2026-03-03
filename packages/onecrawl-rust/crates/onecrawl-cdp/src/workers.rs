@@ -33,7 +33,7 @@ pub async fn get_service_workers(page: &Page) -> Result<Vec<ServiceWorkerInfo>> 
             "#,
         )
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("get_service_workers failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("get_service_workers failed: {e}")))?;
 
     let workers: Vec<ServiceWorkerInfo> = result.into_value().unwrap_or_default();
 
@@ -60,7 +60,7 @@ pub async fn unregister_service_workers(page: &Page) -> Result<usize> {
         )
         .await
         .map_err(|e| {
-            onecrawl_core::Error::Browser(format!("unregister_service_workers failed: {e}"))
+            onecrawl_core::Error::Cdp(format!("unregister_service_workers failed: {e}"))
         })?;
 
     let count: usize = result.into_value().unwrap_or(0);
@@ -91,7 +91,7 @@ pub async fn get_worker_info(page: &Page) -> Result<serde_json::Value> {
             "#,
         )
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("get_worker_info failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("get_worker_info failed: {e}")))?;
 
     let val: serde_json::Value = result.into_value().unwrap_or(serde_json::Value::Null);
     Ok(val)

@@ -234,7 +234,7 @@ pub fn cleanup_idle(pool: &mut SessionPool) -> usize {
 /// Save the pool to a JSON file.
 pub fn save_pool(pool: &SessionPool, path: &Path) -> Result<()> {
     let json = serde_json::to_string_pretty(pool)
-        .map_err(|e| Error::Browser(format!("serialize pool failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("serialize pool failed: {e}")))?;
     std::fs::write(path, json)?;
     Ok(())
 }
@@ -243,7 +243,7 @@ pub fn save_pool(pool: &SessionPool, path: &Path) -> Result<()> {
 pub fn load_pool(path: &Path) -> Result<SessionPool> {
     let data = std::fs::read_to_string(path)?;
     let pool: SessionPool = serde_json::from_str(&data)
-        .map_err(|e| Error::Browser(format!("parse pool failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("parse pool failed: {e}")))?;
     Ok(pool)
 }
 

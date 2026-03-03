@@ -81,12 +81,12 @@ pub async fn fingerprint_element(page: &Page, selector: &str) -> Result<ElementF
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(e.to_string()))?;
+        .map_err(|e| Error::Cdp(e.to_string()))?;
     let v = val.into_value().unwrap_or(serde_json::json!(null));
     if v.is_null() {
         return Err(Error::NotFound(format!("Element not found: {selector}")));
     }
-    serde_json::from_value(v).map_err(|e| Error::Browser(e.to_string()))
+    serde_json::from_value(v).map_err(|e| Error::Cdp(e.to_string()))
 }
 
 /// Relocate an element after the page structure has changed.
@@ -189,7 +189,7 @@ pub async fn relocate_element(
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(e.to_string()))?;
+        .map_err(|e| Error::Cdp(e.to_string()))?;
     let matches: Vec<ElementMatch> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))?;
     Ok(matches)

@@ -71,7 +71,7 @@ pub async fn start_dom_observer(page: &Page, target_selector: Option<&str>) -> R
 
     page.evaluate(js.as_str())
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("start_dom_observer failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("start_dom_observer failed: {e}")))?;
 
     Ok(())
 }
@@ -89,7 +89,7 @@ pub async fn drain_dom_mutations(page: &Page) -> Result<Vec<DomMutation>> {
             "#,
         )
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("drain_dom_mutations failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("drain_dom_mutations failed: {e}")))?;
 
     let mutations: Vec<DomMutation> = result.into_value().unwrap_or_default();
 
@@ -102,7 +102,7 @@ pub async fn stop_dom_observer(page: &Page) -> Result<()> {
         "if (window.__onecrawl_dom_observer) { window.__onecrawl_dom_observer.disconnect(); window.__onecrawl_dom_observer = null; }",
     )
     .await
-    .map_err(|e| onecrawl_core::Error::Browser(format!("stop_dom_observer failed: {e}")))?;
+    .map_err(|e| onecrawl_core::Error::Cdp(format!("stop_dom_observer failed: {e}")))?;
 
     Ok(())
 }
@@ -120,7 +120,7 @@ pub async fn get_dom_snapshot(page: &Page, selector: Option<&str>) -> Result<Str
     let result = page
         .evaluate(js.as_str())
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("get_dom_snapshot failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("get_dom_snapshot failed: {e}")))?;
 
     let html: String = result.into_value().unwrap_or_default();
     Ok(html)

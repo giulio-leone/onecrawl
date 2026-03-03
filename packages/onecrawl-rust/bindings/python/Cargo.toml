@@ -17,6 +17,7 @@ onecrawl-crypto = { path = "../../crates/onecrawl-crypto" }
 onecrawl-parser = { path = "../../crates/onecrawl-parser" }
 onecrawl-storage = { path = "../../crates/onecrawl-storage" }
 onecrawl-cdp = { path = "../../crates/onecrawl-cdp" }
+onecrawl-server = { path = "../../crates/onecrawl-server" }
 base64 = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

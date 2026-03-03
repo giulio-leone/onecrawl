@@ -19,7 +19,7 @@ pub async fn get_local_storage(page: &Page) -> Result<serde_json::Value> {
             "#,
         )
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("get_local_storage failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("get_local_storage failed: {e}")))?;
 
     let val: serde_json::Value = result
         .into_value()
@@ -36,7 +36,7 @@ pub async fn set_local_storage(page: &Page, key: &str, value: &str) -> Result<()
     );
     page.evaluate(js.as_str())
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("set_local_storage failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("set_local_storage failed: {e}")))?;
     Ok(())
 }
 
@@ -44,7 +44,7 @@ pub async fn set_local_storage(page: &Page, key: &str, value: &str) -> Result<()
 pub async fn clear_local_storage(page: &Page) -> Result<()> {
     page.evaluate("localStorage.clear()")
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("clear_local_storage failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("clear_local_storage failed: {e}")))?;
     Ok(())
 }
 
@@ -64,7 +64,7 @@ pub async fn get_session_storage(page: &Page) -> Result<serde_json::Value> {
             "#,
         )
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("get_session_storage failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("get_session_storage failed: {e}")))?;
 
     let val: serde_json::Value = result
         .into_value()
@@ -81,7 +81,7 @@ pub async fn set_session_storage(page: &Page, key: &str, value: &str) -> Result<
     );
     page.evaluate(js.as_str())
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("set_session_storage failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("set_session_storage failed: {e}")))?;
     Ok(())
 }
 
@@ -89,7 +89,7 @@ pub async fn set_session_storage(page: &Page, key: &str, value: &str) -> Result<
 pub async fn clear_session_storage(page: &Page) -> Result<()> {
     page.evaluate("sessionStorage.clear()")
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("clear_session_storage failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("clear_session_storage failed: {e}")))?;
     Ok(())
 }
 
@@ -111,7 +111,7 @@ pub async fn get_indexeddb_databases(page: &Page) -> Result<Vec<String>> {
         )
         .await
         .map_err(|e| {
-            onecrawl_core::Error::Browser(format!("get_indexeddb_databases failed: {e}"))
+            onecrawl_core::Error::Cdp(format!("get_indexeddb_databases failed: {e}"))
         })?;
 
     let names: Vec<String> = result.into_value().unwrap_or_default();
@@ -136,6 +136,6 @@ pub async fn clear_site_data(page: &Page) -> Result<()> {
         "#,
     )
     .await
-    .map_err(|e| onecrawl_core::Error::Browser(format!("clear_site_data failed: {e}")))?;
+    .map_err(|e| onecrawl_core::Error::Cdp(format!("clear_site_data failed: {e}")))?;
     Ok(())
 }

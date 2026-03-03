@@ -104,7 +104,7 @@ pub async fn start_har_recording(page: &Page, recorder: &HarRecorder) -> Result<
 
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("start_har_recording failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("start_har_recording failed: {e}")))?;
 
     // Also capture existing resource entries
     let existing_js = r#"
@@ -131,7 +131,7 @@ pub async fn start_har_recording(page: &Page, recorder: &HarRecorder) -> Result<
     let result = page
         .evaluate(existing_js)
         .await
-        .map_err(|e| Error::Browser(format!("get existing entries: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("get existing entries: {e}")))?;
 
     if let Ok(entries) = result.into_value::<Vec<serde_json::Value>>() {
         let mut har_entries = recorder.entries.lock().await;
@@ -157,7 +157,7 @@ pub async fn drain_har_entries(page: &Page, recorder: &HarRecorder) -> Result<us
             "#,
         )
         .await
-        .map_err(|e| Error::Browser(format!("drain_har failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("drain_har failed: {e}")))?;
 
     let entries: Vec<serde_json::Value> = match result.into_value() {
         Ok(v) => v,

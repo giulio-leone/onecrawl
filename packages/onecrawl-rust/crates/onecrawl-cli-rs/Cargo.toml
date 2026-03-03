@@ -17,6 +17,7 @@ onecrawl-crypto = { path = "../onecrawl-crypto" }
 onecrawl-parser = { path = "../onecrawl-parser" }
 onecrawl-storage = { path = "../onecrawl-storage" }
 onecrawl-cdp = { path = "../onecrawl-cdp" }
+onecrawl-server = { path = "../onecrawl-server" }
 clap = { workspace = true }
 colored = { workspace = true }
 tokio = { workspace = true }

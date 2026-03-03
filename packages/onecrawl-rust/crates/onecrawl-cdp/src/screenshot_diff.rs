@@ -50,9 +50,9 @@ pub fn compare_screenshots(baseline: &[u8], current: &[u8]) -> Result<DiffResult
 /// Compare two screenshot files on disk.
 pub fn compare_screenshot_files(baseline_path: &Path, current_path: &Path) -> Result<DiffResult> {
     let baseline = std::fs::read(baseline_path)
-        .map_err(|e| Error::Browser(format!("read baseline failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("read baseline failed: {e}")))?;
     let current = std::fs::read(current_path)
-        .map_err(|e| Error::Browser(format!("read current failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("read current failed: {e}")))?;
     compare_screenshots(&baseline, &current)
 }
 
@@ -62,11 +62,11 @@ pub async fn visual_regression(page: &Page, baseline_path: &Path) -> Result<Diff
     let current = page
         .screenshot(chromiumoxide::page::ScreenshotParams::builder().build())
         .await
-        .map_err(|e| Error::Browser(format!("visual_regression screenshot failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("visual_regression screenshot failed: {e}")))?;
 
     if !baseline_path.exists() {
         std::fs::write(baseline_path, &current)
-            .map_err(|e| Error::Browser(format!("save baseline failed: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("save baseline failed: {e}")))?;
         return Ok(DiffResult {
             total_pixels: current.len() as u64 / 4,
             different_pixels: 0,
@@ -78,6 +78,6 @@ pub async fn visual_regression(page: &Page, baseline_path: &Path) -> Result<Diff
     }
 
     let baseline = std::fs::read(baseline_path)
-        .map_err(|e| Error::Browser(format!("read baseline failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("read baseline failed: {e}")))?;
     compare_screenshots(&baseline, &current)
 }

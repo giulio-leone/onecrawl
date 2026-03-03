@@ -196,7 +196,7 @@ pub async fn extract_items(page: &Page, schema: &ExtractionSchema) -> Result<Ext
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(e.to_string()))?;
+        .map_err(|e| Error::Cdp(e.to_string()))?;
     let raw = val.into_value().unwrap_or(serde_json::json!({}));
 
     let items: Vec<ExtractedItem> =
@@ -234,7 +234,7 @@ pub async fn extract_with_pagination(
         let val = page
             .evaluate(js)
             .await
-            .map_err(|e| Error::Browser(e.to_string()))?;
+            .map_err(|e| Error::Cdp(e.to_string()))?;
         let raw = val.into_value().unwrap_or(serde_json::json!({}));
 
         let mut items: Vec<ExtractedItem> =
@@ -266,7 +266,7 @@ pub async fn extract_with_pagination(
             let click_val = page
                 .evaluate(click_js)
                 .await
-                .map_err(|e| Error::Browser(e.to_string()))?;
+                .map_err(|e| Error::Cdp(e.to_string()))?;
             let clicked: bool = click_val.into_value().unwrap_or(false);
             if !clicked {
                 break;
@@ -295,7 +295,7 @@ pub async fn extract_single(
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(e.to_string()))?;
+        .map_err(|e| Error::Cdp(e.to_string()))?;
     let raw = val.into_value().unwrap_or(serde_json::json!({}));
     let map: HashMap<String, String> = serde_json::from_value(raw).unwrap_or_default();
     Ok(map)
@@ -363,7 +363,7 @@ pub fn export_json(items: &[ExtractedItem], path: &std::path::Path) -> Result<us
 pub fn parse_field_spec(spec: &str) -> Result<ExtractionRule> {
     let parts: Vec<&str> = spec.splitn(4, ':').collect();
     if parts.len() < 4 {
-        return Err(Error::InvalidInput(format!(
+        return Err(Error::Config(format!(
             "Invalid field spec: '{spec}'. Expected format: name:css:selector:extract"
         )));
     }

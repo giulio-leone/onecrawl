@@ -30,7 +30,7 @@ pub async fn set_device_orientation(page: &Page, reading: SensorReading) -> Resu
     );
     page.evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("set_device_orientation: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("set_device_orientation: {e}")))?;
     Ok(())
 }
 
@@ -51,7 +51,7 @@ pub async fn override_permission(page: &Page, permission: &str, state: &str) -> 
     );
     page.evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("override_permission: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("override_permission: {e}")))?;
     Ok(())
 }
 
@@ -74,7 +74,7 @@ pub async fn set_battery_status(page: &Page, level: f64, charging: bool) -> Resu
     );
     page.evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("set_battery_status: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("set_battery_status: {e}")))?;
     Ok(())
 }
 
@@ -103,7 +103,7 @@ pub async fn set_connection_info(
     );
     page.evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("set_connection_info: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("set_connection_info: {e}")))?;
     Ok(())
 }
 
@@ -115,7 +115,7 @@ pub async fn set_hardware_concurrency(page: &Page, cores: u32) -> Result<()> {
     );
     page.evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("set_hardware_concurrency: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("set_hardware_concurrency: {e}")))?;
     Ok(())
 }
 
@@ -127,7 +127,7 @@ pub async fn set_device_memory(page: &Page, memory_gb: f64) -> Result<()> {
     );
     page.evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("set_device_memory: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("set_device_memory: {e}")))?;
     Ok(())
 }
 
@@ -149,7 +149,7 @@ pub async fn get_navigator_info(page: &Page) -> Result<serde_json::Value> {
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("get_navigator_info: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("get_navigator_info: {e}")))?;
     let raw = val
         .into_value::<String>()
         .unwrap_or_else(|_| "{}".to_string());

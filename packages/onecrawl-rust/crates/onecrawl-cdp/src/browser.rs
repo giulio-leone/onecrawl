@@ -14,7 +14,7 @@ impl BrowserSession {
         Self::launch_with_config(
             BrowserConfig::builder()
                 .build()
-                .map_err(|e| Error::Browser(format!("config error: {e}")))?,
+                .map_err(|e| Error::Cdp(format!("config error: {e}")))?,
             false,
         )
         .await
@@ -26,7 +26,7 @@ impl BrowserSession {
             BrowserConfig::builder()
                 .with_head()
                 .build()
-                .map_err(|e| Error::Browser(format!("config error: {e}")))?,
+                .map_err(|e| Error::Cdp(format!("config error: {e}")))?,
             true,
         )
         .await
@@ -36,7 +36,7 @@ impl BrowserSession {
     async fn launch_with_config(config: BrowserConfig, _headed: bool) -> Result<Self> {
         let (browser, mut handler) = Browser::launch(config)
             .await
-            .map_err(|e| Error::Browser(format!("launch failed: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("launch failed: {e}")))?;
 
         let handler_task = tokio::spawn(async move {
             while let Some(h) = handler.next().await {
@@ -56,7 +56,7 @@ impl BrowserSession {
     pub async fn connect(ws_url: &str) -> Result<Self> {
         let (browser, mut handler) = Browser::connect(ws_url)
             .await
-            .map_err(|e| Error::Browser(format!("connect failed: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("connect failed: {e}")))?;
 
         let handler_task = tokio::spawn(async move {
             while let Some(h) = handler.next().await {
@@ -87,7 +87,7 @@ impl BrowserSession {
         self.browser
             .new_page(url)
             .await
-            .map_err(|e| Error::Browser(format!("new page failed: {e}")))
+            .map_err(|e| Error::Cdp(format!("new page failed: {e}")))
     }
 
     /// Close the browser.
@@ -95,7 +95,7 @@ impl BrowserSession {
         self.browser
             .close()
             .await
-            .map_err(|e| Error::Browser(format!("close failed: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("close failed: {e}")))?;
         Ok(())
     }
 }

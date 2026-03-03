@@ -153,11 +153,11 @@ pub async fn detect_captcha(page: &Page) -> Result<CaptchaDetection> {
     let raw: String = page
         .evaluate(DETECT_CAPTCHA_JS)
         .await
-        .map_err(|e| Error::Browser(format!("captcha detect eval failed: {e}")))?
+        .map_err(|e| Error::Cdp(format!("captcha detect eval failed: {e}")))?
         .into_value()
-        .map_err(|e| Error::Browser(format!("captcha detect parse failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("captcha detect parse failed: {e}")))?;
 
-    serde_json::from_str(&raw).map_err(|e| Error::Browser(format!("captcha json parse: {e}")))
+    serde_json::from_str(&raw).map_err(|e| Error::Cdp(format!("captcha json parse: {e}")))
 }
 
 /// Wait up to `timeout_ms` for a CAPTCHA to appear, polling every 500 ms.
@@ -180,7 +180,7 @@ pub async fn screenshot_captcha(page: &Page, detection: &CaptchaDetection) -> Re
     let selector = detection
         .selector
         .as_deref()
-        .ok_or_else(|| Error::Browser("no captcha selector available".into()))?;
+        .ok_or_else(|| Error::Cdp("no captcha selector available".into()))?;
 
     let js = format!(
         r#"
@@ -196,18 +196,18 @@ pub async fn screenshot_captcha(page: &Page, detection: &CaptchaDetection) -> Re
         }})()
         "#,
         sel = serde_json::to_string(selector)
-            .map_err(|e| Error::Browser(format!("selector serialize: {e}")))?
+            .map_err(|e| Error::Cdp(format!("selector serialize: {e}")))?
     );
 
     let raw: String = page
         .evaluate(js.as_str())
         .await
-        .map_err(|e| Error::Browser(format!("screenshot eval failed: {e}")))?
+        .map_err(|e| Error::Cdp(format!("screenshot eval failed: {e}")))?
         .into_value()
-        .map_err(|e| Error::Browser(format!("screenshot parse failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("screenshot parse failed: {e}")))?;
 
     if raw.is_empty() {
-        return Err(Error::Browser(
+        return Err(Error::Cdp(
             "captcha element not found or zero-size".into(),
         ));
     }
@@ -222,7 +222,7 @@ pub async fn inject_solution(
     solution: &str,
 ) -> Result<bool> {
     let escaped_solution = serde_json::to_string(solution)
-        .map_err(|e| Error::Browser(format!("solution serialize: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("solution serialize: {e}")))?;
 
     let js = match detection.captcha_type.as_str() {
         "recaptcha_v2" | "recaptcha_v3" => {
@@ -295,7 +295,7 @@ pub async fn inject_solution(
                 .as_deref()
                 .unwrap_or("input[name*=\"captcha\"]");
             let escaped_sel = serde_json::to_string(sel)
-                .map_err(|e| Error::Browser(format!("selector serialize: {e}")))?;
+                .map_err(|e| Error::Cdp(format!("selector serialize: {e}")))?;
             format!(
                 r#"
                 (() => {{
@@ -309,7 +309,7 @@ pub async fn inject_solution(
             )
         }
         other => {
-            return Err(Error::Browser(format!(
+            return Err(Error::Cdp(format!(
                 "injection not supported for captcha type: {other}"
             )));
         }
@@ -318,9 +318,9 @@ pub async fn inject_solution(
     let raw: String = page
         .evaluate(js.as_str())
         .await
-        .map_err(|e| Error::Browser(format!("inject eval: {e}")))?
+        .map_err(|e| Error::Cdp(format!("inject eval: {e}")))?
         .into_value()
-        .map_err(|e| Error::Browser(format!("inject parse: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("inject parse: {e}")))?;
     Ok(raw == "true")
 }
 

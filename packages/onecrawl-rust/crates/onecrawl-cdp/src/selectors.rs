@@ -43,7 +43,7 @@ pub async fn css_select(page: &Page, selector: &str) -> Result<SelectorResult> {
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(e.to_string()))?;
+        .map_err(|e| Error::Cdp(e.to_string()))?;
     let mut elements: Vec<ElementData> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))?;
 
@@ -117,7 +117,7 @@ pub async fn xpath_select(page: &Page, expression: &str) -> Result<SelectorResul
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(e.to_string()))?;
+        .map_err(|e| Error::Cdp(e.to_string()))?;
     let elements: Vec<ElementData> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))?;
     let count = elements.len();
@@ -159,7 +159,7 @@ pub async fn find_by_text(page: &Page, text: &str, tag: Option<&str>) -> Result<
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(e.to_string()))?;
+        .map_err(|e| Error::Cdp(e.to_string()))?;
     let elements: Vec<ElementData> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))?;
     let count = elements.len();
@@ -206,7 +206,7 @@ pub async fn find_by_regex(
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(e.to_string()))?;
+        .map_err(|e| Error::Cdp(e.to_string()))?;
     let elements: Vec<ElementData> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))?;
     let count = elements.len();
@@ -264,7 +264,7 @@ pub async fn auto_selector(page: &Page, target_selector: &str) -> Result<String>
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(e.to_string()))?;
+        .map_err(|e| Error::Cdp(e.to_string()))?;
     let s = val.into_value().unwrap_or(serde_json::json!(""));
     Ok(s.as_str().map(String::from).unwrap_or_default())
 }

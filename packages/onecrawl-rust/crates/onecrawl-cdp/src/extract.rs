@@ -156,7 +156,7 @@ pub async fn extract(
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(e.to_string()))?;
+        .map_err(|e| Error::Cdp(e.to_string()))?;
     let raw = val.into_value().unwrap_or(serde_json::json!({}));
 
     let format_str = match format {
@@ -246,7 +246,7 @@ pub async fn get_page_metadata(page: &Page) -> Result<serde_json::Value> {
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(e.to_string()))?;
+        .map_err(|e| Error::Cdp(e.to_string()))?;
     Ok(val.into_value().unwrap_or(serde_json::json!({})))
 }
 
@@ -257,7 +257,7 @@ pub fn parse_extract_format(s: &str) -> Result<ExtractFormat> {
         "html" | "htm" => Ok(ExtractFormat::Html),
         "markdown" | "md" => Ok(ExtractFormat::Markdown),
         "json" => Ok(ExtractFormat::Json),
-        _ => Err(Error::InvalidInput(format!(
+        _ => Err(Error::Config(format!(
             "Unknown format: {s}. Use: text, html, markdown, json"
         ))),
     }

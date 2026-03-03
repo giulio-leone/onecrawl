@@ -372,7 +372,7 @@ pub fn export_processed(result: &PipelineResult, path: &Path, format: &str) -> R
             Ok(result.items.len())
         }
         "csv" => export_csv(&result.items, path),
-        _ => Err(Error::InvalidInput(format!(
+        _ => Err(Error::Config(format!(
             "unsupported export format '{format}'. Use: json, jsonl, csv"
         ))),
     }

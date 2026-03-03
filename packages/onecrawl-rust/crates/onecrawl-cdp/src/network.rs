@@ -65,7 +65,7 @@ pub struct InterceptedResponse {
 pub async fn enable_network(page: &Page) -> Result<()> {
     page.execute(chromiumoxide::cdp::browser_protocol::network::EnableParams::default())
         .await
-        .map_err(|e| Error::Browser(format!("Network.enable failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("Network.enable failed: {e}")))?;
     Ok(())
 }
 
@@ -76,7 +76,7 @@ pub async fn enable_network(page: &Page) -> Result<()> {
 pub async fn enable_request_interception(page: &Page) -> Result<()> {
     page.execute(chromiumoxide::cdp::browser_protocol::fetch::EnableParams::default())
         .await
-        .map_err(|e| Error::Browser(format!("Fetch.enable failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("Fetch.enable failed: {e}")))?;
     Ok(())
 }
 
@@ -84,7 +84,7 @@ pub async fn enable_request_interception(page: &Page) -> Result<()> {
 pub async fn disable_request_interception(page: &Page) -> Result<()> {
     page.execute(chromiumoxide::cdp::browser_protocol::fetch::DisableParams::default())
         .await
-        .map_err(|e| Error::Browser(format!("Fetch.disable failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("Fetch.disable failed: {e}")))?;
     Ok(())
 }
 
@@ -117,7 +117,7 @@ pub async fn block_resources(page: &Page, resource_types: &[ResourceType]) -> Re
     );
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("block_resources failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("block_resources failed: {e}")))?;
 
     // Also set up Fetch-domain interception with patterns
     let patterns: Vec<chromiumoxide::cdp::browser_protocol::fetch::RequestPattern> = resource_types
@@ -169,7 +169,7 @@ pub async fn block_resources(page: &Page, resource_types: &[ResourceType]) -> Re
     };
     page.execute(params)
         .await
-        .map_err(|e| Error::Browser(format!("Fetch.enable with patterns failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("Fetch.enable with patterns failed: {e}")))?;
 
     Ok(())
 }
@@ -196,7 +196,7 @@ pub async fn observe_requests(page: &Page) -> Result<()> {
     "#;
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("observe_requests failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("observe_requests failed: {e}")))?;
     Ok(())
 }
 
@@ -205,9 +205,9 @@ pub async fn get_intercepted_requests(page: &Page) -> Result<serde_json::Value> 
     let val = page
         .evaluate("JSON.stringify(window.__onecrawl_requests || [])")
         .await
-        .map_err(|e| Error::Browser(format!("get_intercepted_requests failed: {e}")))?
+        .map_err(|e| Error::Cdp(format!("get_intercepted_requests failed: {e}")))?
         .into_value::<serde_json::Value>()
-        .map_err(|e| Error::Browser(format!("parse requests failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("parse requests failed: {e}")))?;
     Ok(val)
 }
 
@@ -233,7 +233,7 @@ pub async fn observe_responses(page: &Page) -> Result<()> {
     "#;
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("observe_responses failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("observe_responses failed: {e}")))?;
     Ok(())
 }
 
@@ -242,9 +242,9 @@ pub async fn get_intercepted_responses(page: &Page) -> Result<serde_json::Value>
     let val = page
         .evaluate("JSON.stringify(window.__onecrawl_responses || [])")
         .await
-        .map_err(|e| Error::Browser(format!("get_intercepted_responses failed: {e}")))?
+        .map_err(|e| Error::Cdp(format!("get_intercepted_responses failed: {e}")))?
         .into_value::<serde_json::Value>()
-        .map_err(|e| Error::Browser(format!("parse responses failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("parse responses failed: {e}")))?;
     Ok(val)
 }
 

@@ -110,11 +110,11 @@ pub async fn detect_forms(page: &Page) -> Result<Vec<FormInfo>> {
     let raw: String = page
         .evaluate(DETECT_FORMS_JS)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?
+        .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?
         .into_value()
-        .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?;
     let forms: Vec<FormInfo> =
-        serde_json::from_str(&raw).map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?;
+        serde_json::from_str(&raw).map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?;
     Ok(forms)
 }
 
@@ -129,7 +129,7 @@ pub async fn fill_form(
         .iter()
         .find(|f| f.selector == form_selector)
         .ok_or_else(|| {
-            onecrawl_core::Error::Browser(format!("form not found: {form_selector}"))
+            onecrawl_core::Error::Cdp(format!("form not found: {form_selector}"))
         })?;
 
     let mut filled: usize = 0;
@@ -171,7 +171,7 @@ pub async fn auto_fill(
         .iter()
         .find(|f| f.selector == form_selector)
         .ok_or_else(|| {
-            onecrawl_core::Error::Browser(format!("form not found: {form_selector}"))
+            onecrawl_core::Error::Cdp(format!("form not found: {form_selector}"))
         })?;
 
     let mut filled: usize = 0;
@@ -216,11 +216,11 @@ pub async fn submit_form(page: &Page, form_selector: &str) -> Result<()> {
     let res: String = page
         .evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?
+        .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?
         .into_value()
-        .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?;
     if res == "not_found" {
-        return Err(onecrawl_core::Error::Browser(format!(
+        return Err(onecrawl_core::Error::Cdp(format!(
             "form not found: {form_selector}"
         )));
     }
@@ -287,11 +287,11 @@ async fn set_field_value(page: &Page, field: &FormField, value: &str) -> Result<
     let ok: bool = page
         .evaluate(js)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?
+        .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?
         .into_value()
-        .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?;
     if !ok {
-        return Err(onecrawl_core::Error::Browser(format!(
+        return Err(onecrawl_core::Error::Cdp(format!(
             "element not found: {sel}"
         )));
     }

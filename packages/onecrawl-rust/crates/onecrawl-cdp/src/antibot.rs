@@ -254,7 +254,7 @@ pub async fn bot_detection_test(page: &Page) -> Result<serde_json::Value> {
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(e.to_string()))?;
+        .map_err(|e| Error::Cdp(e.to_string()))?;
     let mut result = val.into_value().unwrap_or(serde_json::json!({}));
 
     // Calculate bot detection score (0 = definitely bot, 100 = appears human)

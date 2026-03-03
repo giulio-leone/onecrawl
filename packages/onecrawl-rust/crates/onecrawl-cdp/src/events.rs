@@ -88,13 +88,13 @@ pub async fn observe_console(page: &Page, tx: broadcast::Sender<BrowserEvent>) -
     "#;
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("observe_console failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("observe_console failed: {e}")))?;
 
     // Start a polling task to drain console messages
     let page_clone_url = page
         .url()
         .await
-        .map_err(|e| Error::Browser(format!("get url for console: {e}")))?
+        .map_err(|e| Error::Cdp(format!("get url for console: {e}")))?
         .unwrap_or_default()
         .to_string();
 
@@ -124,7 +124,7 @@ pub async fn drain_console(page: &Page, tx: &broadcast::Sender<BrowserEvent>) ->
             "#,
         )
         .await
-        .map_err(|e| Error::Browser(format!("drain_console failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("drain_console failed: {e}")))?;
 
     // Try to parse as Value; if it fails, return 0 (no messages)
     let val: serde_json::Value = match result.into_value() {
@@ -180,7 +180,7 @@ pub async fn observe_errors(page: &Page, tx: broadcast::Sender<BrowserEvent>) ->
     "#;
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("observe_errors failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("observe_errors failed: {e}")))?;
 
     let _ = tx.send(BrowserEvent {
         event_type: EventType::PageError,
@@ -204,7 +204,7 @@ pub async fn drain_errors(page: &Page, tx: &broadcast::Sender<BrowserEvent>) -> 
             "#,
         )
         .await
-        .map_err(|e| Error::Browser(format!("drain_errors failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("drain_errors failed: {e}")))?;
 
     let val: serde_json::Value = match result.into_value() {
         Ok(v) => v,
@@ -242,7 +242,7 @@ pub fn emit_custom(
         timestamp: now_ms(),
         data,
     })
-    .map_err(|e| Error::Browser(format!("emit_custom failed: {e}")))?;
+    .map_err(|e| Error::Cdp(format!("emit_custom failed: {e}")))?;
     Ok(())
 }
 

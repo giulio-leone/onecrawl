@@ -39,7 +39,7 @@ pub async fn start_js_coverage(page: &Page) -> Result<()> {
 
     page.execute(EnableParams::default())
         .await
-        .map_err(|e| Error::Browser(format!("Profiler.enable failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("Profiler.enable failed: {e}")))?;
 
     let params: StartPreciseCoverageParams = StartPreciseCoverageParams::builder()
         .call_count(true)
@@ -48,7 +48,7 @@ pub async fn start_js_coverage(page: &Page) -> Result<()> {
 
     page.execute(params)
         .await
-        .map_err(|e| Error::Browser(format!("StartPreciseCoverage failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("StartPreciseCoverage failed: {e}")))?;
 
     Ok(())
 }
@@ -63,7 +63,7 @@ pub async fn stop_js_coverage(page: &Page) -> Result<CoverageReport> {
     let resp = page
         .execute(TakePreciseCoverageParams::default())
         .await
-        .map_err(|e| Error::Browser(format!("TakePreciseCoverage failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("TakePreciseCoverage failed: {e}")))?;
     let result: &TakePreciseCoverageReturns = &resp;
 
     let mut scripts = Vec::new();
@@ -138,10 +138,10 @@ pub async fn start_css_coverage(page: &Page) -> Result<()> {
 
     page.execute(DomEnableParams::default())
         .await
-        .map_err(|e| Error::Browser(format!("DOM.enable failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("DOM.enable failed: {e}")))?;
     page.execute(EnableParams::default())
         .await
-        .map_err(|e| Error::Browser(format!("CSS.enable failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("CSS.enable failed: {e}")))?;
 
     let js = r#"
         (() => {
@@ -173,7 +173,7 @@ pub async fn start_css_coverage(page: &Page) -> Result<()> {
     "#;
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("start_css_coverage JS failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("start_css_coverage JS failed: {e}")))?;
 
     Ok(())
 }
@@ -204,9 +204,9 @@ pub async fn get_css_coverage(page: &Page) -> Result<serde_json::Value> {
             "#,
         )
         .await
-        .map_err(|e| Error::Browser(format!("get_css_coverage failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("get_css_coverage failed: {e}")))?;
 
     result
         .into_value::<serde_json::Value>()
-        .map_err(|e| Error::Browser(format!("parse css coverage: {e}")))
+        .map_err(|e| Error::Cdp(format!("parse css coverage: {e}")))
 }

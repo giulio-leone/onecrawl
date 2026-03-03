@@ -53,7 +53,7 @@ impl Default for QueueConfig {
 /// Execute a single request with retry logic (via page's JS fetch).
 pub async fn execute_request(page: &Page, request: &QueuedRequest) -> Result<RequestResult> {
     let req_json = serde_json::to_string(request)
-        .map_err(|e| Error::Browser(format!("serialize request failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("serialize request failed: {e}")))?;
     let js = format!(
         r#"
         (async () => {{
@@ -120,10 +120,10 @@ pub async fn execute_request(page: &Page, request: &QueuedRequest) -> Result<Req
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("execute_request failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("execute_request failed: {e}")))?;
     let result: RequestResult =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!({})))
-            .map_err(|e| Error::Browser(format!("parse request result failed: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("parse request result failed: {e}")))?;
     Ok(result)
 }
 
@@ -134,7 +134,7 @@ pub async fn execute_batch(
     config: &QueueConfig,
 ) -> Result<Vec<RequestResult>> {
     let reqs_json = serde_json::to_string(requests)
-        .map_err(|e| Error::Browser(format!("serialize batch failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("serialize batch failed: {e}")))?;
     let concurrency = config.concurrency;
     let delay = config.delay_between_ms;
 
@@ -225,10 +225,10 @@ pub async fn execute_batch(
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("execute_batch failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("execute_batch failed: {e}")))?;
     let results: Vec<RequestResult> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))
-            .map_err(|e| Error::Browser(format!("parse batch results failed: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("parse batch results failed: {e}")))?;
     Ok(results)
 }
 

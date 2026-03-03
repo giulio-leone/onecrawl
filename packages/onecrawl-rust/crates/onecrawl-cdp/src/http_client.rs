@@ -77,7 +77,7 @@ fn build_fetch_js(request: &HttpRequest) -> String {
 
 fn parse_response(raw: serde_json::Value) -> Result<HttpResponse> {
     if let Some(err) = raw.get("error").and_then(|v| v.as_str()) {
-        return Err(Error::Browser(format!("fetch failed: {err}")));
+        return Err(Error::Cdp(format!("fetch failed: {err}")));
     }
     Ok(HttpResponse {
         status: raw.get("status").and_then(|v| v.as_u64()).unwrap_or(0) as u16,
@@ -117,7 +117,7 @@ pub async fn fetch(page: &Page, request: &HttpRequest) -> Result<HttpResponse> {
     let val = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(e.to_string()))?;
+        .map_err(|e| Error::Cdp(e.to_string()))?;
     let raw = val.into_value().unwrap_or(serde_json::json!({}));
     parse_response(raw)
 }
@@ -176,7 +176,7 @@ pub async fn fetch_json(page: &Page, url: &str) -> Result<serde_json::Value> {
     headers.insert("Accept".to_string(), "application/json".to_string());
     let resp = get(page, url, Some(headers)).await?;
     if resp.status >= 400 {
-        return Err(Error::Browser(format!(
+        return Err(Error::Cdp(format!(
             "HTTP {} {} for {}",
             resp.status, resp.status_text, url
         )));

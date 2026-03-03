@@ -99,7 +99,7 @@ pub async fn print_to_pdf(page: &Page, options: &DetailedPdfOptions) -> Result<V
     let bytes = page
         .pdf(params)
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("print_to_pdf failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("print_to_pdf failed: {e}")))?;
 
     Ok(bytes)
 }
@@ -121,7 +121,7 @@ pub async fn get_print_metrics(page: &Page) -> Result<serde_json::Value> {
             })"#,
         )
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("get_print_metrics failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("get_print_metrics failed: {e}")))?;
 
     let val: serde_json::Value = result.into_value().unwrap_or(serde_json::Value::Null);
     Ok(val)

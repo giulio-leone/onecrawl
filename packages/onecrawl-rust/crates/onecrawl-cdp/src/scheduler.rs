@@ -190,7 +190,7 @@ pub fn get_stats(scheduler: &Scheduler) -> HashMap<String, usize> {
 /// Save the scheduler to a JSON file.
 pub fn save_scheduler(scheduler: &Scheduler, path: &Path) -> Result<()> {
     let json = serde_json::to_string_pretty(scheduler)
-        .map_err(|e| Error::Browser(format!("serialize scheduler failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("serialize scheduler failed: {e}")))?;
     std::fs::write(path, json)?;
     Ok(())
 }
@@ -199,7 +199,7 @@ pub fn save_scheduler(scheduler: &Scheduler, path: &Path) -> Result<()> {
 pub fn load_scheduler(path: &Path) -> Result<Scheduler> {
     let data = std::fs::read_to_string(path)?;
     let scheduler: Scheduler = serde_json::from_str(&data)
-        .map_err(|e| Error::Browser(format!("parse scheduler failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("parse scheduler failed: {e}")))?;
     Ok(scheduler)
 }
 

@@ -71,7 +71,7 @@ pub async fn get_accessibility_tree(page: &Page) -> Result<serde_json::Value> {
     let result = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("get_accessibility_tree failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("get_accessibility_tree failed: {e}")))?;
 
     match result.into_value::<serde_json::Value>() {
         Ok(v) => Ok(v),
@@ -118,7 +118,7 @@ pub async fn get_element_accessibility(page: &Page, selector: &str) -> Result<se
     let result = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("get_element_accessibility failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("get_element_accessibility failed: {e}")))?;
 
     match result.into_value::<serde_json::Value>() {
         Ok(v) => Ok(v),
@@ -287,7 +287,7 @@ pub async fn audit_accessibility(page: &Page) -> Result<AccessibilityAudit> {
     let result = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("audit_accessibility failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("audit_accessibility failed: {e}")))?;
 
     match result.into_value::<AccessibilityAudit>() {
         Ok(audit) => Ok(audit),

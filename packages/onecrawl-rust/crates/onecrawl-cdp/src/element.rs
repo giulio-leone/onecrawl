@@ -6,10 +6,10 @@ pub async fn click(page: &Page, selector: &str) -> Result<()> {
     let el = page
         .find_element(selector)
         .await
-        .map_err(|e| Error::Browser(format!("element not found: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("element not found: {e}")))?;
     el.click()
         .await
-        .map_err(|e| Error::Browser(format!("click failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("click failed: {e}")))?;
     Ok(())
 }
 
@@ -18,13 +18,13 @@ pub async fn type_text(page: &Page, selector: &str, text: &str) -> Result<()> {
     let el = page
         .find_element(selector)
         .await
-        .map_err(|e| Error::Browser(format!("element not found: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("element not found: {e}")))?;
     el.click()
         .await
-        .map_err(|e| Error::Browser(format!("focus failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("focus failed: {e}")))?;
     el.type_str(text)
         .await
-        .map_err(|e| Error::Browser(format!("type failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("type failed: {e}")))?;
     Ok(())
 }
 
@@ -33,10 +33,10 @@ pub async fn focus(page: &Page, selector: &str) -> Result<()> {
     let el = page
         .find_element(selector)
         .await
-        .map_err(|e| Error::Browser(format!("element not found: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("element not found: {e}")))?;
     el.click()
         .await
-        .map_err(|e| Error::Browser(format!("focus failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("focus failed: {e}")))?;
     Ok(())
 }
 
@@ -47,7 +47,7 @@ pub async fn hover(page: &Page, selector: &str) -> Result<()> {
         selector.replace('\'', "\\'")
     ))
     .await
-    .map_err(|e| Error::Browser(format!("hover failed: {e}")))?;
+    .map_err(|e| Error::Cdp(format!("hover failed: {e}")))?;
     Ok(())
 }
 
@@ -58,7 +58,7 @@ pub async fn scroll_into_view(page: &Page, selector: &str) -> Result<()> {
         selector.replace('\'', "\\'")
     ))
     .await
-    .map_err(|e| Error::Browser(format!("scroll_into_view failed: {e}")))?;
+    .map_err(|e| Error::Cdp(format!("scroll_into_view failed: {e}")))?;
     Ok(())
 }
 
@@ -67,11 +67,11 @@ pub async fn get_text(page: &Page, selector: &str) -> Result<String> {
     let el = page
         .find_element(selector)
         .await
-        .map_err(|e| Error::Browser(format!("element not found: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("element not found: {e}")))?;
     let text = el
         .inner_text()
         .await
-        .map_err(|e| Error::Browser(format!("get_text failed: {e}")))?
+        .map_err(|e| Error::Cdp(format!("get_text failed: {e}")))?
         .unwrap_or_default();
     Ok(text)
 }
@@ -81,9 +81,9 @@ pub async fn evaluate(page: &Page, expression: &str) -> Result<serde_json::Value
     let result = page
         .evaluate(expression)
         .await
-        .map_err(|e| Error::Browser(format!("eval failed: {e}")))?
+        .map_err(|e| Error::Cdp(format!("eval failed: {e}")))?
         .into_value::<serde_json::Value>()
-        .map_err(|e| Error::Browser(format!("parse result failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("parse result failed: {e}")))?;
     Ok(result)
 }
 
@@ -97,7 +97,7 @@ pub async fn double_click(page: &Page, selector: &str) -> Result<()> {
         selector.replace('\'', "\\'")
     ))
     .await
-    .map_err(|e| Error::Browser(format!("double_click failed: {e}")))?;
+    .map_err(|e| Error::Cdp(format!("double_click failed: {e}")))?;
     Ok(())
 }
 
@@ -112,7 +112,7 @@ pub async fn check(page: &Page, selector: &str) -> Result<()> {
         selector.replace('\'', "\\'")
     ))
     .await
-    .map_err(|e| Error::Browser(format!("check failed: {e}")))?;
+    .map_err(|e| Error::Cdp(format!("check failed: {e}")))?;
     Ok(())
 }
 
@@ -127,7 +127,7 @@ pub async fn uncheck(page: &Page, selector: &str) -> Result<()> {
         selector.replace('\'', "\\'")
     ))
     .await
-    .map_err(|e| Error::Browser(format!("uncheck failed: {e}")))?;
+    .map_err(|e| Error::Cdp(format!("uncheck failed: {e}")))?;
     Ok(())
 }
 
@@ -140,9 +140,9 @@ pub async fn get_attribute(page: &Page, selector: &str, attribute: &str) -> Resu
             attribute.replace('\'', "\\'")
         ))
         .await
-        .map_err(|e| Error::Browser(format!("get_attribute failed: {e}")))?
+        .map_err(|e| Error::Cdp(format!("get_attribute failed: {e}")))?
         .into_value::<serde_json::Value>()
-        .map_err(|e| Error::Browser(format!("parse attribute failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("parse attribute failed: {e}")))?;
     match val {
         serde_json::Value::String(s) => Ok(Some(s)),
         serde_json::Value::Null => Ok(None),
@@ -162,6 +162,6 @@ pub async fn select_option(page: &Page, selector: &str, value: &str) -> Result<(
         value.replace('\'', "\\'")
     ))
     .await
-    .map_err(|e| Error::Browser(format!("select_option failed: {e}")))?;
+    .map_err(|e| Error::Cdp(format!("select_option failed: {e}")))?;
     Ok(())
 }

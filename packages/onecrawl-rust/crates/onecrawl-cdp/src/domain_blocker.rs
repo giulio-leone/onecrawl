@@ -129,7 +129,7 @@ pub fn available_categories() -> Vec<(String, usize)> {
 ///
 /// Returns the total number of domains currently on the blocklist.
 pub async fn block_domains(page: &Page, domains: &[String]) -> Result<usize> {
-    let domains_json = serde_json::to_string(domains).map_err(|e| Error::Browser(e.to_string()))?;
+    let domains_json = serde_json::to_string(domains).map_err(|e| Error::Cdp(e.to_string()))?;
 
     let js = format!(
         r#"
@@ -190,7 +190,7 @@ pub async fn block_domains(page: &Page, domains: &[String]) -> Result<usize> {
     let result = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("block_domains failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("block_domains failed: {e}")))?;
 
     let count: usize = result.into_value().unwrap_or(0);
     Ok(count)
@@ -200,7 +200,7 @@ pub async fn block_domains(page: &Page, domains: &[String]) -> Result<usize> {
 pub async fn block_category(page: &Page, category: &str) -> Result<usize> {
     let domains = get_blocklist(category);
     if domains.is_empty() {
-        return Err(Error::InvalidInput(format!("Unknown category: {category}")));
+        return Err(Error::Config(format!("Unknown category: {category}")));
     }
     block_domains(page, &domains).await
 }
@@ -225,7 +225,7 @@ pub async fn block_stats(page: &Page) -> Result<BlockStats> {
     let result = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("block_stats failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("block_stats failed: {e}")))?;
 
     let raw: String = result
         .into_value()
@@ -242,7 +242,7 @@ pub async fn clear_blocks(page: &Page) -> Result<()> {
     "#;
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("clear_blocks failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("clear_blocks failed: {e}")))?;
     Ok(())
 }
 
@@ -252,7 +252,7 @@ pub async fn list_blocked(page: &Page) -> Result<Vec<String>> {
     let result = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("list_blocked failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("list_blocked failed: {e}")))?;
 
     let raw: String = result.into_value().unwrap_or_else(|_| "[]".to_string());
     let domains: Vec<String> = serde_json::from_str(&raw)?;

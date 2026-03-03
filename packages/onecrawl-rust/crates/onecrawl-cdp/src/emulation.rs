@@ -72,11 +72,11 @@ pub async fn set_viewport(page: &Page, viewport: &Viewport) -> Result<()> {
             .device_scale_factor(viewport.device_scale_factor)
             .mobile(viewport.is_mobile)
             .build()
-            .map_err(|e| Error::Browser(format!("SetDeviceMetricsOverride build: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("SetDeviceMetricsOverride build: {e}")))?;
 
     page.execute(params)
         .await
-        .map_err(|e| Error::Browser(format!("SetDeviceMetricsOverride failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("SetDeviceMetricsOverride failed: {e}")))?;
 
     if viewport.has_touch {
         let touch_params =
@@ -85,7 +85,7 @@ pub async fn set_viewport(page: &Page, viewport: &Viewport) -> Result<()> {
             );
         page.execute(touch_params)
             .await
-            .map_err(|e| Error::Browser(format!("SetTouchEmulationEnabled failed: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("SetTouchEmulationEnabled failed: {e}")))?;
     }
 
     Ok(())
@@ -98,7 +98,7 @@ pub async fn clear_viewport(page: &Page) -> Result<()> {
         ),
     )
     .await
-    .map_err(|e| Error::Browser(format!("ClearDeviceMetricsOverride failed: {e}")))?;
+    .map_err(|e| Error::Cdp(format!("ClearDeviceMetricsOverride failed: {e}")))?;
     Ok(())
 }
 
@@ -109,7 +109,7 @@ pub async fn set_user_agent(page: &Page, user_agent: &str) -> Result<()> {
     );
     page.execute(params)
         .await
-        .map_err(|e| Error::Browser(format!("SetUserAgentOverride failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("SetUserAgentOverride failed: {e}")))?;
     Ok(())
 }
 
@@ -129,7 +129,7 @@ pub async fn set_geolocation(
 
     page.execute(params)
         .await
-        .map_err(|e| Error::Browser(format!("SetGeolocationOverride failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("SetGeolocationOverride failed: {e}")))?;
     Ok(())
 }
 
@@ -141,7 +141,7 @@ pub async fn set_timezone(page: &Page, timezone_id: &str) -> Result<()> {
     );
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("set_timezone failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("set_timezone failed: {e}")))?;
     Ok(())
 }
 
@@ -156,6 +156,6 @@ pub async fn set_color_scheme(page: &Page, scheme: &str) -> Result<()> {
         SetEmulatedMediaParams::builder().features(features).build();
     page.execute(params)
         .await
-        .map_err(|e| Error::Browser(format!("SetEmulatedMedia failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("SetEmulatedMedia failed: {e}")))?;
     Ok(())
 }

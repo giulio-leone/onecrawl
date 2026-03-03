@@ -3316,11 +3316,29 @@ fn register_parser(parent: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+// ──────────────────────────── Server ────────────────────────────
+
+/// Start the OneCrawl HTTP server.
+#[pyfunction]
+#[pyo3(signature = (port=9867))]
+fn start_server(port: u16) -> PyResult<()> {
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+    rt.block_on(async {
+        onecrawl_server::serve::start_server(port)
+            .await
+            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+    })
+}
+
+// ──────────────────────────── Module ────────────────────────────────
+
 #[pymodule]
 fn onecrawl(m: &Bound<'_, PyModule>) -> PyResult<()> {
     register_crypto(m)?;
     register_parser(m)?;
     m.add_class::<Store>()?;
     m.add_class::<Browser>()?;
+    m.add_function(wrap_pyfunction!(start_server, m)?)?;
     Ok(())
 }

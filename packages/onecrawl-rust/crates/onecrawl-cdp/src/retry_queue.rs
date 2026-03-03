@@ -231,7 +231,7 @@ pub fn clear_completed(queue: &mut RetryQueue) -> usize {
 /// Save the queue to a JSON file.
 pub fn save_queue(queue: &RetryQueue, path: &Path) -> Result<()> {
     let json = serde_json::to_string_pretty(queue)
-        .map_err(|e| Error::Browser(format!("serialize queue failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("serialize queue failed: {e}")))?;
     std::fs::write(path, json)?;
     Ok(())
 }
@@ -240,7 +240,7 @@ pub fn save_queue(queue: &RetryQueue, path: &Path) -> Result<()> {
 pub fn load_queue(path: &Path) -> Result<RetryQueue> {
     let data = std::fs::read_to_string(path)?;
     let queue: RetryQueue = serde_json::from_str(&data)
-        .map_err(|e| Error::Browser(format!("parse queue failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("parse queue failed: {e}")))?;
     Ok(queue)
 }
 

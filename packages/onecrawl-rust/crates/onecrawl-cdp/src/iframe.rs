@@ -36,7 +36,7 @@ pub async fn list_iframes(page: &Page) -> Result<Vec<IframeInfo>> {
             "#,
         )
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("list_iframes failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("list_iframes failed: {e}")))?;
 
     let iframes: Vec<IframeInfo> = result.into_value().unwrap_or_default();
 
@@ -72,7 +72,7 @@ pub async fn eval_in_iframe(
     let result = page
         .evaluate(js.as_str())
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("eval_in_iframe failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("eval_in_iframe failed: {e}")))?;
 
     let val: serde_json::Value = result.into_value().unwrap_or(serde_json::Value::Null);
     Ok(val)
@@ -98,7 +98,7 @@ pub async fn get_iframe_content(page: &Page, index: usize) -> Result<String> {
     let result = page
         .evaluate(js.as_str())
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("get_iframe_content failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("get_iframe_content failed: {e}")))?;
 
     let html: String = result.into_value().unwrap_or_default();
     Ok(html)

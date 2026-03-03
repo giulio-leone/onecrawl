@@ -618,6 +618,29 @@ enum Commands {
         #[command(subcommand)]
         action: PoolAction,
     },
+
+    // ── Server ──────────────────────────────────────────────────
+    /// Start the HTTP API server for multi-instance browser management
+    Serve {
+        /// Port to listen on
+        #[arg(short, long, default_value_t = 9867)]
+        port: u16,
+        /// Bind address
+        #[arg(short, long, default_value = "0.0.0.0")]
+        bind: String,
+    },
+
+    // ── MCP ─────────────────────────────────────────────────────
+    /// Start the MCP (Model Context Protocol) server
+    Mcp {
+        /// Transport mode
+        #[arg(short, long, default_value = "stdio")]
+        transport: String,
+    },
+
+    // ── Version ─────────────────────────────────────────────────
+    /// Show version and build information
+    Version,
 }
 
 #[derive(Subcommand)]
@@ -2653,5 +2676,38 @@ async fn main() {
                 commands::browser::pool_load(&path);
             }
         },
+
+        // ── Server ──────────────────────────────────────────────────
+        Commands::Serve { port, bind: _ } => {
+            onecrawl_server::serve::start_server(port).await.unwrap();
+        }
+
+        // ── MCP ─────────────────────────────────────────────────────
+        Commands::Mcp { transport } => {
+            println!("OneCrawl MCP Server");
+            println!("  Transport: {transport}");
+            println!();
+            println!("To start the MCP server, run:");
+            println!("  onecrawl-mcp --transport {transport}");
+            println!();
+            println!("Available transports: stdio, sse");
+            println!("43 tools across 7 namespaces: navigation, scraping, crawling, stealth, data, automation, auth");
+        }
+
+        // ── Version ─────────────────────────────────────────────────
+        Commands::Version => {
+            println!("onecrawl {}", env!("CARGO_PKG_VERSION"));
+            println!();
+            println!("Components:");
+            println!("  core      onecrawl-core");
+            println!("  crypto    onecrawl-crypto (AES-256-GCM, PKCE, TOTP, PBKDF2)");
+            println!("  parser    onecrawl-parser (lol_html, scraper)");
+            println!("  storage   onecrawl-storage (sled, encrypted KV)");
+            println!("  cdp       onecrawl-cdp (63 modules)");
+            println!("  server    onecrawl-server (axum, 18 endpoints)");
+            println!("  mcp       onecrawl-mcp (43 tools, 7 namespaces)");
+            println!();
+            println!("Profile: {}", if cfg!(debug_assertions) { "debug" } else { "release" });
+        }
     }
 }

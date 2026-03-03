@@ -5,7 +5,7 @@ use onecrawl_core::{Error, Result};
 pub async fn goto(page: &Page, url: &str) -> Result<()> {
     page.goto(url)
         .await
-        .map_err(|e| Error::Browser(format!("goto failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("goto failed: {e}")))?;
     Ok(())
 }
 
@@ -13,7 +13,7 @@ pub async fn goto(page: &Page, url: &str) -> Result<()> {
 pub async fn go_back(page: &Page) -> Result<()> {
     page.evaluate("window.history.back()")
         .await
-        .map_err(|e| Error::Browser(format!("go_back failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("go_back failed: {e}")))?;
     Ok(())
 }
 
@@ -21,7 +21,7 @@ pub async fn go_back(page: &Page) -> Result<()> {
 pub async fn go_forward(page: &Page) -> Result<()> {
     page.evaluate("window.history.forward()")
         .await
-        .map_err(|e| Error::Browser(format!("go_forward failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("go_forward failed: {e}")))?;
     Ok(())
 }
 
@@ -29,7 +29,7 @@ pub async fn go_forward(page: &Page) -> Result<()> {
 pub async fn reload(page: &Page) -> Result<()> {
     page.evaluate("window.location.reload()")
         .await
-        .map_err(|e| Error::Browser(format!("reload failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("reload failed: {e}")))?;
     Ok(())
 }
 
@@ -38,7 +38,7 @@ pub async fn get_url(page: &Page) -> Result<String> {
     let url = page
         .url()
         .await
-        .map_err(|e| Error::Browser(format!("get_url failed: {e}")))?
+        .map_err(|e| Error::Cdp(format!("get_url failed: {e}")))?
         .unwrap_or_default()
         .to_string();
     Ok(url)
@@ -49,9 +49,9 @@ pub async fn get_title(page: &Page) -> Result<String> {
     let title = page
         .evaluate("document.title")
         .await
-        .map_err(|e| Error::Browser(format!("get_title failed: {e}")))?
+        .map_err(|e| Error::Cdp(format!("get_title failed: {e}")))?
         .into_value::<String>()
-        .map_err(|e| Error::Browser(format!("parse title failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("parse title failed: {e}")))?;
     Ok(title)
 }
 
@@ -73,14 +73,14 @@ pub async fn wait_for_selector(page: &Page, selector: &str, timeout_ms: u64) -> 
         let found = page
             .evaluate(js.as_str())
             .await
-            .map_err(|e| Error::Browser(format!("wait_for_selector eval failed: {e}")))?
+            .map_err(|e| Error::Cdp(format!("wait_for_selector eval failed: {e}")))?
             .into_value::<bool>()
             .unwrap_or(false);
         if found {
             return Ok(());
         }
         if tokio::time::Instant::now() >= deadline {
-            return Err(Error::Browser(format!(
+            return Err(Error::Cdp(format!(
                 "wait_for_selector timed out after {timeout_ms}ms for '{selector}'"
             )));
         }
@@ -99,7 +99,7 @@ pub async fn wait_for_url(page: &Page, url_pattern: &str, timeout_ms: u64) -> Re
             return Ok(());
         }
         if tokio::time::Instant::now() >= deadline {
-            return Err(Error::Browser(format!(
+            return Err(Error::Cdp(format!(
                 "wait_for_url timed out after {timeout_ms}ms waiting for '{url_pattern}'"
             )));
         }

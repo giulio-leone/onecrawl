@@ -54,7 +54,7 @@ pub async fn set_network_conditions(page: &Page, profile: NetworkProfile) -> Res
             .upload_throughput(kbps_to_bytes_per_sec(750.0))
             .connection_type(ConnectionType::Cellular3g)
             .build()
-            .map_err(|e| Error::Browser(format!("Fast3G build: {e}")))?,
+            .map_err(|e| Error::Cdp(format!("Fast3G build: {e}")))?,
 
         NetworkProfile::Slow3G => EmulateNetworkConditionsParams::builder()
             .offline(false)
@@ -63,7 +63,7 @@ pub async fn set_network_conditions(page: &Page, profile: NetworkProfile) -> Res
             .upload_throughput(kbps_to_bytes_per_sec(500.0))
             .connection_type(ConnectionType::Cellular3g)
             .build()
-            .map_err(|e| Error::Browser(format!("Slow3G build: {e}")))?,
+            .map_err(|e| Error::Cdp(format!("Slow3G build: {e}")))?,
 
         NetworkProfile::Offline => EmulateNetworkConditionsParams::builder()
             .offline(true)
@@ -72,7 +72,7 @@ pub async fn set_network_conditions(page: &Page, profile: NetworkProfile) -> Res
             .upload_throughput(0.0)
             .connection_type(ConnectionType::None)
             .build()
-            .map_err(|e| Error::Browser(format!("Offline build: {e}")))?,
+            .map_err(|e| Error::Cdp(format!("Offline build: {e}")))?,
 
         NetworkProfile::Regular4G => EmulateNetworkConditionsParams::builder()
             .offline(false)
@@ -81,7 +81,7 @@ pub async fn set_network_conditions(page: &Page, profile: NetworkProfile) -> Res
             .upload_throughput(kbps_to_bytes_per_sec(3000.0))
             .connection_type(ConnectionType::Cellular4g)
             .build()
-            .map_err(|e| Error::Browser(format!("Regular4G build: {e}")))?,
+            .map_err(|e| Error::Cdp(format!("Regular4G build: {e}")))?,
 
         NetworkProfile::WiFi => EmulateNetworkConditionsParams::builder()
             .offline(false)
@@ -90,7 +90,7 @@ pub async fn set_network_conditions(page: &Page, profile: NetworkProfile) -> Res
             .upload_throughput(kbps_to_bytes_per_sec(15000.0))
             .connection_type(ConnectionType::Wifi)
             .build()
-            .map_err(|e| Error::Browser(format!("WiFi build: {e}")))?,
+            .map_err(|e| Error::Cdp(format!("WiFi build: {e}")))?,
 
         NetworkProfile::Custom {
             download_kbps,
@@ -102,12 +102,12 @@ pub async fn set_network_conditions(page: &Page, profile: NetworkProfile) -> Res
             .download_throughput(kbps_to_bytes_per_sec(download_kbps))
             .upload_throughput(kbps_to_bytes_per_sec(upload_kbps))
             .build()
-            .map_err(|e| Error::Browser(format!("Custom profile build: {e}")))?,
+            .map_err(|e| Error::Cdp(format!("Custom profile build: {e}")))?,
     };
 
     page.execute(params)
         .await
-        .map_err(|e| Error::Browser(format!("EmulateNetworkConditions failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("EmulateNetworkConditions failed: {e}")))?;
 
     Ok(())
 }
@@ -121,11 +121,11 @@ pub async fn clear_network_conditions(page: &Page) -> Result<()> {
         .download_throughput(-1.0)
         .upload_throughput(-1.0)
         .build()
-        .map_err(|e| Error::Browser(format!("clear conditions build: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("clear conditions build: {e}")))?;
 
     page.execute(params)
         .await
-        .map_err(|e| Error::Browser(format!("ClearNetworkConditions failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("ClearNetworkConditions failed: {e}")))?;
 
     Ok(())
 }

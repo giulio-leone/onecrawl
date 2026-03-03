@@ -52,7 +52,7 @@ pub async fn drag_and_drop(page: &Page, source: &str, target: &str) -> Result<()
     );
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("drag_and_drop failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("drag_and_drop failed: {e}")))?;
     Ok(())
 }
 
@@ -61,7 +61,7 @@ pub async fn set_file_input(page: &Page, selector: &str, file_paths: &[String]) 
     let el = page
         .find_element(selector)
         .await
-        .map_err(|e| Error::Browser(format!("file input not found: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("file input not found: {e}")))?;
 
     let backend_node_id = el.backend_node_id;
 
@@ -69,11 +69,11 @@ pub async fn set_file_input(page: &Page, selector: &str, file_paths: &[String]) 
         .files(file_paths.to_vec())
         .backend_node_id(backend_node_id)
         .build()
-        .map_err(|e| Error::Browser(format!("SetFileInputFilesParams build failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("SetFileInputFilesParams build failed: {e}")))?;
 
     page.execute(set_files)
         .await
-        .map_err(|e| Error::Browser(format!("DOM.setFileInputFiles failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("DOM.setFileInputFiles failed: {e}")))?;
 
     Ok(())
 }
@@ -93,9 +93,9 @@ pub async fn bounding_box(page: &Page, selector: &str) -> Result<(f64, f64, f64,
             selector = selector.replace('\'', "\\'"),
         ))
         .await
-        .map_err(|e| Error::Browser(format!("bounding_box eval failed: {e}")))?
+        .map_err(|e| Error::Cdp(format!("bounding_box eval failed: {e}")))?
         .into_value::<serde_json::Value>()
-        .map_err(|e| Error::Browser(format!("bounding_box parse failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("bounding_box parse failed: {e}")))?;
 
     let s = match val {
         serde_json::Value::String(s) => s,
@@ -103,7 +103,7 @@ pub async fn bounding_box(page: &Page, selector: &str) -> Result<(f64, f64, f64,
     };
 
     let obj: serde_json::Value =
-        serde_json::from_str(&s).map_err(|e| Error::Browser(format!("bounding_box json: {e}")))?;
+        serde_json::from_str(&s).map_err(|e| Error::Cdp(format!("bounding_box json: {e}")))?;
 
     let x = obj["x"].as_f64().unwrap_or(0.0);
     let y = obj["y"].as_f64().unwrap_or(0.0);
@@ -132,6 +132,6 @@ pub async fn tap(page: &Page, selector: &str) -> Result<()> {
     );
     page.evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("tap failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("tap failed: {e}")))?;
     Ok(())
 }

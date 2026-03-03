@@ -55,16 +55,16 @@ impl PlaywrightBridge {
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
-            .map_err(|e| Error::Browser(format!("failed to spawn playwright bridge: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("failed to spawn playwright bridge: {e}")))?;
 
         let stdin = child
             .stdin
             .take()
-            .ok_or_else(|| Error::Browser("no stdin on bridge process".into()))?;
+            .ok_or_else(|| Error::Cdp("no stdin on bridge process".into()))?;
         let stdout = child
             .stdout
             .take()
-            .ok_or_else(|| Error::Browser("no stdout on bridge process".into()))?;
+            .ok_or_else(|| Error::Cdp("no stdout on bridge process".into()))?;
 
         Ok(Self {
             child,
@@ -90,36 +90,36 @@ impl PlaywrightBridge {
         };
 
         let mut json = serde_json::to_string(&cmd)
-            .map_err(|e| Error::Browser(format!("serialize command failed: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("serialize command failed: {e}")))?;
         json.push('\n');
 
         self.stdin
             .write_all(json.as_bytes())
             .await
-            .map_err(|e| Error::Browser(format!("write to bridge failed: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("write to bridge failed: {e}")))?;
         self.stdin
             .flush()
             .await
-            .map_err(|e| Error::Browser(format!("flush bridge stdin failed: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("flush bridge stdin failed: {e}")))?;
 
         let mut line = String::new();
         self.reader
             .read_line(&mut line)
             .await
-            .map_err(|e| Error::Browser(format!("read from bridge failed: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("read from bridge failed: {e}")))?;
 
         let resp: BridgeResponse = serde_json::from_str(line.trim())
-            .map_err(|e| Error::Browser(format!("parse bridge response failed: {e}")))?;
+            .map_err(|e| Error::Cdp(format!("parse bridge response failed: {e}")))?;
 
         if resp.id != id {
-            return Err(Error::Browser(format!(
+            return Err(Error::Cdp(format!(
                 "bridge response ID mismatch: expected {id}, got {}",
                 resp.id
             )));
         }
 
         if !resp.success {
-            return Err(Error::Browser(format!(
+            return Err(Error::Cdp(format!(
                 "playwright command '{}' failed: {}",
                 command, resp.data
             )));

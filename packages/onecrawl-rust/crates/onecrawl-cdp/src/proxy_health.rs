@@ -106,7 +106,7 @@ pub async fn check_proxy(
         }})()
         "#,
         test_url = serde_json::to_string(&config.test_url)
-            .map_err(|e| Error::Browser(format!("serialize test_url: {e}")))?,
+            .map_err(|e| Error::Cdp(format!("serialize test_url: {e}")))?,
         timeout = config.timeout_ms,
         anon = config.check_anonymity,
     );
@@ -114,12 +114,12 @@ pub async fn check_proxy(
     let raw: String = page
         .evaluate(js.as_str())
         .await
-        .map_err(|e| Error::Browser(format!("proxy health eval failed: {e}")))?
+        .map_err(|e| Error::Cdp(format!("proxy health eval failed: {e}")))?
         .into_value()
-        .map_err(|e| Error::Browser(format!("proxy health parse failed: {e}")))?;
+        .map_err(|e| Error::Cdp(format!("proxy health parse failed: {e}")))?;
 
     let fr: FetchResult =
-        serde_json::from_str(&raw).map_err(|e| Error::Browser(format!("json parse: {e}")))?;
+        serde_json::from_str(&raw).map_err(|e| Error::Cdp(format!("json parse: {e}")))?;
 
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

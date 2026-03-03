@@ -86,7 +86,7 @@ pub async fn set_dialog_handler(
 
     page.evaluate(js.as_str())
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("set_dialog_handler failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("set_dialog_handler failed: {e}")))?;
 
     Ok(())
 }
@@ -96,7 +96,7 @@ pub async fn get_dialog_history(page: &Page) -> Result<Vec<DialogEvent>> {
     let result = page
         .evaluate("window.__onecrawl_dialog_history || []")
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("get_dialog_history failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("get_dialog_history failed: {e}")))?;
 
     let events: Vec<DialogEvent> = result.into_value().unwrap_or_default();
 
@@ -107,7 +107,7 @@ pub async fn get_dialog_history(page: &Page) -> Result<Vec<DialogEvent>> {
 pub async fn clear_dialog_history(page: &Page) -> Result<()> {
     page.evaluate("window.__onecrawl_dialog_history = []")
         .await
-        .map_err(|e| onecrawl_core::Error::Browser(format!("clear_dialog_history failed: {e}")))?;
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("clear_dialog_history failed: {e}")))?;
 
     Ok(())
 }
