@@ -1,6 +1,6 @@
 {
   "name": "@giulio-leone/onecrawl",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Native TypeScript web crawler, scraper & browser automation. Zero Python dependencies.",
   "type": "module",
   "main": "dist/index.js",
