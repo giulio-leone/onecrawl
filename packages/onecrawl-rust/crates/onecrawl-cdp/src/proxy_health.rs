@@ -42,8 +42,6 @@ struct FetchResult {
     latency: f64,
     ip: Option<String>,
     blocked: bool,
-    #[allow(dead_code)]
-    error: Option<String>,
 }
 
 /// Test a single proxy by fetching the test URL via the browser.

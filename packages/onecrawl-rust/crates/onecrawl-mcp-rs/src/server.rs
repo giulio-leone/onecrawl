@@ -65,8 +65,8 @@ pub struct StoreGetRequest {
 // ──────────────────────────── Server ────────────────────────────
 
 #[derive(Clone)]
-#[allow(dead_code)]
 pub struct OneCrawlMcp {
+    #[allow(dead_code)] // accessed via #[tool_router] proc macro
     tool_router: ToolRouter<Self>,
     store_path: Arc<String>,
     store_password: Arc<String>,

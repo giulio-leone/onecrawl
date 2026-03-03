@@ -29,9 +29,6 @@ const USER_AGENTS: &[&str] = &[
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15",
 ];
 
-#[allow(dead_code)]
-const PLATFORMS: &[&str] = &["Win32", "MacIntel", "Linux x86_64"];
-
 const VIEWPORTS: &[(u32, u32)] = &[
     (1920, 1080),
     (1366, 768),

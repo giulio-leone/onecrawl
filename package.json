@@ -1,11 +1,13 @@
 {
   "name": "onecrawl-monorepo",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
   "packageManager": "pnpm@10.22.0",
   "scripts": {
-    "build": "pnpm -r run build",
-    "typecheck": "pnpm -r run typecheck",
-    "test": "pnpm -r run test"
+    "build": "cd packages/onecrawl-rust && cargo build --workspace",
+    "test": "cd packages/onecrawl-rust && cargo test --workspace",
+    "clippy": "cd packages/onecrawl-rust && cargo clippy --workspace",
+    "build:napi": "cd packages/onecrawl-rust/bindings/napi && npm run build",
+    "build:release": "cd packages/onecrawl-rust && cargo build --release -p onecrawl-cli-rs"
   }
 }

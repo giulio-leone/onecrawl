@@ -236,7 +236,6 @@ pub fn export_graph_json(graph: &LinkGraph, path: &std::path::Path) -> Result<()
 }
 
 /// Build a link graph from spider crawl results.
-#[allow(dead_code)]
 pub fn from_crawl_results(results: &[crate::spider::CrawlResult]) -> LinkGraph {
     let mut edges: Vec<LinkEdge> = Vec::new();
     let success: Vec<&crate::spider::CrawlResult> =
