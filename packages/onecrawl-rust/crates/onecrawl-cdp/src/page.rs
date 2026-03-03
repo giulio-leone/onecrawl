@@ -23,8 +23,11 @@ pub async fn evaluate_js(page: &Page, js: &str) -> Result<serde_json::Value> {
     let result = page
         .evaluate(js)
         .await
-        .map_err(|e| Error::Browser(format!("evaluate failed: {e}")))?
-        .into_value::<serde_json::Value>()
-        .map_err(|e| Error::Browser(format!("parse result failed: {e}")))?;
-    Ok(result)
+        .map_err(|e| Error::Browser(format!("evaluate failed: {e}")))?;
+
+    // Gracefully handle expressions that return undefined/void
+    match result.into_value::<serde_json::Value>() {
+        Ok(val) => Ok(val),
+        Err(_) => Ok(serde_json::Value::Null),
+    }
 }
