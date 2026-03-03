@@ -576,6 +576,7 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
+module.exports.NativeBrowser = nativeBinding.NativeBrowser
 module.exports.NativeStore = nativeBinding.NativeStore
 module.exports.decrypt = nativeBinding.decrypt
 module.exports.deriveKey = nativeBinding.deriveKey

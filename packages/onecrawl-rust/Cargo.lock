@@ -1937,11 +1937,13 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
+ "onecrawl-cdp",
  "onecrawl-core",
  "onecrawl-crypto",
  "onecrawl-parser",
  "onecrawl-storage",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -1961,12 +1963,14 @@ name = "onecrawl-python"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "onecrawl-cdp",
  "onecrawl-core",
  "onecrawl-crypto",
  "onecrawl-parser",
  "onecrawl-storage",
  "pyo3",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

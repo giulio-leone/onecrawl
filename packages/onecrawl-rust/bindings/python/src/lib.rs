@@ -196,6 +196,283 @@ impl Store {
     }
 }
 
+// ──────────────────────────── Browser (CDP) ────────────────────────────
+
+use std::sync::Arc;
+
+/// Browser automation class powered by chromiumoxide (native CDP).
+///
+/// ```python
+/// browser = Browser.launch(headless=True)
+/// browser.goto("https://example.com")
+/// title = browser.get_title()
+/// png = browser.screenshot()
+/// browser.close()
+/// ```
+#[pyclass]
+struct Browser {
+    rt: Arc<tokio::runtime::Runtime>,
+    session: Arc<onecrawl_cdp::BrowserSession>,
+    page: Arc<std::sync::Mutex<Option<onecrawl_cdp::Page>>>,
+}
+
+fn py_err(e: impl std::fmt::Display) -> PyErr {
+    pyo3::exceptions::PyRuntimeError::new_err(e.to_string())
+}
+
+#[pymethods]
+impl Browser {
+    /// Launch a new browser. `headless` defaults to True.
+    #[staticmethod]
+    #[pyo3(signature = (headless=true))]
+    fn launch(headless: bool) -> PyResult<Self> {
+        let rt = tokio::runtime::Runtime::new().map_err(py_err)?;
+        let session = rt.block_on(async {
+            if headless {
+                onecrawl_cdp::BrowserSession::launch_headless().await
+            } else {
+                onecrawl_cdp::BrowserSession::launch_headed().await
+            }
+        }).map_err(py_err)?;
+        let page = rt.block_on(session.new_page("about:blank")).map_err(py_err)?;
+        Ok(Self {
+            rt: Arc::new(rt),
+            session: Arc::new(session),
+            page: Arc::new(std::sync::Mutex::new(Some(page))),
+        })
+    }
+
+    /// Connect to existing browser via CDP WebSocket URL.
+    #[staticmethod]
+    fn connect(ws_url: &str) -> PyResult<Self> {
+        let rt = tokio::runtime::Runtime::new().map_err(py_err)?;
+        let session = rt.block_on(onecrawl_cdp::BrowserSession::connect(ws_url)).map_err(py_err)?;
+        let page = rt.block_on(session.new_page("about:blank")).map_err(py_err)?;
+        Ok(Self {
+            rt: Arc::new(rt),
+            session: Arc::new(session),
+            page: Arc::new(std::sync::Mutex::new(Some(page))),
+        })
+    }
+
+    /// Navigate to a URL.
+    fn goto(&self, url: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::navigation::goto(page, url)).map_err(py_err)
+    }
+
+    /// Get current URL.
+    fn get_url(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::navigation::get_url(page)).map_err(py_err)
+    }
+
+    /// Get page title.
+    fn get_title(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::navigation::get_title(page)).map_err(py_err)
+    }
+
+    /// Get page HTML content.
+    fn content(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::page::get_content(page)).map_err(py_err)
+    }
+
+    /// Set page HTML content.
+    fn set_content(&self, html: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::page::set_content(page, html)).map_err(py_err)
+    }
+
+    /// Take a viewport screenshot (PNG bytes).
+    fn screenshot(&self) -> PyResult<Vec<u8>> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::screenshot::screenshot_viewport(page)).map_err(py_err)
+    }
+
+    /// Take a full-page screenshot (PNG bytes).
+    fn screenshot_full(&self) -> PyResult<Vec<u8>> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::screenshot::screenshot_full(page)).map_err(py_err)
+    }
+
+    /// Screenshot a specific element by CSS selector.
+    fn screenshot_element(&self, selector: &str) -> PyResult<Vec<u8>> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::screenshot::screenshot_element(page, selector)).map_err(py_err)
+    }
+
+    /// Save page as PDF (bytes).
+    fn pdf(&self) -> PyResult<Vec<u8>> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::screenshot::pdf(page)).map_err(py_err)
+    }
+
+    /// Evaluate JavaScript. Returns JSON string.
+    fn evaluate(&self, expression: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let val = self.rt.block_on(onecrawl_cdp::page::evaluate_js(page, expression)).map_err(py_err)?;
+        Ok(val.to_string())
+    }
+
+    /// Click an element by CSS selector.
+    fn click(&self, selector: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::element::click(page, selector)).map_err(py_err)
+    }
+
+    /// Double-click an element.
+    fn double_click(&self, selector: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::element::double_click(page, selector)).map_err(py_err)
+    }
+
+    /// Type text into an element (key-by-key).
+    fn type_text(&self, selector: &str, text: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::element::type_text(page, selector, text)).map_err(py_err)
+    }
+
+    /// Get text content of an element.
+    fn get_text(&self, selector: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::element::get_text(page, selector)).map_err(py_err)
+    }
+
+    /// Get attribute value from an element.
+    fn get_attribute(&self, selector: &str, attribute: &str) -> PyResult<Option<String>> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::element::get_attribute(page, selector, attribute)).map_err(py_err)
+    }
+
+    /// Hover over an element.
+    fn hover(&self, selector: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::element::hover(page, selector)).map_err(py_err)
+    }
+
+    /// Scroll element into view.
+    fn scroll_into_view(&self, selector: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::element::scroll_into_view(page, selector)).map_err(py_err)
+    }
+
+    /// Check a checkbox.
+    fn check(&self, selector: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::element::check(page, selector)).map_err(py_err)
+    }
+
+    /// Uncheck a checkbox.
+    fn uncheck(&self, selector: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::element::uncheck(page, selector)).map_err(py_err)
+    }
+
+    /// Select an option in a `<select>` by value.
+    fn select_option(&self, selector: &str, value: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::element::select_option(page, selector, value)).map_err(py_err)
+    }
+
+    /// Wait for a selector to appear (timeout in ms, default 30000).
+    #[pyo3(signature = (selector, timeout_ms=30000))]
+    fn wait_for_selector(&self, selector: &str, timeout_ms: u64) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::navigation::wait_for_selector(page, selector, timeout_ms)).map_err(py_err)
+    }
+
+    /// Wait for URL to contain pattern (timeout in ms, default 30000).
+    #[pyo3(signature = (pattern, timeout_ms=30000))]
+    fn wait_for_url(&self, pattern: &str, timeout_ms: u64) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::navigation::wait_for_url(page, pattern, timeout_ms)).map_err(py_err)
+    }
+
+    /// Go back in history.
+    fn go_back(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::navigation::go_back(page)).map_err(py_err)
+    }
+
+    /// Go forward in history.
+    fn go_forward(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::navigation::go_forward(page)).map_err(py_err)
+    }
+
+    /// Reload the page.
+    fn reload(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::navigation::reload(page)).map_err(py_err)
+    }
+
+    /// Inject stealth anti-detection patches. Returns (platform, hw_concurrency, device_memory).
+    fn inject_stealth(&self) -> PyResult<(String, u32, u32)> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let fp = onecrawl_cdp::generate_fingerprint();
+        let script = onecrawl_cdp::get_stealth_init_script(&fp);
+        self.rt.block_on(async {
+            page.evaluate(script)
+                .await
+                .map_err(|e| py_err(format!("stealth injection failed: {e}")))?;
+            Ok::<_, PyErr>(())
+        })?;
+        Ok((fp.platform.clone(), fp.hardware_concurrency, fp.device_memory))
+    }
+
+    /// Open a new page/tab and switch to it.
+    #[pyo3(signature = (url=None))]
+    fn new_page(&self, url: Option<&str>) -> PyResult<()> {
+        let new_page = self.rt.block_on(
+            self.session.new_page(url.unwrap_or("about:blank"))
+        ).map_err(py_err)?;
+        let mut guard = self.page.lock().map_err(py_err)?;
+        *guard = Some(new_page);
+        Ok(())
+    }
+
+    /// Wait for a specified number of milliseconds.
+    fn wait(&self, ms: u64) -> PyResult<()> {
+        self.rt.block_on(onecrawl_cdp::navigation::wait_ms(ms));
+        Ok(())
+    }
+
+    /// Close the browser.
+    fn close(&self) -> PyResult<()> {
+        let mut guard = self.page.lock().map_err(py_err)?;
+        *guard = None;
+        Ok(())
+    }
+}
+
 // ──────────────────────────── Module ────────────────────────────
 
 fn register_crypto(parent: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -236,5 +513,6 @@ fn onecrawl(m: &Bound<'_, PyModule>) -> PyResult<()> {
     register_crypto(m)?;
     register_parser(m)?;
     m.add_class::<Store>()?;
+    m.add_class::<Browser>()?;
     Ok(())
 }

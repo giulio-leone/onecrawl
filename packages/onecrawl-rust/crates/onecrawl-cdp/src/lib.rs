@@ -19,3 +19,6 @@ pub use bridge::PlaywrightBridge;
 pub use network::ResourceType;
 pub use screenshot::{ImageFormat, PdfOptions, ScreenshotOptions};
 pub use stealth::{Fingerprint, generate_fingerprint, get_stealth_init_script};
+
+// Re-export chromiumoxide::Page for downstream consumers
+pub use chromiumoxide::Page;
