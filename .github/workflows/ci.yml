@@ -2,18 +2,25 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feat/**']
   pull_request:
     branches: [main]
 
 jobs:
-  build-and-test:
+  test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
-      - run: npm ci
-      - run: npm run build
-      - run: npm run type-check
+          node-version: ${{ matrix.node-version }}
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r run build
+      - run: cd packages/onecrawl && npx vitest run
+      - run: cd packages/onecrawl-cli && node --test test/unit/commands.test.js
+      - run: cd packages/onecrawl-ptc && npx vitest run
