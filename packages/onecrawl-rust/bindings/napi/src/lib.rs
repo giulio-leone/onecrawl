@@ -627,4 +627,154 @@ impl NativeBrowser {
         *guard = None;
         Ok(())
     }
+
+    // ──────────────── Cookie Management ────────────────
+
+    /// Get all cookies (including httpOnly) via CDP.
+    #[napi]
+    pub async fn get_cookies(&self) -> Result<String> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        let cookies = onecrawl_cdp::cookie::get_all_cookies(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&cookies).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Set a cookie. Accepts a JSON string of SetCookieParams.
+    #[napi]
+    pub async fn set_cookie(&self, params_json: String) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        let params: onecrawl_cdp::SetCookieParams = serde_json::from_str(&params_json)
+            .map_err(|e| Error::from_reason(format!("invalid cookie params: {e}")))?;
+        onecrawl_cdp::cookie::set_cookie(page, &params)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Delete cookies by name (optional domain/path).
+    #[napi]
+    pub async fn delete_cookies(
+        &self,
+        name: String,
+        domain: Option<String>,
+        path: Option<String>,
+    ) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::cookie::delete_cookies(
+            page,
+            &name,
+            domain.as_deref(),
+            path.as_deref(),
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Clear all browser cookies.
+    #[napi]
+    pub async fn clear_cookies(&self) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::cookie::clear_cookies(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Keyboard ────────────────
+
+    /// Press a key (keyDown + keyUp).
+    #[napi]
+    pub async fn press_key(&self, key: String) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::keyboard::press_key(page, &key)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Send a keyboard shortcut (e.g., "Control+a", "Meta+c").
+    #[napi]
+    pub async fn keyboard_shortcut(&self, shortcut: String) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::keyboard::keyboard_shortcut(page, &shortcut)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Hold a key down.
+    #[napi]
+    pub async fn key_down(&self, key: String) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::keyboard::key_down(page, &key)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Release a key.
+    #[napi]
+    pub async fn key_up(&self, key: String) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::keyboard::key_up(page, &key)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Fill an input field (clear + set value + fire events).
+    #[napi]
+    pub async fn fill(&self, selector: String, value: String) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::keyboard::fill(page, &selector, &value)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Advanced Input ────────────────
+
+    /// Drag an element and drop onto another (CSS selectors).
+    #[napi]
+    pub async fn drag_and_drop(&self, source: String, target: String) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::input::drag_and_drop(page, &source, &target)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Upload files to a `<input type="file">` element.
+    #[napi]
+    pub async fn upload_file(&self, selector: String, file_paths: Vec<String>) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::input::set_file_input(page, &selector, &file_paths)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get the bounding box of an element. Returns { x, y, width, height }.
+    #[napi]
+    pub async fn bounding_box(&self, selector: String) -> Result<String> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        let (x, y, w, h) = onecrawl_cdp::input::bounding_box(page, &selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(serde_json::json!({"x": x, "y": y, "width": w, "height": h}).to_string())
+    }
+
+    /// Tap an element (touch simulation).
+    #[napi]
+    pub async fn tap(&self, selector: String) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::input::tap(page, &selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
 }

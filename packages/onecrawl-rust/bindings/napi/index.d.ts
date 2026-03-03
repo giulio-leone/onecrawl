@@ -80,6 +80,32 @@ export declare class NativeBrowser {
   wait(ms: number): Promise<void>
   /** Close the browser. */
   close(): Promise<void>
+  /** Get all cookies (including httpOnly) via CDP. */
+  getCookies(): Promise<string>
+  /** Set a cookie. Accepts a JSON string of SetCookieParams. */
+  setCookie(paramsJson: string): Promise<void>
+  /** Delete cookies by name (optional domain/path). */
+  deleteCookies(name: string, domain?: string | undefined | null, path?: string | undefined | null): Promise<void>
+  /** Clear all browser cookies. */
+  clearCookies(): Promise<void>
+  /** Press a key (keyDown + keyUp). */
+  pressKey(key: string): Promise<void>
+  /** Send a keyboard shortcut (e.g., "Control+a", "Meta+c"). */
+  keyboardShortcut(shortcut: string): Promise<void>
+  /** Hold a key down. */
+  keyDown(key: string): Promise<void>
+  /** Release a key. */
+  keyUp(key: string): Promise<void>
+  /** Fill an input field (clear + set value + fire events). */
+  fill(selector: string, value: string): Promise<void>
+  /** Drag an element and drop onto another (CSS selectors). */
+  dragAndDrop(source: string, target: string): Promise<void>
+  /** Upload files to a `<input type="file">` element. */
+  uploadFile(selector: string, filePaths: Array<string>): Promise<void>
+  /** Get the bounding box of an element. Returns { x, y, width, height }. */
+  boundingBox(selector: string): Promise<string>
+  /** Tap an element (touch simulation). */
+  tap(selector: string): Promise<void>
 }
 
 /** Encrypted key-value store backed by sled + AES-256-GCM. */

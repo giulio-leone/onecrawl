@@ -471,6 +471,107 @@ impl Browser {
         *guard = None;
         Ok(())
     }
+
+    // ──────────────── Cookie Management ────────────────
+
+    /// Get all cookies (including httpOnly) via CDP. Returns JSON string.
+    fn get_cookies(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let cookies = self.rt.block_on(onecrawl_cdp::cookie::get_all_cookies(page)).map_err(py_err)?;
+        serde_json::to_string(&cookies).map_err(py_err)
+    }
+
+    /// Set a cookie. Accepts a JSON string of cookie params.
+    fn set_cookie(&self, params_json: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let params: onecrawl_cdp::SetCookieParams = serde_json::from_str(params_json)
+            .map_err(|e| py_err(format!("invalid cookie params: {e}")))?;
+        self.rt.block_on(onecrawl_cdp::cookie::set_cookie(page, &params)).map_err(py_err)
+    }
+
+    /// Delete cookies by name (optional domain/path).
+    #[pyo3(signature = (name, domain=None, path=None))]
+    fn delete_cookies(&self, name: &str, domain: Option<&str>, path: Option<&str>) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::cookie::delete_cookies(page, name, domain, path)).map_err(py_err)
+    }
+
+    /// Clear all browser cookies.
+    fn clear_cookies(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::cookie::clear_cookies(page)).map_err(py_err)
+    }
+
+    // ──────────────── Keyboard ────────────────
+
+    /// Press a key (keyDown + keyUp).
+    fn press_key(&self, key: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::keyboard::press_key(page, key)).map_err(py_err)
+    }
+
+    /// Send a keyboard shortcut (e.g., "Control+a", "Meta+c").
+    fn keyboard_shortcut(&self, shortcut: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::keyboard::keyboard_shortcut(page, shortcut)).map_err(py_err)
+    }
+
+    /// Hold a key down.
+    fn key_down(&self, key: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::keyboard::key_down(page, key)).map_err(py_err)
+    }
+
+    /// Release a key.
+    fn key_up(&self, key: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::keyboard::key_up(page, key)).map_err(py_err)
+    }
+
+    /// Fill an input field (clear + set value + fire events).
+    fn fill(&self, selector: &str, value: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::keyboard::fill(page, selector, value)).map_err(py_err)
+    }
+
+    // ──────────────── Advanced Input ────────────────
+
+    /// Drag an element and drop onto another (CSS selectors).
+    fn drag_and_drop(&self, source: &str, target: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::input::drag_and_drop(page, source, target)).map_err(py_err)
+    }
+
+    /// Upload files to a `<input type="file">` element.
+    fn upload_file(&self, selector: &str, file_paths: Vec<String>) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::input::set_file_input(page, selector, &file_paths)).map_err(py_err)
+    }
+
+    /// Get bounding box of an element. Returns (x, y, width, height).
+    fn bounding_box(&self, selector: &str) -> PyResult<(f64, f64, f64, f64)> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::input::bounding_box(page, selector)).map_err(py_err)
+    }
+
+    /// Tap an element (touch simulation).
+    fn tap(&self, selector: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::input::tap(page, selector)).map_err(py_err)
+    }
 }
 
 // ──────────────────────────── Module ────────────────────────────
