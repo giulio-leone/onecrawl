@@ -572,6 +572,73 @@ impl Browser {
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
         self.rt.block_on(onecrawl_cdp::input::tap(page, selector)).map_err(py_err)
     }
+
+    // ──── Emulation ────
+
+    /// Set viewport dimensions and device emulation.
+    #[pyo3(signature = (width, height, device_scale_factor=None, is_mobile=None, has_touch=None))]
+    fn set_viewport(
+        &self,
+        width: u32,
+        height: u32,
+        device_scale_factor: Option<f64>,
+        is_mobile: Option<bool>,
+        has_touch: Option<bool>,
+    ) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let vp = onecrawl_cdp::emulation::Viewport {
+            width,
+            height,
+            device_scale_factor: device_scale_factor.unwrap_or(1.0),
+            is_mobile: is_mobile.unwrap_or(false),
+            has_touch: has_touch.unwrap_or(false),
+        };
+        self.rt.block_on(onecrawl_cdp::emulation::set_viewport(page, &vp)).map_err(py_err)
+    }
+
+    /// Set viewport from a device preset name.
+    fn set_device(&self, device: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let vp = match device.to_lowercase().as_str() {
+            "desktop" => onecrawl_cdp::emulation::Viewport::desktop(),
+            "iphone14" | "iphone_14" | "iphone" => onecrawl_cdp::emulation::Viewport::iphone_14(),
+            "ipad" => onecrawl_cdp::emulation::Viewport::ipad(),
+            "pixel7" | "pixel_7" | "pixel" => onecrawl_cdp::emulation::Viewport::pixel_7(),
+            _ => return Err(py_err(format!("Unknown device: {device}"))),
+        };
+        self.rt.block_on(onecrawl_cdp::emulation::set_viewport(page, &vp)).map_err(py_err)
+    }
+
+    /// Clear viewport override.
+    fn clear_viewport(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::emulation::clear_viewport(page)).map_err(py_err)
+    }
+
+    /// Override user agent string.
+    fn set_user_agent(&self, user_agent: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::emulation::set_user_agent(page, user_agent)).map_err(py_err)
+    }
+
+    /// Set geolocation override.
+    #[pyo3(signature = (latitude, longitude, accuracy=None))]
+    fn set_geolocation(&self, latitude: f64, longitude: f64, accuracy: Option<f64>) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::emulation::set_geolocation(page, latitude, longitude, accuracy.unwrap_or(1.0))).map_err(py_err)
+    }
+
+    /// Emulate color scheme preference (dark/light).
+    fn set_color_scheme(&self, scheme: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::emulation::set_color_scheme(page, scheme)).map_err(py_err)
+    }
 }
 
 // ──────────────────────────── Module ────────────────────────────

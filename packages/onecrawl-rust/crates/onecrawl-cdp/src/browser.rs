@@ -13,7 +13,6 @@ impl BrowserSession {
     pub async fn launch_headless() -> Result<Self> {
         Self::launch_with_config(
             BrowserConfig::builder()
-                .with_head()
                 .build()
                 .map_err(|e| Error::Browser(format!("config error: {e}")))?,
             false,
@@ -25,6 +24,7 @@ impl BrowserSession {
     pub async fn launch_headed() -> Result<Self> {
         Self::launch_with_config(
             BrowserConfig::builder()
+                .with_head()
                 .build()
                 .map_err(|e| Error::Browser(format!("config error: {e}")))?,
             true,

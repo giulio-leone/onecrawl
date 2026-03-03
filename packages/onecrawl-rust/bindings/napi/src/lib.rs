@@ -777,4 +777,87 @@ impl NativeBrowser {
             .await
             .map_err(|e| Error::from_reason(e.to_string()))
     }
+
+    // ──── Emulation ────
+
+    /// Set viewport dimensions and device emulation.
+    #[napi]
+    pub async fn set_viewport(
+        &self,
+        width: u32,
+        height: u32,
+        device_scale_factor: Option<f64>,
+        is_mobile: Option<bool>,
+        has_touch: Option<bool>,
+    ) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        let vp = onecrawl_cdp::emulation::Viewport {
+            width,
+            height,
+            device_scale_factor: device_scale_factor.unwrap_or(1.0),
+            is_mobile: is_mobile.unwrap_or(false),
+            has_touch: has_touch.unwrap_or(false),
+        };
+        onecrawl_cdp::emulation::set_viewport(page, &vp)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Set viewport from a device preset name (desktop, iphone14, ipad, pixel7).
+    #[napi]
+    pub async fn set_device(&self, device: String) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        let vp = match device.to_lowercase().as_str() {
+            "desktop" => onecrawl_cdp::emulation::Viewport::desktop(),
+            "iphone14" | "iphone_14" | "iphone" => onecrawl_cdp::emulation::Viewport::iphone_14(),
+            "ipad" => onecrawl_cdp::emulation::Viewport::ipad(),
+            "pixel7" | "pixel_7" | "pixel" => onecrawl_cdp::emulation::Viewport::pixel_7(),
+            _ => return Err(Error::from_reason(format!("Unknown device: {device}"))),
+        };
+        onecrawl_cdp::emulation::set_viewport(page, &vp)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Clear viewport override (revert to browser defaults).
+    #[napi]
+    pub async fn clear_viewport(&self) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::emulation::clear_viewport(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Override the browser user agent string.
+    #[napi]
+    pub async fn set_user_agent(&self, user_agent: String) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::emulation::set_user_agent(page, &user_agent)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Set geolocation override.
+    #[napi]
+    pub async fn set_geolocation(&self, latitude: f64, longitude: f64, accuracy: Option<f64>) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::emulation::set_geolocation(page, latitude, longitude, accuracy.unwrap_or(1.0))
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Emulate color scheme preference (dark/light).
+    #[napi]
+    pub async fn set_color_scheme(&self, scheme: String) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::emulation::set_color_scheme(page, &scheme)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
 }

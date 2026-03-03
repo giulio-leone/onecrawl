@@ -106,6 +106,18 @@ export declare class NativeBrowser {
   boundingBox(selector: string): Promise<string>
   /** Tap an element (touch simulation). */
   tap(selector: string): Promise<void>
+  /** Set viewport dimensions and device emulation. */
+  setViewport(width: number, height: number, deviceScaleFactor?: number | undefined | null, isMobile?: boolean | undefined | null, hasTouch?: boolean | undefined | null): Promise<void>
+  /** Set viewport from a device preset name (desktop, iphone14, ipad, pixel7). */
+  setDevice(device: string): Promise<void>
+  /** Clear viewport override (revert to browser defaults). */
+  clearViewport(): Promise<void>
+  /** Override the browser user agent string. */
+  setUserAgent(userAgent: string): Promise<void>
+  /** Set geolocation override. */
+  setGeolocation(latitude: number, longitude: number, accuracy?: number | undefined | null): Promise<void>
+  /** Emulate color scheme preference (dark/light). */
+  setColorScheme(scheme: string): Promise<void>
 }
 
 /** Encrypted key-value store backed by sled + AES-256-GCM. */
