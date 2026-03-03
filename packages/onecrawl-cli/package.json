@@ -15,7 +15,8 @@
     "stealth.js",
     "stealth-init.js",
     "ghost-click.js",
-    "skills"
+    "skills",
+    "lib/"
   ],
   "engines": {
     "node": ">=18"
@@ -38,6 +39,7 @@
     "token-efficient"
   ],
   "dependencies": {
+    "minimist": "^1.2.8",
     "playwright": "1.59.0-alpha-2026-02-25"
   }
 }
