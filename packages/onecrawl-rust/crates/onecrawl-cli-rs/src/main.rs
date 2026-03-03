@@ -381,6 +381,27 @@ enum Commands {
         action: ScreenshotDiffAction,
     },
 
+    // ── Geofencing ──────────────────────────────────────────────────
+    /// Virtual geolocation profiles
+    Geo {
+        #[command(subcommand)]
+        action: GeoAction,
+    },
+
+    // ── Cookie Jar ──────────────────────────────────────────────────
+    /// Persistent cookie jar operations
+    CookieJar {
+        #[command(subcommand)]
+        action: CookieJarAction,
+    },
+
+    // ── Request Queue ───────────────────────────────────────────────
+    /// Queued request execution with retry
+    Request {
+        #[command(subcommand)]
+        action: RequestAction,
+    },
+
     // ── Offline Commands ────────────────────────────────────────────
     /// Crypto operations
     Crypto {
@@ -428,6 +449,56 @@ enum BenchAction {
         /// Output format: table or json
         #[arg(short, long, default_value = "table")]
         format: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum GeoAction {
+    /// Apply a geo profile by preset name or JSON
+    Apply {
+        /// Preset name (e.g. "new york") or JSON GeoProfile
+        profile: String,
+    },
+    /// List available geo presets
+    Presets,
+    /// Get current geolocation as seen by the page
+    Current,
+}
+
+#[derive(Subcommand)]
+enum CookieJarAction {
+    /// Export all cookies to stdout or file
+    Export {
+        /// Output file path (prints to stdout if omitted)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+    /// Import cookies from a file
+    Import {
+        /// Cookie jar JSON file path
+        path: String,
+    },
+    /// Clear all cookies
+    Clear,
+}
+
+#[derive(Subcommand)]
+enum RequestAction {
+    /// Execute a single request (JSON QueuedRequest)
+    Execute {
+        /// JSON QueuedRequest
+        json: String,
+    },
+    /// Execute a batch of requests (JSON array)
+    Batch {
+        /// JSON array of QueuedRequest
+        json: String,
+        /// Concurrency limit
+        #[arg(short, long, default_value = "3")]
+        concurrency: usize,
+        /// Delay between requests in ms
+        #[arg(short, long, default_value = "100")]
+        delay: u64,
     },
 }
 
@@ -1260,6 +1331,38 @@ async fn main() {
             }
             ScreenshotDiffAction::Regression { baseline_path } => {
                 commands::browser::screenshot_diff_regression(&baseline_path).await
+            }
+        },
+
+        // ── Geofencing ─────────────────────────────────────────────
+        Commands::Geo { action } => match action {
+            GeoAction::Apply { profile } => commands::browser::geo_apply(&profile).await,
+            GeoAction::Presets => commands::browser::geo_presets().await,
+            GeoAction::Current => commands::browser::geo_current().await,
+        },
+
+        // ── Cookie Jar ─────────────────────────────────────────────
+        Commands::CookieJar { action } => match action {
+            CookieJarAction::Export { output } => {
+                commands::browser::cookie_jar_export(output.as_deref()).await
+            }
+            CookieJarAction::Import { path } => {
+                commands::browser::cookie_jar_import(&path).await
+            }
+            CookieJarAction::Clear => commands::browser::cookie_jar_clear().await,
+        },
+
+        // ── Request Queue ──────────────────────────────────────────
+        Commands::Request { action } => match action {
+            RequestAction::Execute { json } => {
+                commands::browser::request_execute(&json).await
+            }
+            RequestAction::Batch {
+                json,
+                concurrency,
+                delay,
+            } => {
+                commands::browser::request_batch(&json, concurrency, delay).await
             }
         },
 

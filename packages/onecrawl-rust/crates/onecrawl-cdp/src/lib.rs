@@ -38,6 +38,9 @@ pub mod web_storage;
 pub mod webauthn;
 pub mod websocket;
 pub mod workers;
+pub mod geofencing;
+pub mod cookie_jar;
+pub mod request_queue;
 
 pub use accessibility::AccessibilityAudit;
 pub use benchmark::{BenchmarkResult, BenchmarkSuite};
@@ -67,6 +70,9 @@ pub use webauthn::{VirtualAuthenticator, VirtualCredential};
 pub use tabs::TabInfo;
 pub use downloads::DownloadInfo;
 pub use screenshot_diff::DiffResult;
+pub use geofencing::GeoProfile;
+pub use cookie_jar::{CookieJar, StoredCookie};
+pub use request_queue::{QueuedRequest, RequestResult, QueueConfig};
 
 // Re-export chromiumoxide::Page for downstream consumers
 pub use chromiumoxide::Page;

@@ -1717,6 +1717,149 @@ impl NativeBrowser {
         let suite = onecrawl_cdp::benchmark::run_cdp_benchmarks(page, iters).await;
         serde_json::to_string(&suite).map_err(|e| Error::from_reason(e.to_string()))
     }
+
+    // ──────────────── Geofencing ────────────────
+
+    /// Apply a geo profile. Accepts a JSON string of GeoProfile.
+    #[napi(js_name = "applyGeoProfile")]
+    pub async fn apply_geo_profile(&self, profile: String) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let p: onecrawl_cdp::GeoProfile = serde_json::from_str(&profile)
+            .map_err(|e| Error::from_reason(format!("invalid geo profile: {e}")))?;
+        onecrawl_cdp::geofencing::apply_geo_profile(page, &p)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// List available geo preset names.
+    #[napi(js_name = "listGeoPresets")]
+    pub fn list_geo_presets(&self) -> Vec<String> {
+        onecrawl_cdp::geofencing::list_presets()
+    }
+
+    /// Get a geo preset by name. Returns JSON string of GeoProfile or null.
+    #[napi(js_name = "getGeoPreset")]
+    pub fn get_geo_preset(&self, name: String) -> Option<String> {
+        onecrawl_cdp::geofencing::get_preset(&name)
+            .map(|p| serde_json::to_string(&p).unwrap_or_default())
+    }
+
+    /// Get current geolocation as seen by the page. Returns JSON string.
+    #[napi(js_name = "getCurrentGeo")]
+    pub async fn get_current_geo(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let val = onecrawl_cdp::geofencing::get_current_geo(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&val).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Cookie Jar ────────────────
+
+    /// Export all cookies as a JSON CookieJar string.
+    #[napi(js_name = "exportCookies")]
+    pub async fn export_cookies(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let jar = onecrawl_cdp::cookie_jar::export_cookies(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&jar).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Import cookies from a JSON CookieJar string. Returns count imported.
+    #[napi(js_name = "importCookies")]
+    pub async fn import_cookies(&self, jar: String) -> Result<u32> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let cookie_jar: onecrawl_cdp::CookieJar = serde_json::from_str(&jar)
+            .map_err(|e| Error::from_reason(format!("invalid cookie jar: {e}")))?;
+        let count = onecrawl_cdp::cookie_jar::import_cookies(page, &cookie_jar)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(count as u32)
+    }
+
+    /// Save cookies to a file. Returns count saved.
+    #[napi(js_name = "saveCookiesToFile")]
+    pub async fn save_cookies_to_file(&self, path: String) -> Result<u32> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let count = onecrawl_cdp::cookie_jar::save_cookies_to_file(page, std::path::Path::new(&path))
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(count as u32)
+    }
+
+    /// Load cookies from a file. Returns count loaded.
+    #[napi(js_name = "loadCookiesFromFile")]
+    pub async fn load_cookies_from_file(&self, path: String) -> Result<u32> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let count = onecrawl_cdp::cookie_jar::load_cookies_from_file(page, std::path::Path::new(&path))
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(count as u32)
+    }
+
+    /// Clear all cookies via cookie_jar module.
+    #[napi(js_name = "clearAllCookies")]
+    pub async fn clear_all_cookies(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::cookie_jar::clear_all_cookies(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Request Queue ────────────────
+
+    /// Execute a single request with retry. Accepts JSON QueuedRequest. Returns JSON RequestResult.
+    #[napi(js_name = "executeRequest")]
+    pub async fn execute_request(&self, request: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let req: onecrawl_cdp::QueuedRequest = serde_json::from_str(&request)
+            .map_err(|e| Error::from_reason(format!("invalid request: {e}")))?;
+        let result = onecrawl_cdp::request_queue::execute_request(page, &req)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Execute a batch of requests. Accepts JSON array of QueuedRequest + optional JSON QueueConfig.
+    #[napi(js_name = "executeBatch")]
+    pub async fn execute_batch(&self, requests: String, config: Option<String>) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let reqs: Vec<onecrawl_cdp::QueuedRequest> = serde_json::from_str(&requests)
+            .map_err(|e| Error::from_reason(format!("invalid requests: {e}")))?;
+        let cfg: onecrawl_cdp::QueueConfig = match config {
+            Some(c) => serde_json::from_str(&c)
+                .map_err(|e| Error::from_reason(format!("invalid config: {e}")))?,
+            None => onecrawl_cdp::QueueConfig::default(),
+        };
+        let results = onecrawl_cdp::request_queue::execute_batch(page, &reqs, &cfg)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&results).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Create a GET request. Returns JSON QueuedRequest.
+    #[napi(js_name = "createGetRequest")]
+    pub fn create_get_request(&self, id: String, url: String) -> String {
+        let req = onecrawl_cdp::request_queue::get_request(&id, &url);
+        serde_json::to_string(&req).unwrap_or_default()
+    }
+
+    /// Create a POST request. Returns JSON QueuedRequest.
+    #[napi(js_name = "createPostRequest")]
+    pub fn create_post_request(&self, id: String, url: String, body: String) -> String {
+        let req = onecrawl_cdp::request_queue::post_request(&id, &url, &body);
+        serde_json::to_string(&req).unwrap_or_default()
+    }
 }
 
 fn parse_network_profile(name: &str) -> std::result::Result<onecrawl_cdp::NetworkProfile, String> {

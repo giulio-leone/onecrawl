@@ -1920,3 +1920,127 @@ pub async fn bench_report(format: &str) {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Geofencing
+// ---------------------------------------------------------------------------
+
+pub async fn geo_apply(profile: &str) {
+    let profile = profile.to_string();
+    with_page(|page| async move {
+        let geo: onecrawl_cdp::GeoProfile = if let Some(p) = onecrawl_cdp::geofencing::get_preset(&profile) {
+            p
+        } else {
+            serde_json::from_str(&profile).map_err(|e| format!("Invalid profile name or JSON: {e}"))?
+        };
+        onecrawl_cdp::geofencing::apply_geo_profile(&page, &geo)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Geo profile '{}' applied (lat={}, lng={})", "✓".green(), geo.name, geo.latitude, geo.longitude);
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn geo_presets() {
+    let presets = onecrawl_cdp::geofencing::list_presets();
+    for name in &presets {
+        if let Some(p) = onecrawl_cdp::geofencing::get_preset(name) {
+            println!("  {} — lat={:.4}, lng={:.4}, tz={}", name.green(), p.latitude, p.longitude, p.timezone);
+        }
+    }
+}
+
+pub async fn geo_current() {
+    with_page(|page| async move {
+        let val = onecrawl_cdp::geofencing::get_current_geo(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&val).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Cookie Jar
+// ---------------------------------------------------------------------------
+
+pub async fn cookie_jar_export(output: Option<&str>) {
+    let output = output.map(String::from);
+    with_page(|page| async move {
+        if let Some(path) = output {
+            let count = onecrawl_cdp::cookie_jar::save_cookies_to_file(&page, std::path::Path::new(&path))
+                .await
+                .map_err(|e| e.to_string())?;
+            println!("{} Exported {} cookies to {}", "✓".green(), count, path);
+        } else {
+            let jar = onecrawl_cdp::cookie_jar::export_cookies(&page)
+                .await
+                .map_err(|e| e.to_string())?;
+            println!("{}", serde_json::to_string_pretty(&jar).unwrap_or_default());
+        }
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn cookie_jar_import(path: &str) {
+    let path = path.to_string();
+    with_page(|page| async move {
+        let count = onecrawl_cdp::cookie_jar::load_cookies_from_file(&page, std::path::Path::new(&path))
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Imported {} cookies from {}", "✓".green(), count, path);
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn cookie_jar_clear() {
+    with_page(|page| async move {
+        onecrawl_cdp::cookie_jar::clear_all_cookies(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} All cookies cleared (cookie jar)", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Request Queue
+// ---------------------------------------------------------------------------
+
+pub async fn request_execute(json: &str) {
+    let json = json.to_string();
+    with_page(|page| async move {
+        let req: onecrawl_cdp::QueuedRequest = serde_json::from_str(&json)
+            .map_err(|e| format!("Invalid request JSON: {e}"))?;
+        let result = onecrawl_cdp::request_queue::execute_request(&page, &req)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn request_batch(json: &str, concurrency: usize, delay: u64) {
+    let json = json.to_string();
+    with_page(|page| async move {
+        let reqs: Vec<onecrawl_cdp::QueuedRequest> = serde_json::from_str(&json)
+            .map_err(|e| format!("Invalid requests JSON: {e}"))?;
+        let config = onecrawl_cdp::QueueConfig {
+            concurrency,
+            delay_between_ms: delay,
+            ..Default::default()
+        };
+        let results = onecrawl_cdp::request_queue::execute_batch(&page, &reqs, &config)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&results).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}

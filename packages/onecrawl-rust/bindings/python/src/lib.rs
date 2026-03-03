@@ -1285,6 +1285,117 @@ impl Browser {
         let suite = self.rt.block_on(onecrawl_cdp::benchmark::run_cdp_benchmarks(page, iterations));
         serde_json::to_string(&suite).map_err(py_err)
     }
+
+    // ──────────────── Geofencing ────────────────
+
+    /// Apply a geo profile. Accepts JSON string of GeoProfile.
+    fn apply_geo_profile(&self, profile: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let p: onecrawl_cdp::GeoProfile = serde_json::from_str(profile)
+            .map_err(|e| py_err(format!("invalid geo profile: {e}")))?;
+        self.rt.block_on(onecrawl_cdp::geofencing::apply_geo_profile(page, &p)).map_err(py_err)
+    }
+
+    /// List available geo preset names.
+    fn list_geo_presets(&self) -> Vec<String> {
+        onecrawl_cdp::geofencing::list_presets()
+    }
+
+    /// Get a geo preset by name. Returns JSON string or None.
+    #[pyo3(signature = (name,))]
+    fn get_geo_preset(&self, name: &str) -> Option<String> {
+        onecrawl_cdp::geofencing::get_preset(name)
+            .map(|p| serde_json::to_string(&p).unwrap_or_default())
+    }
+
+    /// Get current geolocation as seen by the page. Returns JSON string.
+    fn get_current_geo(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let val = self.rt.block_on(onecrawl_cdp::geofencing::get_current_geo(page)).map_err(py_err)?;
+        serde_json::to_string(&val).map_err(py_err)
+    }
+
+    // ──────────────── Cookie Jar ────────────────
+
+    /// Export all cookies as a JSON CookieJar string.
+    fn export_cookies(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let jar = self.rt.block_on(onecrawl_cdp::cookie_jar::export_cookies(page)).map_err(py_err)?;
+        serde_json::to_string(&jar).map_err(py_err)
+    }
+
+    /// Import cookies from a JSON CookieJar string. Returns count imported.
+    fn import_cookies(&self, jar: &str) -> PyResult<usize> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let cookie_jar: onecrawl_cdp::CookieJar = serde_json::from_str(jar)
+            .map_err(|e| py_err(format!("invalid cookie jar: {e}")))?;
+        self.rt.block_on(onecrawl_cdp::cookie_jar::import_cookies(page, &cookie_jar)).map_err(py_err)
+    }
+
+    /// Save cookies to a file. Returns count saved.
+    fn save_cookies_to_file(&self, path: &str) -> PyResult<usize> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::cookie_jar::save_cookies_to_file(page, std::path::Path::new(path))).map_err(py_err)
+    }
+
+    /// Load cookies from a file. Returns count loaded.
+    fn load_cookies_from_file(&self, path: &str) -> PyResult<usize> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::cookie_jar::load_cookies_from_file(page, std::path::Path::new(path))).map_err(py_err)
+    }
+
+    /// Clear all cookies via cookie_jar module.
+    fn clear_all_cookies(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::cookie_jar::clear_all_cookies(page)).map_err(py_err)
+    }
+
+    // ──────────────── Request Queue ────────────────
+
+    /// Execute a single request with retry. Accepts JSON QueuedRequest. Returns JSON RequestResult.
+    fn execute_request(&self, request: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let req: onecrawl_cdp::QueuedRequest = serde_json::from_str(request)
+            .map_err(|e| py_err(format!("invalid request: {e}")))?;
+        let result = self.rt.block_on(onecrawl_cdp::request_queue::execute_request(page, &req)).map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Execute a batch of requests. Accepts JSON array + optional JSON config. Returns JSON array.
+    #[pyo3(signature = (requests, config=None))]
+    fn execute_batch(&self, requests: &str, config: Option<&str>) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let reqs: Vec<onecrawl_cdp::QueuedRequest> = serde_json::from_str(requests)
+            .map_err(|e| py_err(format!("invalid requests: {e}")))?;
+        let cfg: onecrawl_cdp::QueueConfig = match config {
+            Some(c) => serde_json::from_str(c)
+                .map_err(|e| py_err(format!("invalid config: {e}")))?,
+            None => onecrawl_cdp::QueueConfig::default(),
+        };
+        let results = self.rt.block_on(onecrawl_cdp::request_queue::execute_batch(page, &reqs, &cfg)).map_err(py_err)?;
+        serde_json::to_string(&results).map_err(py_err)
+    }
+
+    /// Create a GET request. Returns JSON QueuedRequest.
+    fn create_get_request(&self, id: &str, url: &str) -> String {
+        let req = onecrawl_cdp::request_queue::get_request(id, url);
+        serde_json::to_string(&req).unwrap_or_default()
+    }
+
+    /// Create a POST request. Returns JSON QueuedRequest.
+    fn create_post_request(&self, id: &str, url: &str, body: &str) -> String {
+        let req = onecrawl_cdp::request_queue::post_request(id, url, body);
+        serde_json::to_string(&req).unwrap_or_default()
+    }
 }
 
 // ──────────────────────────── Module ────────────────────────────

@@ -257,6 +257,32 @@ export declare class NativeBrowser {
   getNavigatorInfo(): Promise<string>
   /** Run the CDP benchmark suite. Returns JSON string of BenchmarkSuite. */
   runBenchmark(iterations?: number | undefined | null): Promise<string>
+  /** Apply a geo profile. Accepts a JSON string of GeoProfile. */
+  applyGeoProfile(profile: string): Promise<void>
+  /** List available geo preset names. */
+  listGeoPresets(): Array<string>
+  /** Get a geo preset by name. Returns JSON string of GeoProfile or null. */
+  getGeoPreset(name: string): string | null
+  /** Get current geolocation as seen by the page. Returns JSON string. */
+  getCurrentGeo(): Promise<string>
+  /** Export all cookies as a JSON CookieJar string. */
+  exportCookies(): Promise<string>
+  /** Import cookies from a JSON CookieJar string. Returns count imported. */
+  importCookies(jar: string): Promise<number>
+  /** Save cookies to a file. Returns count saved. */
+  saveCookiesToFile(path: string): Promise<number>
+  /** Load cookies from a file. Returns count loaded. */
+  loadCookiesFromFile(path: string): Promise<number>
+  /** Clear all cookies via cookie_jar module. */
+  clearAllCookies(): Promise<void>
+  /** Execute a single request with retry. Accepts JSON QueuedRequest. Returns JSON RequestResult. */
+  executeRequest(request: string): Promise<string>
+  /** Execute a batch of requests. Accepts JSON array of QueuedRequest + optional JSON QueueConfig. */
+  executeBatch(requests: string, config?: string | undefined | null): Promise<string>
+  /** Create a GET request. Returns JSON QueuedRequest. */
+  createGetRequest(id: string, url: string): string
+  /** Create a POST request. Returns JSON QueuedRequest. */
+  createPostRequest(id: string, url: string, body: string): string
 }
 
 /** Encrypted key-value store backed by sled + AES-256-GCM. */
