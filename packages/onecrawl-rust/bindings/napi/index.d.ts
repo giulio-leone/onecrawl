@@ -333,6 +333,54 @@ export declare class NativeBrowser {
   stopPageWatcher(): Promise<void>
   /** Get current page state snapshot as JSON string. */
   getPageState(): Promise<string>
+  /** Run a crawl. Accepts SpiderConfig as JSON, returns Vec<CrawlResult> as JSON. */
+  crawl(configJson: string): Promise<string>
+  /** Compute crawl summary from results JSON. */
+  crawlSummary(resultsJson: string): string
+  /** Save crawl state to a JSON file. */
+  saveCrawlState(stateJson: string, path: string): void
+  /** Load crawl state from a JSON file. */
+  loadCrawlState(path: string): string
+  /** Export crawl results to file. Format: "json" (default) or "jsonl". */
+  exportCrawlResults(resultsJson: string, path: string, format?: string | undefined | null): number
+  /** Inject full stealth anti-bot patches. Returns JSON array of applied patch names. */
+  injectStealthFull(): Promise<string>
+  /** Run bot detection tests. Returns JSON object with scores. */
+  botDetectionTest(): Promise<string>
+  /** Get available stealth profiles. Returns JSON array. */
+  stealthProfiles(): string
+  /** Fingerprint a DOM element by CSS selector. Returns JSON. */
+  fingerprintElement(selector: string): Promise<string>
+  /** Relocate an element using a previously captured fingerprint (JSON). Returns JSON matches. */
+  relocateElement(fingerprint: string): Promise<string>
+  /** Track multiple elements by CSS selectors (JSON array). Optionally save to path. */
+  trackElements(selectors: string, savePath?: string | undefined | null): Promise<string>
+  /** Relocate all fingerprints (JSON array). Returns JSON array of (selector, matches). */
+  relocateAll(fingerprints: string): Promise<string>
+  /** Save fingerprints JSON to a file path. */
+  saveFingerprints(fingerprints: string, path: string): void
+  /** Load fingerprints from a file path. Returns JSON array. */
+  loadFingerprints(path: string): string
+  /** Block a list of domains (JSON array). Returns total blocked count. */
+  blockDomains(domains: string): Promise<number>
+  /** Block domains by category (ads, trackers, social, fonts, media). Returns total count. */
+  blockCategory(category: string): Promise<number>
+  /** Get blocking statistics as JSON. */
+  blockStats(): Promise<string>
+  /** Clear all blocked domains. */
+  clearBlocks(): Promise<void>
+  /** List currently blocked domains as JSON array. */
+  listBlocked(): Promise<string>
+  /** Get available block categories and their domain counts as JSON. */
+  availableBlockCategories(): string
+  /** Parse a shell command string. Returns JSON. */
+  shellParse(input: string): string
+  /** Get available shell commands. Returns JSON. */
+  shellCommands(): string
+  /** Save shell history (JSON) to file. */
+  shellSaveHistory(history: string, path: string): void
+  /** Load shell history from file. Returns JSON. */
+  shellLoadHistory(path: string): string
 }
 
 /** Encrypted key-value store backed by sled + AES-256-GCM. */

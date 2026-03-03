@@ -2064,6 +2064,245 @@ impl Browser {
             .map_err(py_err)?;
         serde_json::to_string(&state).map_err(py_err)
     }
+
+    // ── Spider / Crawl ─────────────────────────────────────────────
+
+    /// Run a crawl. Accepts SpiderConfig as JSON, returns Vec<CrawlResult> as JSON.
+    fn crawl(&self, config_json: &str) -> PyResult<String> {
+        let config: onecrawl_cdp::SpiderConfig =
+            serde_json::from_str(config_json).map_err(py_err)?;
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let results = self
+            .rt
+            .block_on(onecrawl_cdp::spider::crawl(page, config))
+            .map_err(py_err)?;
+        serde_json::to_string(&results).map_err(py_err)
+    }
+
+    /// Compute crawl summary from results JSON.
+    fn crawl_summary(&self, results_json: &str) -> PyResult<String> {
+        let results: Vec<onecrawl_cdp::CrawlResult> =
+            serde_json::from_str(results_json).map_err(py_err)?;
+        let summary = onecrawl_cdp::spider::summarize(&results);
+        serde_json::to_string(&summary).map_err(py_err)
+    }
+
+    /// Save crawl state to a JSON file.
+    fn save_crawl_state(&self, state_json: &str, path: &str) -> PyResult<()> {
+        let state: onecrawl_cdp::CrawlState =
+            serde_json::from_str(state_json).map_err(py_err)?;
+        onecrawl_cdp::spider::save_state(&state, std::path::Path::new(path)).map_err(py_err)
+    }
+
+    /// Load crawl state from a JSON file.
+    fn load_crawl_state(&self, path: &str) -> PyResult<String> {
+        let state =
+            onecrawl_cdp::spider::load_state(std::path::Path::new(path)).map_err(py_err)?;
+        serde_json::to_string(&state).map_err(py_err)
+    }
+
+    /// Export crawl results to file. Format: "json" (default) or "jsonl".
+    fn export_crawl_results(
+        &self,
+        results_json: &str,
+        path: &str,
+        format: Option<&str>,
+    ) -> PyResult<usize> {
+        let results: Vec<onecrawl_cdp::CrawlResult> =
+            serde_json::from_str(results_json).map_err(py_err)?;
+        let p = std::path::Path::new(path);
+        match format {
+            Some("jsonl") => onecrawl_cdp::spider::export_results_jsonl(&results, p).map_err(py_err),
+            _ => onecrawl_cdp::spider::export_results(&results, p).map_err(py_err),
+        }
+    }
+
+    // ── Anti-Bot ────────────────────────────────────────────────────
+
+    /// Inject full stealth anti-bot patches. Returns JSON array of applied patch names.
+    fn inject_stealth_full(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let applied = self
+            .rt
+            .block_on(onecrawl_cdp::antibot::inject_stealth_full(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&applied).map_err(py_err)
+    }
+
+    /// Run bot detection tests. Returns JSON object with scores.
+    fn bot_detection_test(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::antibot::bot_detection_test(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Get available stealth profiles. Returns JSON array.
+    fn stealth_profiles(&self) -> PyResult<String> {
+        let profiles = onecrawl_cdp::antibot::stealth_profiles();
+        serde_json::to_string(&profiles).map_err(py_err)
+    }
+
+    // ── Adaptive Element Tracker ────────────────────────────────────
+
+    /// Fingerprint a DOM element by CSS selector. Returns JSON.
+    fn fingerprint_element(&self, selector: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let fp = self
+            .rt
+            .block_on(onecrawl_cdp::adaptive::fingerprint_element(page, selector))
+            .map_err(py_err)?;
+        serde_json::to_string(&fp).map_err(py_err)
+    }
+
+    /// Relocate an element using a previously captured fingerprint (JSON). Returns JSON matches.
+    fn relocate_element(&self, fingerprint: &str) -> PyResult<String> {
+        let fp: onecrawl_cdp::ElementFingerprint =
+            serde_json::from_str(fingerprint).map_err(py_err)?;
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let matches = self
+            .rt
+            .block_on(onecrawl_cdp::adaptive::relocate_element(page, &fp))
+            .map_err(py_err)?;
+        serde_json::to_string(&matches).map_err(py_err)
+    }
+
+    /// Track multiple elements by CSS selectors (JSON array). Optionally save to path.
+    fn track_elements(&self, selectors: &str, save_path: Option<&str>) -> PyResult<String> {
+        let sels: Vec<String> = serde_json::from_str(selectors).map_err(py_err)?;
+        let sel_refs: Vec<&str> = sels.iter().map(|s| s.as_str()).collect();
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let path_buf = save_path.map(std::path::PathBuf::from);
+        let fps = self
+            .rt
+            .block_on(onecrawl_cdp::adaptive::track_elements(
+                page,
+                &sel_refs,
+                path_buf.as_deref(),
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&fps).map_err(py_err)
+    }
+
+    /// Relocate all fingerprints (JSON array). Returns JSON array of (selector, matches).
+    fn relocate_all(&self, fingerprints: &str) -> PyResult<String> {
+        let fps: Vec<onecrawl_cdp::ElementFingerprint> =
+            serde_json::from_str(fingerprints).map_err(py_err)?;
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let results = self
+            .rt
+            .block_on(onecrawl_cdp::adaptive::relocate_all(page, &fps))
+            .map_err(py_err)?;
+        serde_json::to_string(&results).map_err(py_err)
+    }
+
+    /// Save fingerprints JSON to a file path.
+    fn save_fingerprints(&self, fingerprints: &str, path: &str) -> PyResult<()> {
+        let fps: Vec<onecrawl_cdp::ElementFingerprint> =
+            serde_json::from_str(fingerprints).map_err(py_err)?;
+        onecrawl_cdp::adaptive::save_fingerprints(&fps, std::path::Path::new(path)).map_err(py_err)
+    }
+
+    /// Load fingerprints from a file path. Returns JSON array.
+    fn load_fingerprints(&self, path: &str) -> PyResult<String> {
+        let fps =
+            onecrawl_cdp::adaptive::load_fingerprints(std::path::Path::new(path)).map_err(py_err)?;
+        serde_json::to_string(&fps).map_err(py_err)
+    }
+
+    // ── Domain Blocker ────────────────────────────────────────────
+
+    /// Block a list of domains (JSON array). Returns total blocked count.
+    fn block_domains(&self, domains: &str) -> PyResult<usize> {
+        let list: Vec<String> = serde_json::from_str(domains).map_err(py_err)?;
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::domain_blocker::block_domains(page, &list))
+            .map_err(py_err)
+    }
+
+    /// Block domains by category (ads, trackers, social, fonts, media). Returns total count.
+    fn block_category(&self, category: &str) -> PyResult<usize> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::domain_blocker::block_category(page, category))
+            .map_err(py_err)
+    }
+
+    /// Get blocking statistics as JSON.
+    fn block_stats(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let stats = self
+            .rt
+            .block_on(onecrawl_cdp::domain_blocker::block_stats(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&stats).map_err(py_err)
+    }
+
+    /// Clear all blocked domains.
+    fn clear_blocks(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::domain_blocker::clear_blocks(page))
+            .map_err(py_err)
+    }
+
+    /// List currently blocked domains as JSON array.
+    fn list_blocked(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let domains = self
+            .rt
+            .block_on(onecrawl_cdp::domain_blocker::list_blocked(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&domains).map_err(py_err)
+    }
+
+    /// Get available block categories and their domain counts as JSON.
+    fn available_block_categories(&self) -> PyResult<String> {
+        let cats = onecrawl_cdp::domain_blocker::available_categories();
+        serde_json::to_string(&cats).map_err(py_err)
+    }
+
+    // ── Shell ─────────────────────────────────────────────────────
+
+    /// Parse a shell command string. Returns JSON.
+    fn shell_parse(&self, input: &str) -> PyResult<String> {
+        let cmd = onecrawl_cdp::shell::parse_command(input);
+        serde_json::to_string(&cmd).map_err(py_err)
+    }
+
+    /// Get available shell commands. Returns JSON.
+    fn shell_commands(&self) -> PyResult<String> {
+        let cmds = onecrawl_cdp::shell::available_commands();
+        serde_json::to_string(&cmds).map_err(py_err)
+    }
+
+    /// Save shell history (JSON) to file.
+    fn shell_save_history(&self, history: &str, path: &str) -> PyResult<()> {
+        let h: onecrawl_cdp::ShellHistory = serde_json::from_str(history).map_err(py_err)?;
+        onecrawl_cdp::shell::save_history(&h, std::path::Path::new(path)).map_err(py_err)
+    }
+
+    /// Load shell history from file. Returns JSON.
+    fn shell_load_history(&self, path: &str) -> PyResult<String> {
+        let h =
+            onecrawl_cdp::shell::load_history(std::path::Path::new(path)).map_err(py_err)?;
+        serde_json::to_string(&h).map_err(py_err)
+    }
 }
 
 // ──────────────────────────── Module ────────────────────────────

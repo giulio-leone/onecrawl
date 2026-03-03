@@ -1,0 +1,366 @@
+//! Spider/Crawler framework — lightweight, configurable web crawler
+//! using the existing CDP browser infrastructure.
+
+use chromiumoxide::Page;
+use onecrawl_core::Result;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+
+/// Configuration for a crawl session.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpiderConfig {
+    pub start_urls: Vec<String>,
+    pub max_depth: usize,
+    pub max_pages: usize,
+    pub concurrency: usize,
+    pub delay_ms: u64,
+    pub follow_links: bool,
+    pub same_domain_only: bool,
+    /// Substring patterns a URL must contain to be included (empty = allow all).
+    pub url_patterns: Vec<String>,
+    /// Substring patterns that cause a URL to be excluded.
+    pub exclude_patterns: Vec<String>,
+    /// Optional CSS selector to extract content from each page.
+    pub extract_selector: Option<String>,
+    /// Format for extracted content: "text", "html", "markdown", "json".
+    pub extract_format: String,
+    pub timeout_ms: u64,
+    pub user_agent: Option<String>,
+}
+
+impl Default for SpiderConfig {
+    fn default() -> Self {
+        Self {
+            start_urls: vec![],
+            max_depth: 3,
+            max_pages: 100,
+            concurrency: 3,
+            delay_ms: 500,
+            follow_links: true,
+            same_domain_only: true,
+            url_patterns: vec![],
+            exclude_patterns: vec![],
+            extract_selector: None,
+            extract_format: "text".to_string(),
+            timeout_ms: 30000,
+            user_agent: None,
+        }
+    }
+}
+
+/// Result of crawling a single page.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrawlResult {
+    pub url: String,
+    /// "success", "error", "timeout", "skipped"
+    pub status: String,
+    pub title: String,
+    pub depth: usize,
+    pub links_found: usize,
+    pub content: Option<String>,
+    pub error: Option<String>,
+    pub duration_ms: f64,
+    pub timestamp: f64,
+}
+
+/// Aggregate statistics for a completed crawl.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrawlSummary {
+    pub total_pages: usize,
+    pub successful: usize,
+    pub failed: usize,
+    pub skipped: usize,
+    pub total_links_found: usize,
+    pub total_duration_ms: f64,
+    pub pages_per_second: f64,
+    pub domain_stats: HashMap<String, usize>,
+}
+
+/// Serialisable crawl state for pause/resume.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CrawlState {
+    pub config: SpiderConfig,
+    pub visited: Vec<String>,
+    /// (url, depth)
+    pub pending: Vec<(String, usize)>,
+    pub results: Vec<CrawlResult>,
+    /// "running", "paused", "completed", "stopped"
+    pub status: String,
+}
+
+// ── helpers ────────────────────────────────────────────────────
+
+fn extract_domain(url_str: &str) -> String {
+    url_str
+        .split("://")
+        .nth(1)
+        .unwrap_or(url_str)
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .split(':')
+        .next()
+        .unwrap_or("")
+        .to_string()
+}
+
+fn now_epoch_ms() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f64()
+        * 1000.0
+}
+
+/// Returns `true` when the URL should be skipped (asset, mailto, etc.).
+fn is_non_page_url(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    if lower.starts_with("mailto:")
+        || lower.starts_with("tel:")
+        || lower.starts_with("javascript:")
+    {
+        return true;
+    }
+    let path = lower.split('?').next().unwrap_or(&lower);
+    let path = path.split('#').next().unwrap_or(path);
+    let asset_exts = [
+        ".jpg", ".jpeg", ".png", ".gif", ".svg", ".ico", ".css", ".js", ".woff", ".woff2",
+        ".ttf", ".eot", ".mp4", ".mp3", ".pdf", ".zip",
+    ];
+    asset_exts.iter().any(|ext| path.ends_with(ext))
+}
+
+/// Check whether `url` matches any exclude substring pattern.
+fn matches_exclude(url: &str, patterns: &[String]) -> bool {
+    let lower = url.to_ascii_lowercase();
+    patterns.iter().any(|p| lower.contains(&p.to_ascii_lowercase()))
+}
+
+/// Check whether `url` matches at least one include pattern (empty = allow all).
+fn matches_include(url: &str, patterns: &[String]) -> bool {
+    if patterns.is_empty() {
+        return true;
+    }
+    let lower = url.to_ascii_lowercase();
+    patterns.iter().any(|p| lower.contains(&p.to_ascii_lowercase()))
+}
+
+// ── public API ─────────────────────────────────────────────────
+
+/// Run a sequential crawl using the provided browser `page`.
+pub async fn crawl(page: &Page, config: SpiderConfig) -> Result<Vec<CrawlResult>> {
+    let mut visited: HashSet<String> = HashSet::new();
+    let mut queue: Vec<(String, usize)> =
+        config.start_urls.iter().map(|u| (u.clone(), 0)).collect();
+    let mut results: Vec<CrawlResult> = Vec::new();
+
+    let start_domain = config
+        .start_urls
+        .first()
+        .map(|u| extract_domain(u))
+        .unwrap_or_default();
+
+    while let Some((url, depth)) = queue.pop() {
+        if visited.len() >= config.max_pages {
+            break;
+        }
+        if depth > config.max_depth {
+            continue;
+        }
+        if visited.contains(&url) {
+            continue;
+        }
+        if is_non_page_url(&url) {
+            continue;
+        }
+        if matches_exclude(&url, &config.exclude_patterns) {
+            continue;
+        }
+        if !matches_include(&url, &config.url_patterns) {
+            continue;
+        }
+        if config.same_domain_only && extract_domain(&url) != start_domain {
+            continue;
+        }
+
+        visited.insert(url.clone());
+        let start_time = std::time::Instant::now();
+
+        match tokio::time::timeout(
+            std::time::Duration::from_millis(config.timeout_ms),
+            page.goto(&url),
+        )
+        .await
+        {
+            Ok(Ok(_)) => {
+                // Small settling delay
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+                // Title
+                let title: String = page
+                    .evaluate("document.title")
+                    .await
+                    .ok()
+                    .and_then(|v| v.into_value::<String>().ok())
+                    .unwrap_or_default();
+
+                // Discover links
+                let mut links_found: usize = 0;
+                if config.follow_links && depth < config.max_depth {
+                    let links_js = r#"
+                        Array.from(document.querySelectorAll('a[href]'))
+                            .map(a => a.href)
+                            .filter(h => h.startsWith('http'))
+                    "#;
+                    if let Ok(val) = page.evaluate(links_js).await
+                        && let Ok(links) = val.into_value::<Vec<String>>()
+                    {
+                        for href in &links {
+                            if !visited.contains(href) {
+                                queue.push((href.clone(), depth + 1));
+                                links_found += 1;
+                            }
+                        }
+                    }
+                }
+
+                // Optional content extraction
+                let content = if let Some(ref sel) = config.extract_selector {
+                    let js = match config.extract_format.as_str() {
+                        "html" => format!(
+                            "document.querySelector('{}')?.innerHTML || ''",
+                            sel.replace('\'', "\\'")
+                        ),
+                        _ => format!(
+                            "document.querySelector('{}')?.textContent || ''",
+                            sel.replace('\'', "\\'")
+                        ),
+                    };
+                    page.evaluate(js)
+                        .await
+                        .ok()
+                        .and_then(|v| v.into_value::<String>().ok())
+                } else {
+                    None
+                };
+
+                results.push(CrawlResult {
+                    url,
+                    status: "success".to_string(),
+                    title,
+                    depth,
+                    links_found,
+                    content,
+                    error: None,
+                    duration_ms: start_time.elapsed().as_secs_f64() * 1000.0,
+                    timestamp: now_epoch_ms(),
+                });
+            }
+            Ok(Err(e)) => {
+                results.push(CrawlResult {
+                    url,
+                    status: "error".to_string(),
+                    title: String::new(),
+                    depth,
+                    links_found: 0,
+                    content: None,
+                    error: Some(e.to_string()),
+                    duration_ms: start_time.elapsed().as_secs_f64() * 1000.0,
+                    timestamp: now_epoch_ms(),
+                });
+            }
+            Err(_) => {
+                results.push(CrawlResult {
+                    url,
+                    status: "timeout".to_string(),
+                    title: String::new(),
+                    depth,
+                    links_found: 0,
+                    content: None,
+                    error: Some("Timeout".to_string()),
+                    duration_ms: config.timeout_ms as f64,
+                    timestamp: now_epoch_ms(),
+                });
+            }
+        }
+
+        if config.delay_ms > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(config.delay_ms)).await;
+        }
+    }
+
+    Ok(results)
+}
+
+/// Compute aggregate statistics from crawl results.
+pub fn summarize(results: &[CrawlResult]) -> CrawlSummary {
+    let mut domain_stats: HashMap<String, usize> = HashMap::new();
+    let mut successful: usize = 0;
+    let mut failed: usize = 0;
+    let mut skipped: usize = 0;
+    let mut total_links: usize = 0;
+    let mut total_duration: f64 = 0.0;
+
+    for r in results {
+        match r.status.as_str() {
+            "success" => successful += 1,
+            "error" | "timeout" => failed += 1,
+            _ => skipped += 1,
+        }
+        total_links += r.links_found;
+        total_duration += r.duration_ms;
+
+        let domain = extract_domain(&r.url);
+        *domain_stats.entry(domain).or_insert(0) += 1;
+    }
+
+    let pages_per_second = if total_duration > 0.0 {
+        (results.len() as f64 / total_duration) * 1000.0
+    } else {
+        0.0
+    };
+
+    CrawlSummary {
+        total_pages: results.len(),
+        successful,
+        failed,
+        skipped,
+        total_links_found: total_links,
+        total_duration_ms: total_duration,
+        pages_per_second,
+        domain_stats,
+    }
+}
+
+/// Persist crawl state to a JSON file (for pause/resume).
+pub fn save_state(state: &CrawlState, path: &std::path::Path) -> Result<()> {
+    let json = serde_json::to_string_pretty(state)?;
+    std::fs::write(path, json)?;
+    Ok(())
+}
+
+/// Load crawl state from a JSON file.
+pub fn load_state(path: &std::path::Path) -> Result<CrawlState> {
+    let json = std::fs::read_to_string(path)?;
+    Ok(serde_json::from_str(&json)?)
+}
+
+/// Export results to a JSON file. Returns the number of results written.
+pub fn export_results(results: &[CrawlResult], path: &std::path::Path) -> Result<usize> {
+    let json = serde_json::to_string_pretty(results)?;
+    let count = results.len();
+    std::fs::write(path, json)?;
+    Ok(count)
+}
+
+/// Export results as JSONL (one JSON object per line). Returns the count.
+pub fn export_results_jsonl(results: &[CrawlResult], path: &std::path::Path) -> Result<usize> {
+    let mut content = String::new();
+    for r in results {
+        content.push_str(&serde_json::to_string(r)?);
+        content.push('\n');
+    }
+    let count = results.len();
+    std::fs::write(path, content)?;
+    Ok(count)
+}

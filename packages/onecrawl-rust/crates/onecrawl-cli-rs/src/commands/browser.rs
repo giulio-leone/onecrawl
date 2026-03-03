@@ -1345,6 +1345,178 @@ pub async fn stealth_inject() {
 }
 
 // ---------------------------------------------------------------------------
+// Anti-Bot
+// ---------------------------------------------------------------------------
+
+pub async fn antibot_inject(level: &str) {
+    let lvl = level.to_string();
+    with_page(|page| async move {
+        let applied = onecrawl_cdp::antibot::inject_stealth_full(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        // Filter by profile level
+        let profiles = onecrawl_cdp::antibot::stealth_profiles();
+        let profile = profiles.iter().find(|p| p.level == lvl);
+        let names: Vec<&str> = if let Some(p) = profile {
+            applied.iter().filter(|a| p.patches.contains(a)).map(|s| s.as_str()).collect()
+        } else {
+            applied.iter().map(|s| s.as_str()).collect()
+        };
+        println!("{} Anti-bot patches injected (level: {})", "✓".green(), lvl.cyan());
+        for n in &names {
+            println!("  • {}", n);
+        }
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn antibot_test() {
+    with_page(|page| async move {
+        let result = onecrawl_cdp::antibot::bot_detection_test(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn antibot_profiles() {
+    let profiles = onecrawl_cdp::antibot::stealth_profiles();
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&profiles).unwrap_or_default()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Adaptive Element Tracker
+// ---------------------------------------------------------------------------
+
+pub async fn adaptive_fingerprint(selector: &str) {
+    let sel = selector.to_string();
+    with_page(|page| async move {
+        let fp = onecrawl_cdp::adaptive::fingerprint_element(&page, &sel)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&fp).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn adaptive_relocate(fingerprint_json: &str) {
+    let fp: onecrawl_cdp::ElementFingerprint =
+        match serde_json::from_str(fingerprint_json) {
+            Ok(fp) => fp,
+            Err(e) => {
+                eprintln!("{} Invalid fingerprint JSON: {}", "✗".red(), e);
+                std::process::exit(1);
+            }
+        };
+    with_page(|page| async move {
+        let matches = onecrawl_cdp::adaptive::relocate_element(&page, &fp)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&matches).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn adaptive_track(selectors: &str, save_path: Option<&str>) {
+    let sels: Vec<String> = match serde_json::from_str(selectors) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{} Invalid selectors JSON: {}", "✗".red(), e);
+            std::process::exit(1);
+        }
+    };
+    let sel_refs: Vec<&str> = sels.iter().map(|s| s.as_str()).collect();
+    let path_buf = save_path.map(std::path::PathBuf::from);
+    with_page(|page| async move {
+        let fps = onecrawl_cdp::adaptive::track_elements(
+            &page,
+            &sel_refs,
+            path_buf.as_deref(),
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&fps).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn adaptive_relocate_all(fingerprints_json: &str) {
+    let fps: Vec<onecrawl_cdp::ElementFingerprint> =
+        match serde_json::from_str(fingerprints_json) {
+            Ok(fps) => fps,
+            Err(e) => {
+                eprintln!("{} Invalid fingerprints JSON: {}", "✗".red(), e);
+                std::process::exit(1);
+            }
+        };
+    with_page(|page| async move {
+        let results = onecrawl_cdp::adaptive::relocate_all(&page, &fps)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&results).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn adaptive_save(fingerprints: &str, path: &str) {
+    let fps: Vec<onecrawl_cdp::ElementFingerprint> =
+        match serde_json::from_str(fingerprints) {
+            Ok(fps) => fps,
+            Err(e) => {
+                eprintln!("{} Invalid fingerprints JSON: {}", "✗".red(), e);
+                std::process::exit(1);
+            }
+        };
+    match onecrawl_cdp::adaptive::save_fingerprints(&fps, std::path::Path::new(path)) {
+        Ok(_) => println!("{} Saved {} fingerprints to {}", "✓".green(), fps.len(), path.cyan()),
+        Err(e) => {
+            eprintln!("{} {}", "✗".red(), e);
+            std::process::exit(1);
+        }
+    }
+}
+
+pub async fn adaptive_load(path: &str) {
+    match onecrawl_cdp::adaptive::load_fingerprints(std::path::Path::new(path)) {
+        Ok(fps) => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&fps).unwrap_or_default()
+            );
+        }
+        Err(e) => {
+            eprintln!("{} {}", "✗".red(), e);
+            std::process::exit(1);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Wait
 // ---------------------------------------------------------------------------
 
@@ -2504,4 +2676,258 @@ pub async fn page_watcher_state() {
         Ok(())
     })
     .await;
+}
+
+// ── Spider / Crawl ─────────────────────────────────────────────────
+
+#[allow(clippy::too_many_arguments)]
+pub async fn spider_crawl(
+    start_url: &str,
+    max_depth: usize,
+    max_pages: usize,
+    concurrency: usize,
+    delay: u64,
+    same_domain: bool,
+    selector: Option<&str>,
+    format: &str,
+    output: Option<&str>,
+    output_format: &str,
+) {
+    with_page(|page| async move {
+        let config = onecrawl_cdp::SpiderConfig {
+            start_urls: vec![start_url.to_string()],
+            max_depth,
+            max_pages,
+            concurrency,
+            delay_ms: delay,
+            follow_links: true,
+            same_domain_only: same_domain,
+            extract_selector: selector.map(String::from),
+            extract_format: format.to_string(),
+            ..Default::default()
+        };
+        println!(
+            "{} Starting crawl from {} (depth={}, max_pages={})",
+            "→".cyan(),
+            start_url,
+            max_depth,
+            max_pages
+        );
+        let results = onecrawl_cdp::spider::crawl(&page, config)
+            .await
+            .map_err(|e| e.to_string())?;
+        let summary = onecrawl_cdp::spider::summarize(&results);
+        println!(
+            "{} Crawl complete: {} pages ({} ok, {} failed) in {:.0}ms ({:.2} p/s)",
+            "✓".green(),
+            summary.total_pages,
+            summary.successful,
+            summary.failed,
+            summary.total_duration_ms,
+            summary.pages_per_second,
+        );
+        if let Some(path) = output {
+            let p = std::path::Path::new(path);
+            let count = match output_format {
+                "jsonl" => onecrawl_cdp::spider::export_results_jsonl(&results, p),
+                _ => onecrawl_cdp::spider::export_results(&results, p),
+            }
+            .map_err(|e| e.to_string())?;
+            println!("{} Saved {} results to {}", "✓".green(), count, path);
+        } else {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&results).unwrap_or_default()
+            );
+        }
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn spider_resume(state_file: &str) {
+    let state = match onecrawl_cdp::spider::load_state(std::path::Path::new(state_file)) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{} Failed to load state: {}", "✗".red(), e);
+            return;
+        }
+    };
+    println!(
+        "{} Resuming crawl: {} visited, {} pending",
+        "→".cyan(),
+        state.visited.len(),
+        state.pending.len(),
+    );
+    let mut config = state.config.clone();
+    config.start_urls = state.pending.iter().map(|(u, _)| u.clone()).collect();
+    with_page(|page| async move {
+        let results = onecrawl_cdp::spider::crawl(&page, config)
+            .await
+            .map_err(|e| e.to_string())?;
+        let summary = onecrawl_cdp::spider::summarize(&results);
+        println!(
+            "{} Resume complete: {} pages ({} ok, {} failed)",
+            "✓".green(),
+            summary.total_pages,
+            summary.successful,
+            summary.failed,
+        );
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&results).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub fn spider_summary(results_file: &str) {
+    let data = match std::fs::read_to_string(results_file) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("{} Failed to read file: {}", "✗".red(), e);
+            return;
+        }
+    };
+    let results: Vec<onecrawl_cdp::CrawlResult> = match serde_json::from_str(&data) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{} Invalid JSON: {}", "✗".red(), e);
+            return;
+        }
+    };
+    let summary = onecrawl_cdp::spider::summarize(&results);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&summary).unwrap_or_default()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Interactive Shell
+// ---------------------------------------------------------------------------
+
+pub async fn shell_repl() {
+    use std::io::{self, BufRead, Write};
+
+    let mut history = onecrawl_cdp::shell::ShellHistory::new(500);
+    let commands = onecrawl_cdp::shell::available_commands();
+
+    println!("{} OneCrawl Interactive Shell", "▶".green());
+    println!("  Type {} for commands, {} to quit.\n", "help".cyan(), "exit".cyan());
+
+    loop {
+        print!("{} ", "onecrawl>".green());
+        io::stdout().flush().ok();
+
+        let mut line = String::new();
+        if io::stdin().lock().read_line(&mut line).is_err() || line.is_empty() {
+            break;
+        }
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        let cmd = onecrawl_cdp::shell::parse_command(trimmed);
+        history.add(cmd.clone());
+
+        match cmd.command.as_str() {
+            "exit" | "quit" => {
+                println!("{} Bye!", "✓".green());
+                break;
+            }
+            "help" => {
+                for (name, desc) in &commands {
+                    println!("  {:<28} {}", name.cyan(), desc);
+                }
+            }
+            "history" => {
+                for (i, c) in history.commands.iter().enumerate() {
+                    println!("  {:>4}  {}", i + 1, c.raw);
+                }
+            }
+            other => {
+                println!("{} Command '{}' would be dispatched to the browser session", "→".yellow(), other);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Domain Blocker
+// ---------------------------------------------------------------------------
+
+pub async fn domain_block(domains: &[String]) {
+    with_page(|page| async move {
+        let count = onecrawl_cdp::domain_blocker::block_domains(&page, domains)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Blocked {} domain(s) — {} total on blocklist", "✓".green(), domains.len(), count);
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn domain_block_category(category: &str) {
+    let cat = category.to_string();
+    with_page(|page| async move {
+        let count = onecrawl_cdp::domain_blocker::block_category(&page, &cat)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Category '{}' blocked — {} total on blocklist", "✓".green(), cat.cyan(), count);
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn domain_unblock() {
+    with_page(|page| async move {
+        onecrawl_cdp::domain_blocker::clear_blocks(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} All domain blocks cleared", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn domain_stats() {
+    with_page(|page| async move {
+        let stats = onecrawl_cdp::domain_blocker::block_stats(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&stats).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn domain_list() {
+    with_page(|page| async move {
+        let domains = onecrawl_cdp::domain_blocker::list_blocked(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        if domains.is_empty() {
+            println!("No domains currently blocked.");
+        } else {
+            for d in &domains {
+                println!("  • {}", d);
+            }
+            println!("\n{} domain(s) blocked", domains.len());
+        }
+        Ok(())
+    })
+    .await;
+}
+
+pub fn domain_categories() {
+    let cats = onecrawl_cdp::domain_blocker::available_categories();
+    for (name, count) in &cats {
+        println!("  {:<12} {} domains", name.cyan(), count);
+    }
 }

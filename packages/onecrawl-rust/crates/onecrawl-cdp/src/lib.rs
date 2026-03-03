@@ -3,6 +3,8 @@
 //! Wraps `chromiumoxide` to provide high-level browser commands.
 
 pub mod accessibility;
+pub mod adaptive;
+pub mod antibot;
 pub mod advanced_emulation;
 pub mod benchmark;
 pub mod bridge;
@@ -14,6 +16,7 @@ pub mod coverage;
 pub mod dialog;
 pub mod dom_nav;
 pub mod dom_observer;
+pub mod domain_blocker;
 pub mod downloads;
 pub mod element;
 pub mod emulation;
@@ -30,6 +33,7 @@ pub mod network;
 pub mod network_log;
 pub mod page;
 pub mod page_watcher;
+pub mod spider;
 #[cfg(feature = "playwright")]
 pub mod playwright_backend;
 pub mod print;
@@ -38,6 +42,7 @@ pub mod request_queue;
 pub mod screenshot;
 pub mod screenshot_diff;
 pub mod selectors;
+pub mod shell;
 pub mod stealth;
 pub mod tabs;
 pub mod throttle;
@@ -48,6 +53,8 @@ pub mod websocket;
 pub mod workers;
 
 pub use accessibility::AccessibilityAudit;
+pub use adaptive::{ElementFingerprint, ElementMatch, TrackedElement};
+pub use antibot::AntibotProfile;
 pub use benchmark::{BenchmarkResult, BenchmarkSuite};
 pub use bridge::PlaywrightBridge;
 pub use browser::BrowserSession;
@@ -82,6 +89,9 @@ pub use request_queue::{QueueConfig, QueuedRequest, RequestResult};
 pub use screenshot_diff::DiffResult;
 pub use selectors::{ElementData, SelectorResult};
 pub use page_watcher::PageChange;
+pub use shell::{ShellCommand, ShellHistory};
+pub use domain_blocker::{BlockedDomain, BlockStats};
+pub use spider::{CrawlResult, CrawlState, CrawlSummary, SpiderConfig};
 pub use tabs::TabInfo;
 
 // Re-export chromiumoxide::Page for downstream consumers

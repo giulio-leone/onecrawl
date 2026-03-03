@@ -323,6 +323,20 @@ enum Commands {
         action: StealthAction,
     },
 
+    // ── Anti-Bot ────────────────────────────────────────────────────
+    /// Advanced anti-bot evasion
+    Antibot {
+        #[command(subcommand)]
+        action: AntibotAction,
+    },
+
+    // ── Adaptive Element Tracker ────────────────────────────────────
+    /// Adaptive element fingerprinting and relocation
+    Adaptive {
+        #[command(subcommand)]
+        action: AdaptiveAction,
+    },
+
     // ── Wait ────────────────────────────────────────────────────────
     /// Wait for a duration in milliseconds
     Wait {
@@ -466,6 +480,46 @@ enum Commands {
         #[command(subcommand)]
         action: ExtractAction,
     },
+
+    // ── Spider / Crawl ─────────────────────────────────────────────
+    /// Web spider/crawler
+    Spider {
+        #[command(subcommand)]
+        action: SpiderAction,
+    },
+
+    // ── Interactive Shell ──────────────────────────────────────────
+    /// Launch interactive scraping REPL
+    Shell,
+
+    // ── Domain Blocker ─────────────────────────────────────────────
+    /// Block domains, ads, trackers and social scripts
+    Domain {
+        #[command(subcommand)]
+        action: DomainAction,
+    },
+}
+
+#[derive(Subcommand)]
+enum DomainAction {
+    /// Block specific domains
+    Block {
+        /// Domains to block
+        domains: Vec<String>,
+    },
+    /// Block an entire category (ads, trackers, social, fonts, media)
+    BlockCategory {
+        /// Category name
+        category: String,
+    },
+    /// Remove all domain blocks
+    Unblock,
+    /// Show blocking statistics
+    Stats,
+    /// List currently blocked domains
+    List,
+    /// Show available block categories
+    Categories,
 }
 
 #[derive(Subcommand)]
@@ -731,6 +785,59 @@ enum CoverageAction {
 enum StealthAction {
     /// Inject stealth anti-detection patches
     Inject,
+}
+
+#[derive(Subcommand)]
+enum AntibotAction {
+    /// Inject full anti-bot stealth patches
+    Inject {
+        /// Level: basic, standard, aggressive
+        #[arg(short, long, default_value = "aggressive")]
+        level: String,
+    },
+    /// Run bot detection test on the current page
+    Test,
+    /// List available stealth profiles
+    Profiles,
+}
+
+#[derive(Subcommand)]
+enum AdaptiveAction {
+    /// Fingerprint a DOM element by CSS selector
+    Fingerprint {
+        /// CSS selector
+        selector: String,
+    },
+    /// Relocate an element using a fingerprint JSON
+    Relocate {
+        /// Fingerprint JSON string
+        fingerprint_json: String,
+    },
+    /// Track multiple elements by selectors (JSON array)
+    Track {
+        /// JSON array of CSS selectors
+        selectors: String,
+        /// Optional path to save fingerprints
+        #[arg(short, long)]
+        save: Option<String>,
+    },
+    /// Relocate all tracked elements from fingerprints JSON
+    RelocateAll {
+        /// JSON array of fingerprints
+        fingerprints_json: String,
+    },
+    /// Save fingerprints JSON to a file
+    Save {
+        /// JSON array of fingerprints
+        fingerprints: String,
+        /// File path
+        path: String,
+    },
+    /// Load fingerprints from a file
+    Load {
+        /// File path
+        path: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1136,6 +1243,52 @@ enum ExtractAction {
     Metadata,
 }
 
+#[derive(Subcommand)]
+enum SpiderAction {
+    /// Crawl starting from a URL
+    Crawl {
+        /// Start URL
+        start_url: String,
+        /// Maximum crawl depth
+        #[arg(long, default_value = "3")]
+        max_depth: usize,
+        /// Maximum number of pages
+        #[arg(long, default_value = "100")]
+        max_pages: usize,
+        /// Concurrent workers (reserved for future use)
+        #[arg(long, default_value = "3")]
+        concurrency: usize,
+        /// Delay between requests in milliseconds
+        #[arg(long, default_value = "500")]
+        delay: u64,
+        /// Only follow links on the same domain
+        #[arg(long, default_value = "true")]
+        same_domain: bool,
+        /// CSS selector to extract from each page
+        #[arg(long)]
+        selector: Option<String>,
+        /// Content format: text, html, markdown, json
+        #[arg(long, default_value = "text")]
+        format: String,
+        /// Save results to file
+        #[arg(long)]
+        output: Option<String>,
+        /// Output file format: json or jsonl
+        #[arg(long, default_value = "json")]
+        output_format: String,
+    },
+    /// Resume a crawl from a saved state file
+    Resume {
+        /// Path to the state JSON file
+        state_file: String,
+    },
+    /// Print summary of a results file
+    Summary {
+        /// Path to the results JSON file
+        results_file: String,
+    },
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -1433,6 +1586,37 @@ async fn main() {
             StealthAction::Inject => commands::browser::stealth_inject().await,
         },
 
+        // ── Anti-Bot ────────────────────────────────────────────────
+        Commands::Antibot { action } => match action {
+            AntibotAction::Inject { level } => {
+                commands::browser::antibot_inject(&level).await
+            }
+            AntibotAction::Test => commands::browser::antibot_test().await,
+            AntibotAction::Profiles => commands::browser::antibot_profiles().await,
+        },
+
+        // ── Adaptive Element Tracker ────────────────────────────────
+        Commands::Adaptive { action } => match action {
+            AdaptiveAction::Fingerprint { selector } => {
+                commands::browser::adaptive_fingerprint(&selector).await
+            }
+            AdaptiveAction::Relocate { fingerprint_json } => {
+                commands::browser::adaptive_relocate(&fingerprint_json).await
+            }
+            AdaptiveAction::Track { selectors, save } => {
+                commands::browser::adaptive_track(&selectors, save.as_deref()).await
+            }
+            AdaptiveAction::RelocateAll { fingerprints_json } => {
+                commands::browser::adaptive_relocate_all(&fingerprints_json).await
+            }
+            AdaptiveAction::Save { fingerprints, path } => {
+                commands::browser::adaptive_save(&fingerprints, &path).await
+            }
+            AdaptiveAction::Load { path } => {
+                commands::browser::adaptive_load(&path).await
+            }
+        },
+
         // ── Wait ────────────────────────────────────────────────────
         Commands::Wait { ms } => commands::browser::wait_ms(ms).await,
         Commands::WaitForSelector { selector, timeout } => {
@@ -1598,6 +1782,59 @@ async fn main() {
                     .await
             }
             ExtractAction::Metadata => commands::browser::extract_metadata().await,
+        },
+
+        // ── Spider / Crawl ──────────────────────────────────────────
+        Commands::Spider { action } => match action {
+            SpiderAction::Crawl {
+                start_url,
+                max_depth,
+                max_pages,
+                concurrency,
+                delay,
+                same_domain,
+                selector,
+                format,
+                output,
+                output_format,
+            } => {
+                commands::browser::spider_crawl(
+                    &start_url,
+                    max_depth,
+                    max_pages,
+                    concurrency,
+                    delay,
+                    same_domain,
+                    selector.as_deref(),
+                    &format,
+                    output.as_deref(),
+                    &output_format,
+                )
+                .await
+            }
+            SpiderAction::Resume { state_file } => {
+                commands::browser::spider_resume(&state_file).await
+            }
+            SpiderAction::Summary { results_file } => {
+                commands::browser::spider_summary(&results_file)
+            }
+        },
+
+        // ── Interactive Shell ──────────────────────────────────────
+        Commands::Shell => commands::browser::shell_repl().await,
+
+        // ── Domain Blocker ─────────────────────────────────────────
+        Commands::Domain { action } => match action {
+            DomainAction::Block { domains } => {
+                commands::browser::domain_block(&domains).await
+            }
+            DomainAction::BlockCategory { category } => {
+                commands::browser::domain_block_category(&category).await
+            }
+            DomainAction::Unblock => commands::browser::domain_unblock().await,
+            DomainAction::Stats => commands::browser::domain_stats().await,
+            DomainAction::List => commands::browser::domain_list().await,
+            DomainAction::Categories => commands::browser::domain_categories(),
         },
     }
 }

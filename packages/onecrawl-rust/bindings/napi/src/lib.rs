@@ -2489,6 +2489,294 @@ impl NativeBrowser {
             .map_err(|e| Error::from_reason(e.to_string()))?;
         serde_json::to_string(&state).map_err(|e| Error::from_reason(e.to_string()))
     }
+
+    // ── Spider / Crawl ─────────────────────────────────────────────
+
+    /// Run a crawl. Accepts SpiderConfig as JSON, returns Vec<CrawlResult> as JSON.
+    #[napi]
+    pub async fn crawl(&self, config_json: String) -> Result<String> {
+        let config: onecrawl_cdp::SpiderConfig =
+            serde_json::from_str(&config_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let results = onecrawl_cdp::spider::crawl(page, config)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&results).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Compute crawl summary from results JSON.
+    #[napi]
+    pub fn crawl_summary(&self, results_json: String) -> Result<String> {
+        let results: Vec<onecrawl_cdp::CrawlResult> =
+            serde_json::from_str(&results_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let summary = onecrawl_cdp::spider::summarize(&results);
+        serde_json::to_string(&summary).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Save crawl state to a JSON file.
+    #[napi]
+    pub fn save_crawl_state(&self, state_json: String, path: String) -> Result<()> {
+        let state: onecrawl_cdp::CrawlState =
+            serde_json::from_str(&state_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        onecrawl_cdp::spider::save_state(&state, std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Load crawl state from a JSON file.
+    #[napi]
+    pub fn load_crawl_state(&self, path: String) -> Result<String> {
+        let state = onecrawl_cdp::spider::load_state(std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&state).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Export crawl results to file. Format: "json" (default) or "jsonl".
+    #[napi]
+    pub fn export_crawl_results(
+        &self,
+        results_json: String,
+        path: String,
+        format: Option<String>,
+    ) -> Result<u32> {
+        let results: Vec<onecrawl_cdp::CrawlResult> =
+            serde_json::from_str(&results_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let p = std::path::Path::new(&path);
+        let count = match format.as_deref() {
+            Some("jsonl") => onecrawl_cdp::spider::export_results_jsonl(&results, p),
+            _ => onecrawl_cdp::spider::export_results(&results, p),
+        }
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(count as u32)
+    }
+
+    // ── Anti-Bot ────────────────────────────────────────────────────
+
+    /// Inject full stealth anti-bot patches. Returns JSON array of applied patch names.
+    #[napi]
+    pub async fn inject_stealth_full(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let applied = onecrawl_cdp::antibot::inject_stealth_full(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&applied).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Run bot detection tests. Returns JSON object with scores.
+    #[napi]
+    pub async fn bot_detection_test(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::antibot::bot_detection_test(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get available stealth profiles. Returns JSON array.
+    #[napi]
+    pub fn stealth_profiles(&self) -> Result<String> {
+        let profiles = onecrawl_cdp::antibot::stealth_profiles();
+        serde_json::to_string(&profiles).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Adaptive Element Tracker ────────────────────────────────────
+
+    /// Fingerprint a DOM element by CSS selector. Returns JSON.
+    #[napi]
+    pub async fn fingerprint_element(&self, selector: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let fp = onecrawl_cdp::adaptive::fingerprint_element(page, &selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&fp).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Relocate an element using a previously captured fingerprint (JSON). Returns JSON matches.
+    #[napi]
+    pub async fn relocate_element(&self, fingerprint: String) -> Result<String> {
+        let fp: onecrawl_cdp::ElementFingerprint =
+            serde_json::from_str(&fingerprint).map_err(|e| Error::from_reason(e.to_string()))?;
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let matches = onecrawl_cdp::adaptive::relocate_element(page, &fp)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&matches).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Track multiple elements by CSS selectors (JSON array). Optionally save to path.
+    #[napi]
+    pub async fn track_elements(&self, selectors: String, save_path: Option<String>) -> Result<String> {
+        let sels: Vec<String> =
+            serde_json::from_str(&selectors).map_err(|e| Error::from_reason(e.to_string()))?;
+        let sel_refs: Vec<&str> = sels.iter().map(|s| s.as_str()).collect();
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let path_buf = save_path.map(std::path::PathBuf::from);
+        let fps = onecrawl_cdp::adaptive::track_elements(
+            page,
+            &sel_refs,
+            path_buf.as_deref(),
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&fps).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Relocate all fingerprints (JSON array). Returns JSON array of (selector, matches).
+    #[napi]
+    pub async fn relocate_all(&self, fingerprints: String) -> Result<String> {
+        let fps: Vec<onecrawl_cdp::ElementFingerprint> =
+            serde_json::from_str(&fingerprints).map_err(|e| Error::from_reason(e.to_string()))?;
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let results = onecrawl_cdp::adaptive::relocate_all(page, &fps)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&results).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Save fingerprints JSON to a file path.
+    #[napi]
+    pub fn save_fingerprints(&self, fingerprints: String, path: String) -> Result<()> {
+        let fps: Vec<onecrawl_cdp::ElementFingerprint> =
+            serde_json::from_str(&fingerprints).map_err(|e| Error::from_reason(e.to_string()))?;
+        onecrawl_cdp::adaptive::save_fingerprints(&fps, std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Load fingerprints from a file path. Returns JSON array.
+    #[napi]
+    pub fn load_fingerprints(&self, path: String) -> Result<String> {
+        let fps = onecrawl_cdp::adaptive::load_fingerprints(std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&fps).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Domain Blocker ────────────────────────────────────────────
+
+    /// Block a list of domains (JSON array). Returns total blocked count.
+    #[napi]
+    pub async fn block_domains(&self, domains: String) -> Result<u32> {
+        let list: Vec<String> =
+            serde_json::from_str(&domains).map_err(|e| Error::from_reason(e.to_string()))?;
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let count = onecrawl_cdp::domain_blocker::block_domains(page, &list)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(count as u32)
+    }
+
+    /// Block domains by category (ads, trackers, social, fonts, media). Returns total count.
+    #[napi]
+    pub async fn block_category(&self, category: String) -> Result<u32> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let count = onecrawl_cdp::domain_blocker::block_category(page, &category)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(count as u32)
+    }
+
+    /// Get blocking statistics as JSON.
+    #[napi]
+    pub async fn block_stats(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let stats = onecrawl_cdp::domain_blocker::block_stats(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&stats).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Clear all blocked domains.
+    #[napi]
+    pub async fn clear_blocks(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::domain_blocker::clear_blocks(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// List currently blocked domains as JSON array.
+    #[napi]
+    pub async fn list_blocked(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let domains = onecrawl_cdp::domain_blocker::list_blocked(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&domains).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get available block categories and their domain counts as JSON.
+    #[napi]
+    pub fn available_block_categories(&self) -> Result<String> {
+        let cats = onecrawl_cdp::domain_blocker::available_categories();
+        serde_json::to_string(&cats).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Shell ─────────────────────────────────────────────────────
+
+    /// Parse a shell command string. Returns JSON.
+    #[napi]
+    pub fn shell_parse(&self, input: String) -> Result<String> {
+        let cmd = onecrawl_cdp::shell::parse_command(&input);
+        serde_json::to_string(&cmd).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get available shell commands. Returns JSON.
+    #[napi]
+    pub fn shell_commands(&self) -> Result<String> {
+        let cmds = onecrawl_cdp::shell::available_commands();
+        serde_json::to_string(&cmds).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Save shell history (JSON) to file.
+    #[napi]
+    pub fn shell_save_history(&self, history: String, path: String) -> Result<()> {
+        let h: onecrawl_cdp::ShellHistory =
+            serde_json::from_str(&history).map_err(|e| Error::from_reason(e.to_string()))?;
+        onecrawl_cdp::shell::save_history(&h, std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Load shell history from file. Returns JSON.
+    #[napi]
+    pub fn shell_load_history(&self, path: String) -> Result<String> {
+        let h = onecrawl_cdp::shell::load_history(std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&h).map_err(|e| Error::from_reason(e.to_string()))
+    }
 }
 
 fn parse_network_profile(name: &str) -> std::result::Result<onecrawl_cdp::NetworkProfile, String> {
