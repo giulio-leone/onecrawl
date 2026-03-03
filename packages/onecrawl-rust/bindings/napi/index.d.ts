@@ -147,6 +147,40 @@ export declare class NativeBrowser {
   exportWsFrames(): Promise<string>
   /** Get the count of active WebSocket connections. */
   activeWsConnections(): Promise<number>
+  /** Start capturing console messages (log/warn/error/info/debug). */
+  startConsoleCapture(): Promise<void>
+  /** Drain captured console entries as JSON string. */
+  drainConsoleEntries(): Promise<string>
+  /** Clear the console capture buffer. */
+  clearConsole(): Promise<void>
+  /** Set dialog auto-handler (alert/confirm/prompt). */
+  setDialogHandler(accept: boolean, promptText?: string | undefined | null): Promise<void>
+  /** Get dialog history as JSON string. */
+  getDialogHistory(): Promise<string>
+  /** Clear dialog history. */
+  clearDialogHistory(): Promise<void>
+  /** Get all registered service workers as JSON string. */
+  getServiceWorkers(): Promise<string>
+  /** Unregister all service workers. Returns the number unregistered. */
+  unregisterServiceWorkers(): Promise<number>
+  /** Get worker info as JSON string. */
+  getWorkerInfo(): Promise<string>
+  /** Get all localStorage contents as JSON string. */
+  getLocalStorage(): Promise<string>
+  /** Set a localStorage item. */
+  setLocalStorage(key: string, value: string): Promise<void>
+  /** Clear all localStorage. */
+  clearLocalStorage(): Promise<void>
+  /** Get all sessionStorage contents as JSON string. */
+  getSessionStorage(): Promise<string>
+  /** Set a sessionStorage item. */
+  setSessionStorage(key: string, value: string): Promise<void>
+  /** Clear all sessionStorage. */
+  clearSessionStorage(): Promise<void>
+  /** Get IndexedDB database names as JSON string. */
+  getIndexeddbDatabases(): Promise<string>
+  /** Clear all site data (localStorage + sessionStorage + cookies + cache). */
+  clearSiteData(): Promise<void>
   /** Start JavaScript code coverage collection via CDP Profiler. */
   startJsCoverage(): Promise<void>
   /** Stop JavaScript code coverage and return the report as JSON string. */

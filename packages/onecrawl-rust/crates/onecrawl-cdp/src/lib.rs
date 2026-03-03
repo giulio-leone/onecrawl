@@ -5,8 +5,10 @@
 pub mod accessibility;
 pub mod bridge;
 pub mod browser;
+pub mod console;
 pub mod cookie;
 pub mod coverage;
+pub mod dialog;
 pub mod element;
 pub mod emulation;
 pub mod events;
@@ -22,13 +24,17 @@ pub mod screenshot;
 pub mod stealth;
 pub mod throttle;
 pub mod tracing_cdp;
+pub mod web_storage;
 pub mod websocket;
+pub mod workers;
 
 pub use accessibility::AccessibilityAudit;
 pub use browser::BrowserSession;
 pub use bridge::PlaywrightBridge;
+pub use console::ConsoleEntry;
 pub use cookie::{Cookie, SetCookieParams};
 pub use coverage::CoverageReport;
+pub use dialog::DialogEvent;
 pub use emulation::Viewport;
 pub use events::{BrowserEvent, EventStream, EventType};
 pub use har::HarRecorder;
@@ -38,6 +44,7 @@ pub use stealth::{Fingerprint, generate_fingerprint, get_stealth_init_script};
 pub use throttle::NetworkProfile;
 pub use tracing_cdp::PerformanceMetric;
 pub use websocket::WsRecorder;
+pub use workers::ServiceWorkerInfo;
 
 // Re-export chromiumoxide::Page for downstream consumers
 pub use chromiumoxide::Page;

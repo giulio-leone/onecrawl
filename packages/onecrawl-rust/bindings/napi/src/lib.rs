@@ -1095,6 +1095,192 @@ impl NativeBrowser {
         Ok(count as u32)
     }
 
+    // ── Console Interception ───────────────────────────────────────
+
+    /// Start capturing console messages (log/warn/error/info/debug).
+    #[napi]
+    pub async fn start_console_capture(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::console::start_console_capture(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Drain captured console entries as JSON string.
+    #[napi]
+    pub async fn drain_console_entries(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let entries = onecrawl_cdp::console::drain_console_entries(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&entries).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Clear the console capture buffer.
+    #[napi]
+    pub async fn clear_console(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::console::clear_console(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Dialog Handling ────────────────────────────────────────────
+
+    /// Set dialog auto-handler (alert/confirm/prompt).
+    #[napi]
+    pub async fn set_dialog_handler(&self, accept: bool, prompt_text: Option<String>) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::dialog::set_dialog_handler(page, accept, prompt_text.as_deref())
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get dialog history as JSON string.
+    #[napi]
+    pub async fn get_dialog_history(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let events = onecrawl_cdp::dialog::get_dialog_history(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&events).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Clear dialog history.
+    #[napi]
+    pub async fn clear_dialog_history(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::dialog::clear_dialog_history(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Service Workers ────────────────────────────────────────────
+
+    /// Get all registered service workers as JSON string.
+    #[napi]
+    pub async fn get_service_workers(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let workers = onecrawl_cdp::workers::get_service_workers(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&workers).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Unregister all service workers. Returns the number unregistered.
+    #[napi]
+    pub async fn unregister_service_workers(&self) -> Result<u32> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let count = onecrawl_cdp::workers::unregister_service_workers(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(count as u32)
+    }
+
+    /// Get worker info as JSON string.
+    #[napi]
+    pub async fn get_worker_info(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let info = onecrawl_cdp::workers::get_worker_info(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(info.to_string())
+    }
+
+    // ── Web Storage ────────────────────────────────────────────────
+
+    /// Get all localStorage contents as JSON string.
+    #[napi]
+    pub async fn get_local_storage(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let data = onecrawl_cdp::web_storage::get_local_storage(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(data.to_string())
+    }
+
+    /// Set a localStorage item.
+    #[napi]
+    pub async fn set_local_storage(&self, key: String, value: String) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::web_storage::set_local_storage(page, &key, &value)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Clear all localStorage.
+    #[napi]
+    pub async fn clear_local_storage(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::web_storage::clear_local_storage(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get all sessionStorage contents as JSON string.
+    #[napi]
+    pub async fn get_session_storage(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let data = onecrawl_cdp::web_storage::get_session_storage(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(data.to_string())
+    }
+
+    /// Set a sessionStorage item.
+    #[napi]
+    pub async fn set_session_storage(&self, key: String, value: String) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::web_storage::set_session_storage(page, &key, &value)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Clear all sessionStorage.
+    #[napi]
+    pub async fn clear_session_storage(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::web_storage::clear_session_storage(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get IndexedDB database names as JSON string.
+    #[napi]
+    pub async fn get_indexeddb_databases(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let names = onecrawl_cdp::web_storage::get_indexeddb_databases(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&names).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Clear all site data (localStorage + sessionStorage + cookies + cache).
+    #[napi]
+    pub async fn clear_site_data(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::web_storage::clear_site_data(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
     // ── Code Coverage ──────────────────────────────────────────────
 
     /// Start JavaScript code coverage collection via CDP Profiler.

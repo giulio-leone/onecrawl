@@ -253,6 +253,34 @@ enum Commands {
         action: PerfAction,
     },
 
+    // ── Console ─────────────────────────────────────────────────────
+    /// Console message interception
+    Console {
+        #[command(subcommand)]
+        action: ConsoleAction,
+    },
+
+    // ── Dialog ──────────────────────────────────────────────────────
+    /// Dialog auto-handling (alert/confirm/prompt)
+    Dialog {
+        #[command(subcommand)]
+        action: DialogAction,
+    },
+
+    // ── Worker ──────────────────────────────────────────────────────
+    /// Service Worker management
+    Worker {
+        #[command(subcommand)]
+        action: WorkerAction,
+    },
+
+    // ── Web Storage ─────────────────────────────────────────────────
+    /// Web Storage operations (localStorage, sessionStorage, IndexedDB)
+    WebStorage {
+        #[command(subcommand)]
+        action: WebStorageAction,
+    },
+
     // ── Stealth ─────────────────────────────────────────────────────
     /// Stealth operations
     Stealth {
@@ -494,6 +522,73 @@ enum PerfAction {
     Resources,
 }
 
+#[derive(Subcommand)]
+enum ConsoleAction {
+    /// Start console message capture
+    Start,
+    /// Drain captured console entries (JSON)
+    Drain,
+    /// Clear the console buffer
+    Clear,
+}
+
+#[derive(Subcommand)]
+enum DialogAction {
+    /// Set dialog auto-handler
+    SetHandler {
+        /// Accept dialogs
+        #[arg(long)]
+        accept: bool,
+        /// Text to return for prompt() dialogs
+        #[arg(long)]
+        prompt_text: Option<String>,
+    },
+    /// Get dialog history (JSON)
+    History,
+    /// Clear dialog history
+    Clear,
+}
+
+#[derive(Subcommand)]
+enum WorkerAction {
+    /// List registered service workers
+    List,
+    /// Unregister all service workers
+    Unregister,
+    /// Get detailed worker info (JSON)
+    Info,
+}
+
+#[derive(Subcommand)]
+enum WebStorageAction {
+    /// Get all localStorage contents (JSON)
+    LocalGet,
+    /// Set a localStorage item
+    LocalSet {
+        /// Key
+        key: String,
+        /// Value
+        value: String,
+    },
+    /// Clear all localStorage
+    LocalClear,
+    /// Get all sessionStorage contents (JSON)
+    SessionGet,
+    /// Set a sessionStorage item
+    SessionSet {
+        /// Key
+        key: String,
+        /// Value
+        value: String,
+    },
+    /// Clear all sessionStorage
+    SessionClear,
+    /// List IndexedDB database names
+    IndexeddbList,
+    /// Clear all site data (localStorage + sessionStorage + cookies + cache)
+    ClearAll,
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -687,6 +782,45 @@ async fn main() {
             PerfAction::Metrics => commands::browser::perf_metrics().await,
             PerfAction::Timing => commands::browser::perf_timing().await,
             PerfAction::Resources => commands::browser::perf_resources().await,
+        },
+
+        // ── Console ─────────────────────────────────────────────────
+        Commands::Console { action } => match action {
+            ConsoleAction::Start => commands::browser::console_start().await,
+            ConsoleAction::Drain => commands::browser::console_drain().await,
+            ConsoleAction::Clear => commands::browser::console_clear().await,
+        },
+
+        // ── Dialog ──────────────────────────────────────────────────
+        Commands::Dialog { action } => match action {
+            DialogAction::SetHandler { accept, prompt_text } => {
+                commands::browser::dialog_set_handler(accept, prompt_text.as_deref()).await
+            }
+            DialogAction::History => commands::browser::dialog_history().await,
+            DialogAction::Clear => commands::browser::dialog_clear().await,
+        },
+
+        // ── Worker ──────────────────────────────────────────────────
+        Commands::Worker { action } => match action {
+            WorkerAction::List => commands::browser::worker_list().await,
+            WorkerAction::Unregister => commands::browser::worker_unregister().await,
+            WorkerAction::Info => commands::browser::worker_info().await,
+        },
+
+        // ── Web Storage ─────────────────────────────────────────────
+        Commands::WebStorage { action } => match action {
+            WebStorageAction::LocalGet => commands::browser::web_storage_local_get().await,
+            WebStorageAction::LocalSet { key, value } => {
+                commands::browser::web_storage_local_set(&key, &value).await
+            }
+            WebStorageAction::LocalClear => commands::browser::web_storage_local_clear().await,
+            WebStorageAction::SessionGet => commands::browser::web_storage_session_get().await,
+            WebStorageAction::SessionSet { key, value } => {
+                commands::browser::web_storage_session_set(&key, &value).await
+            }
+            WebStorageAction::SessionClear => commands::browser::web_storage_session_clear().await,
+            WebStorageAction::IndexeddbList => commands::browser::web_storage_indexeddb_list().await,
+            WebStorageAction::ClearAll => commands::browser::web_storage_clear_all().await,
         },
 
         // ── Stealth ─────────────────────────────────────────────────

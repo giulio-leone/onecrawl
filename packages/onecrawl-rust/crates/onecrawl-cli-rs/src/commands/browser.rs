@@ -1058,6 +1058,214 @@ pub async fn perf_resources() {
 }
 
 // ---------------------------------------------------------------------------
+// Console
+// ---------------------------------------------------------------------------
+
+pub async fn console_start() {
+    with_page(|page| async move {
+        onecrawl_cdp::console::start_console_capture(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Console capture started", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn console_drain() {
+    with_page(|page| async move {
+        let entries = onecrawl_cdp::console::drain_console_entries(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&entries).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn console_clear() {
+    with_page(|page| async move {
+        onecrawl_cdp::console::clear_console(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Console buffer cleared", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Dialog
+// ---------------------------------------------------------------------------
+
+pub async fn dialog_set_handler(accept: bool, prompt_text: Option<&str>) {
+    let pt = prompt_text.map(String::from);
+    with_page(|page| async move {
+        onecrawl_cdp::dialog::set_dialog_handler(&page, accept, pt.as_deref())
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Dialog handler set (accept={})", "✓".green(), accept);
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn dialog_history() {
+    with_page(|page| async move {
+        let events = onecrawl_cdp::dialog::get_dialog_history(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&events).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn dialog_clear() {
+    with_page(|page| async move {
+        onecrawl_cdp::dialog::clear_dialog_history(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Dialog history cleared", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Worker
+// ---------------------------------------------------------------------------
+
+pub async fn worker_list() {
+    with_page(|page| async move {
+        let workers = onecrawl_cdp::workers::get_service_workers(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&workers).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn worker_unregister() {
+    with_page(|page| async move {
+        let count = onecrawl_cdp::workers::unregister_service_workers(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Unregistered {} service worker(s)", "✓".green(), count);
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn worker_info() {
+    with_page(|page| async move {
+        let info = onecrawl_cdp::workers::get_worker_info(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&info).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Web Storage
+// ---------------------------------------------------------------------------
+
+pub async fn web_storage_local_get() {
+    with_page(|page| async move {
+        let data = onecrawl_cdp::web_storage::get_local_storage(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn web_storage_local_set(key: &str, value: &str) {
+    let k = key.to_string();
+    let v = value.to_string();
+    with_page(|page| async move {
+        onecrawl_cdp::web_storage::set_local_storage(&page, &k, &v)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} localStorage['{}'] set", "✓".green(), k);
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn web_storage_local_clear() {
+    with_page(|page| async move {
+        onecrawl_cdp::web_storage::clear_local_storage(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} localStorage cleared", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn web_storage_session_get() {
+    with_page(|page| async move {
+        let data = onecrawl_cdp::web_storage::get_session_storage(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn web_storage_session_set(key: &str, value: &str) {
+    let k = key.to_string();
+    let v = value.to_string();
+    with_page(|page| async move {
+        onecrawl_cdp::web_storage::set_session_storage(&page, &k, &v)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} sessionStorage['{}'] set", "✓".green(), k);
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn web_storage_session_clear() {
+    with_page(|page| async move {
+        onecrawl_cdp::web_storage::clear_session_storage(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} sessionStorage cleared", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn web_storage_indexeddb_list() {
+    with_page(|page| async move {
+        let names = onecrawl_cdp::web_storage::get_indexeddb_databases(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&names).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn web_storage_clear_all() {
+    with_page(|page| async move {
+        onecrawl_cdp::web_storage::clear_site_data(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} All site data cleared", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
 // Stealth
 // ---------------------------------------------------------------------------
 

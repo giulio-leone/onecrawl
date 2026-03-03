@@ -839,6 +839,141 @@ impl Browser {
         self.rt.block_on(onecrawl_cdp::websocket::active_ws_connections(page)).map_err(py_err)
     }
 
+    // ── Console Interception ──────────────────────────────────────
+
+    /// Start capturing console messages.
+    fn start_console_capture(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::console::start_console_capture(page)).map_err(py_err)
+    }
+
+    /// Drain captured console entries as JSON string.
+    fn drain_console_entries(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let entries = self.rt.block_on(onecrawl_cdp::console::drain_console_entries(page)).map_err(py_err)?;
+        serde_json::to_string(&entries).map_err(py_err)
+    }
+
+    /// Clear the console capture buffer.
+    fn clear_console(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::console::clear_console(page)).map_err(py_err)
+    }
+
+    // ── Dialog Handling ───────────────────────────────────────────
+
+    /// Set dialog auto-handler.
+    #[pyo3(signature = (accept, prompt_text=None))]
+    fn set_dialog_handler(&self, accept: bool, prompt_text: Option<&str>) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::dialog::set_dialog_handler(page, accept, prompt_text)).map_err(py_err)
+    }
+
+    /// Get dialog history as JSON string.
+    fn get_dialog_history(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let events = self.rt.block_on(onecrawl_cdp::dialog::get_dialog_history(page)).map_err(py_err)?;
+        serde_json::to_string(&events).map_err(py_err)
+    }
+
+    /// Clear dialog history.
+    fn clear_dialog_history(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::dialog::clear_dialog_history(page)).map_err(py_err)
+    }
+
+    // ── Service Workers ───────────────────────────────────────────
+
+    /// Get all registered service workers as JSON string.
+    fn get_service_workers(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let workers = self.rt.block_on(onecrawl_cdp::workers::get_service_workers(page)).map_err(py_err)?;
+        serde_json::to_string(&workers).map_err(py_err)
+    }
+
+    /// Unregister all service workers.
+    fn unregister_service_workers(&self) -> PyResult<usize> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::workers::unregister_service_workers(page)).map_err(py_err)
+    }
+
+    /// Get worker info as JSON string.
+    fn get_worker_info(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let info = self.rt.block_on(onecrawl_cdp::workers::get_worker_info(page)).map_err(py_err)?;
+        Ok(info.to_string())
+    }
+
+    // ── Web Storage ───────────────────────────────────────────────
+
+    /// Get all localStorage contents as JSON string.
+    fn get_local_storage(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let data = self.rt.block_on(onecrawl_cdp::web_storage::get_local_storage(page)).map_err(py_err)?;
+        Ok(data.to_string())
+    }
+
+    /// Set a localStorage item.
+    fn set_local_storage(&self, key: &str, value: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::web_storage::set_local_storage(page, key, value)).map_err(py_err)
+    }
+
+    /// Clear all localStorage.
+    fn clear_local_storage(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::web_storage::clear_local_storage(page)).map_err(py_err)
+    }
+
+    /// Get all sessionStorage contents as JSON string.
+    fn get_session_storage(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let data = self.rt.block_on(onecrawl_cdp::web_storage::get_session_storage(page)).map_err(py_err)?;
+        Ok(data.to_string())
+    }
+
+    /// Set a sessionStorage item.
+    fn set_session_storage(&self, key: &str, value: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::web_storage::set_session_storage(page, key, value)).map_err(py_err)
+    }
+
+    /// Clear all sessionStorage.
+    fn clear_session_storage(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::web_storage::clear_session_storage(page)).map_err(py_err)
+    }
+
+    /// Get IndexedDB database names as JSON string.
+    fn get_indexeddb_databases(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let names = self.rt.block_on(onecrawl_cdp::web_storage::get_indexeddb_databases(page)).map_err(py_err)?;
+        serde_json::to_string(&names).map_err(py_err)
+    }
+
+    /// Clear all site data.
+    fn clear_site_data(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::web_storage::clear_site_data(page)).map_err(py_err)
+    }
+
     // ── Code Coverage ──────────────────────────────────────────────
 
     /// Start JavaScript code coverage collection via CDP Profiler.
