@@ -2,21 +2,23 @@
 
 Native TypeScript web crawler and scraper. Zero Python dependencies.
 
-> **Monorepo** — this repository contains three packages:
+> **Monorepo** — this repository contains four packages:
 
 | Package | Description | Version |
 |---------|-------------|---------|
-| [`@giulio-leone/onecrawl`](./packages/onecrawl) | Core crawler library | 2.0.0 |
-| [`@giulio-leone/onecrawl-cli`](./packages/onecrawl-cli) | Optional stealth CLI for AI agents | 0.4.1 |
-| [`@giulio-leone/onecrawl-client`](./packages/onecrawl-client) | HTTP client for OneCrawl server (zero-dep) | 1.0.0 |
+| [`@giulio-leone/onecrawl`](./packages/onecrawl) | Core crawler library | 2.1.0 |
+| [`@giulio-leone/onecrawl-cli`](./packages/onecrawl-cli) | Stealth CLI with AI-first commands | 0.7.0 |
+| [`@giulio-leone/onecrawl-client`](./packages/onecrawl-client) | HTTP client for OneCrawl server (zero-dep) | 1.0.1 |
+| [`@giulio-leone/onecrawl-mcp`](./packages/onecrawl-mcp) | MCP server for AI agent integration | 1.1.0 |
 
 ## Repository Structure
 
 ```
 packages/
-├── onecrawl/          # Core library — crawl, scrape, search
-├── onecrawl-cli/      # Stealth CLI — browser automation with anti-detection patches
-└── onecrawl-client/   # HTTP client — typed fetch wrapper for OneCrawl server API
+├── onecrawl/          # Core library — crawl, scrape, search, passkey auth
+├── onecrawl-cli/      # Stealth CLI — AI-first commands + browser automation
+├── onecrawl-client/   # HTTP client — typed fetch wrapper for OneCrawl server API
+└── onecrawl-mcp/      # MCP server — Model Context Protocol tools for AI agents
 ```
 
 ## Features
@@ -30,6 +32,41 @@ packages/
 - **Hexagonal Architecture** - Easy to extend with custom adapters
 - **Streaming Support** - Progress callbacks for real-time updates
 - **CLI Interface** - Use from command line
+- **Passkey Auth** - WebAuthn/FIDO2 virtual authenticator for permanent sessions
+- **Auth Cascade** - Passkey → Cookie → Manual fallback chain
+- **AI-First CLI** - `find`, `get`, `assert`, `wait-for`, `scroll`, `screenshot --annotate`
+- **MCP Integration** - 13 tools for AI agent orchestration
+
+## What's New in v2.1.0
+
+### Passkey Authentication (core)
+
+Persistent login via WebAuthn/FIDO2 virtual authenticator over CDP. Credentials are encrypted (AES-256-GCM) and stored locally. Auth cascade: passkey → cookie → manual prompt.
+
+```typescript
+import { AuthCascade, PasskeyStore, WebAuthnManager } from '@giulio-leone/onecrawl';
+
+const cascade = new AuthCascade({ storePath: '~/.onecrawl/linkedin' });
+const result = await cascade.authenticate(browserContext, page);
+// result.method: 'passkey' | 'cookie' | 'manual'
+```
+
+### AI-First CLI Commands (onecrawl-cli 0.7.0)
+
+10 new commands for AI agent automation:
+
+| Command | Description |
+|---------|-------------|
+| `scroll <dir> [px]` | Scroll up/down/left/right |
+| `find <strategy> <query>` | Find elements by role, text, label, placeholder, testid |
+| `get <prop> [ref]` | Get text, html, url, title, attributes |
+| `is <state> <ref>` | Check visible, hidden, enabled, disabled, checked |
+| `wait-for <target> [ms]` | Wait for selector, text, url, load, networkidle |
+| `assert <condition>` | Assert visible, text, url, title, count → exit 0/1 |
+| `screenshot --annotate` | Screenshot with numbered interactive elements |
+| `session-info` | Browser version, viewport, URL, stealth status |
+| `health-check` | Full diagnostic: browser, page, cookies, passkey |
+| `auth <action>` | login, register-passkey, status, export, import |
 
 ## Installation
 
