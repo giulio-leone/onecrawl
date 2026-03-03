@@ -1174,6 +1174,108 @@ impl Browser {
         let result = self.rt.block_on(onecrawl_cdp::tracing_cdp::get_resource_timing(page)).map_err(py_err)?;
         serde_json::to_string(&result).map_err(py_err)
     }
+
+    // ── Proxy Pool ─────────────────────────────────────────────────
+
+    /// Create a proxy pool from JSON config. Returns pool JSON.
+    #[staticmethod]
+    fn create_proxy_pool(config: &str) -> PyResult<String> {
+        let pool: onecrawl_cdp::ProxyPool = serde_json::from_str(config).map_err(py_err)?;
+        pool.to_json().map_err(py_err)
+    }
+
+    /// Get Chrome launch args for the first proxy in the pool.
+    #[staticmethod]
+    fn get_proxy_chrome_args(pool: &str) -> PyResult<Vec<String>> {
+        let p: onecrawl_cdp::ProxyPool = serde_json::from_str(pool).map_err(py_err)?;
+        Ok(p.chrome_args())
+    }
+
+    /// Rotate to the next proxy. Returns updated pool JSON.
+    #[staticmethod]
+    fn next_proxy(pool: &str) -> PyResult<String> {
+        let mut p: onecrawl_cdp::ProxyPool = serde_json::from_str(pool).map_err(py_err)?;
+        p.next();
+        p.to_json().map_err(py_err)
+    }
+
+    // ── Request Interception ───────────────────────────────────────
+
+    /// Set request interception rules (JSON array of InterceptRule).
+    fn set_intercept_rules(&self, rules: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let parsed: Vec<onecrawl_cdp::InterceptRule> = serde_json::from_str(rules).map_err(py_err)?;
+        self.rt.block_on(onecrawl_cdp::intercept::set_intercept_rules(page, parsed)).map_err(py_err)
+    }
+
+    /// Get intercepted request log as JSON.
+    fn get_intercepted_requests(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let log = self.rt.block_on(onecrawl_cdp::intercept::get_intercepted_requests(page)).map_err(py_err)?;
+        serde_json::to_string(&log).map_err(py_err)
+    }
+
+    /// Clear all interception rules.
+    fn clear_intercept_rules(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::intercept::clear_intercept_rules(page)).map_err(py_err)
+    }
+
+    // ── Advanced Emulation ─────────────────────────────────────────
+
+    /// Override device orientation sensor.
+    fn set_device_orientation(&self, alpha: f64, beta: f64, gamma: f64) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let reading = onecrawl_cdp::advanced_emulation::SensorReading { alpha, beta, gamma };
+        self.rt.block_on(onecrawl_cdp::advanced_emulation::set_device_orientation(page, reading)).map_err(py_err)
+    }
+
+    /// Override a permission query result.
+    fn override_permission(&self, permission: &str, state: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::advanced_emulation::override_permission(page, permission, state)).map_err(py_err)
+    }
+
+    /// Override battery status API.
+    fn set_battery_status(&self, level: f64, charging: bool) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::advanced_emulation::set_battery_status(page, level, charging)).map_err(py_err)
+    }
+
+    /// Override Network Information API.
+    fn set_connection_info(&self, effective_type: &str, downlink: f64, rtt: u32) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::advanced_emulation::set_connection_info(page, effective_type, downlink, rtt)).map_err(py_err)
+    }
+
+    /// Override hardware concurrency (CPU cores).
+    fn set_hardware_concurrency(&self, cores: u32) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::advanced_emulation::set_hardware_concurrency(page, cores)).map_err(py_err)
+    }
+
+    /// Override device memory (GB).
+    fn set_device_memory(&self, gb: f64) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::advanced_emulation::set_device_memory(page, gb)).map_err(py_err)
+    }
+
+    /// Get current navigator properties as JSON.
+    fn get_navigator_info(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let info = self.rt.block_on(onecrawl_cdp::advanced_emulation::get_navigator_info(page)).map_err(py_err)?;
+        serde_json::to_string(&info).map_err(py_err)
+    }
 }
 
 // ──────────────────────────── Module ────────────────────────────

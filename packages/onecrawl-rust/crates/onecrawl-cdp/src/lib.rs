@@ -3,6 +3,7 @@
 //! Wraps `chromiumoxide` to provide high-level browser commands.
 
 pub mod accessibility;
+pub mod advanced_emulation;
 pub mod bridge;
 pub mod browser;
 pub mod console;
@@ -16,6 +17,7 @@ pub mod events;
 pub mod har;
 pub mod iframe;
 pub mod input;
+pub mod intercept;
 pub mod keyboard;
 pub mod navigation;
 pub mod network;
@@ -23,11 +25,13 @@ pub mod page;
 #[cfg(feature = "playwright")]
 pub mod playwright_backend;
 pub mod print;
+pub mod proxy;
 pub mod screenshot;
 pub mod stealth;
 pub mod throttle;
 pub mod tracing_cdp;
 pub mod web_storage;
+pub mod webauthn;
 pub mod websocket;
 pub mod workers;
 
@@ -50,7 +54,10 @@ pub use websocket::WsRecorder;
 pub use workers::ServiceWorkerInfo;
 pub use dom_observer::DomMutation;
 pub use iframe::IframeInfo;
+pub use intercept::{InterceptAction, InterceptRule};
 pub use print::DetailedPdfOptions;
+pub use proxy::{ProxyConfig, ProxyPool, RotationStrategy};
+pub use webauthn::{VirtualAuthenticator, VirtualCredential};
 
 // Re-export chromiumoxide::Page for downstream consumers
 pub use chromiumoxide::Page;

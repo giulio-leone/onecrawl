@@ -1564,6 +1564,147 @@ impl NativeBrowser {
             .map_err(|e| Error::from_reason(e.to_string()))?;
         serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
     }
+
+    // ── Proxy Pool ─────────────────────────────────────────────────
+
+    /// Create a proxy pool from JSON config. Returns the pool as JSON.
+    #[napi]
+    pub fn create_proxy_pool(&self, config: String) -> Result<String> {
+        let pool: onecrawl_cdp::ProxyPool =
+            serde_json::from_str(&config).map_err(|e| Error::from_reason(e.to_string()))?;
+        pool.to_json().map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get Chrome launch args for the first proxy in the pool.
+    #[napi]
+    pub fn get_proxy_chrome_args(&self, pool: String) -> Result<Vec<String>> {
+        let p: onecrawl_cdp::ProxyPool =
+            serde_json::from_str(&pool).map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(p.chrome_args())
+    }
+
+    /// Rotate to the next proxy in the pool. Returns updated pool JSON.
+    #[napi]
+    pub fn next_proxy(&self, pool: String) -> Result<String> {
+        let mut p: onecrawl_cdp::ProxyPool =
+            serde_json::from_str(&pool).map_err(|e| Error::from_reason(e.to_string()))?;
+        p.next();
+        p.to_json().map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Request Interception ───────────────────────────────────────
+
+    /// Set request interception rules (JSON array of InterceptRule).
+    #[napi]
+    pub async fn set_intercept_rules(&self, rules: String) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let parsed: Vec<onecrawl_cdp::InterceptRule> =
+            serde_json::from_str(&rules).map_err(|e| Error::from_reason(e.to_string()))?;
+        onecrawl_cdp::intercept::set_intercept_rules(page, parsed)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get intercepted request log as JSON.
+    #[napi]
+    pub async fn get_intercepted_requests(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let log = onecrawl_cdp::intercept::get_intercepted_requests(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&log).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Clear all interception rules and restore originals.
+    #[napi]
+    pub async fn clear_intercept_rules(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::intercept::clear_intercept_rules(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Advanced Emulation ─────────────────────────────────────────
+
+    /// Override device orientation sensor.
+    #[napi]
+    pub async fn set_device_orientation(&self, alpha: f64, beta: f64, gamma: f64) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let reading = onecrawl_cdp::advanced_emulation::SensorReading { alpha, beta, gamma };
+        onecrawl_cdp::advanced_emulation::set_device_orientation(page, reading)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Override a permission query result (e.g. "geolocation", "granted").
+    #[napi]
+    pub async fn override_permission(&self, permission: String, state: String) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::advanced_emulation::override_permission(page, &permission, &state)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Override battery status API.
+    #[napi]
+    pub async fn set_battery_status(&self, level: f64, charging: bool) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::advanced_emulation::set_battery_status(page, level, charging)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Override Network Information API.
+    #[napi]
+    pub async fn set_connection_info(
+        &self,
+        effective_type: String,
+        downlink: f64,
+        rtt: u32,
+    ) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::advanced_emulation::set_connection_info(page, &effective_type, downlink, rtt)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Override hardware concurrency (CPU cores).
+    #[napi]
+    pub async fn set_hardware_concurrency(&self, cores: u32) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::advanced_emulation::set_hardware_concurrency(page, cores)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Override device memory (GB).
+    #[napi]
+    pub async fn set_device_memory(&self, gb: f64) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::advanced_emulation::set_device_memory(page, gb)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get current navigator properties as JSON.
+    #[napi]
+    pub async fn get_navigator_info(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let info = onecrawl_cdp::advanced_emulation::get_navigator_info(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&info).map_err(|e| Error::from_reason(e.to_string()))
+    }
 }
 
 fn parse_network_profile(name: &str) -> std::result::Result<onecrawl_cdp::NetworkProfile, String> {

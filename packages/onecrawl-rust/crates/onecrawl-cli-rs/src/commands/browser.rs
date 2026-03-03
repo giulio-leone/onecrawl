@@ -1514,3 +1514,184 @@ pub async fn print_metrics() {
     })
     .await;
 }
+
+// ---------------------------------------------------------------------------
+// Proxy
+// ---------------------------------------------------------------------------
+
+pub async fn proxy_create_pool(json: &str) {
+    match onecrawl_cdp::ProxyPool::from_json(json) {
+        Ok(pool) => match pool.to_json() {
+            Ok(out) => println!("{out}"),
+            Err(e) => {
+                eprintln!("{} {e}", "✗".red());
+                std::process::exit(1);
+            }
+        },
+        Err(e) => {
+            eprintln!("{} {e}", "✗".red());
+            std::process::exit(1);
+        }
+    }
+}
+
+pub async fn proxy_chrome_args(json: &str) {
+    match onecrawl_cdp::ProxyPool::from_json(json) {
+        Ok(pool) => {
+            let args = pool.chrome_args();
+            println!("{}", args.join(" "));
+        }
+        Err(e) => {
+            eprintln!("{} {e}", "✗".red());
+            std::process::exit(1);
+        }
+    }
+}
+
+pub async fn proxy_next(json: &str) {
+    match onecrawl_cdp::ProxyPool::from_json(json) {
+        Ok(mut pool) => {
+            pool.next();
+            match pool.to_json() {
+                Ok(out) => println!("{out}"),
+                Err(e) => {
+                    eprintln!("{} {e}", "✗".red());
+                    std::process::exit(1);
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("{} {e}", "✗".red());
+            std::process::exit(1);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Request Interception
+// ---------------------------------------------------------------------------
+
+pub async fn intercept_set(rules_json: &str) {
+    let rules: Vec<onecrawl_cdp::InterceptRule> = match serde_json::from_str(rules_json) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{} Invalid rules JSON: {e}", "✗".red());
+            std::process::exit(1);
+        }
+    };
+    with_page(|page| async move {
+        onecrawl_cdp::intercept::set_intercept_rules(&page, rules)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Intercept rules set", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn intercept_log() {
+    with_page(|page| async move {
+        let log = onecrawl_cdp::intercept::get_intercepted_requests(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&log).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn intercept_clear() {
+    with_page(|page| async move {
+        onecrawl_cdp::intercept::clear_intercept_rules(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Intercept rules cleared", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Advanced Emulation
+// ---------------------------------------------------------------------------
+
+pub async fn adv_emulation_orientation(alpha: f64, beta: f64, gamma: f64) {
+    with_page(|page| async move {
+        let reading = onecrawl_cdp::advanced_emulation::SensorReading { alpha, beta, gamma };
+        onecrawl_cdp::advanced_emulation::set_device_orientation(&page, reading)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Device orientation set (α={alpha}, β={beta}, γ={gamma})", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn adv_emulation_permission(name: &str, state: &str) {
+    let n = name.to_string();
+    let s = state.to_string();
+    with_page(|page| async move {
+        onecrawl_cdp::advanced_emulation::override_permission(&page, &n, &s)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Permission '{n}' → {s}", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn adv_emulation_battery(level: f64, charging: bool) {
+    with_page(|page| async move {
+        onecrawl_cdp::advanced_emulation::set_battery_status(&page, level, charging)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Battery: {:.0}% {}", "✓".green(), level * 100.0, if charging { "(charging)" } else { "" });
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn adv_emulation_connection(effective_type: &str, downlink: f64, rtt: u32) {
+    let et = effective_type.to_string();
+    with_page(|page| async move {
+        onecrawl_cdp::advanced_emulation::set_connection_info(&page, &et, downlink, rtt)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Connection: {et} ↓{downlink}Mbps RTT={rtt}ms", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn adv_emulation_cpu_cores(n: u32) {
+    with_page(|page| async move {
+        onecrawl_cdp::advanced_emulation::set_hardware_concurrency(&page, n)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} CPU cores → {n}", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn adv_emulation_memory(gb: f64) {
+    with_page(|page| async move {
+        onecrawl_cdp::advanced_emulation::set_device_memory(&page, gb)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Device memory → {gb}GB", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn adv_emulation_navigator_info() {
+    with_page(|page| async move {
+        let info = onecrawl_cdp::advanced_emulation::get_navigator_info(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&info).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}

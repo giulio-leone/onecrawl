@@ -339,6 +339,27 @@ enum Commands {
         url: Option<String>,
     },
 
+    // ── Proxy ───────────────────────────────────────────────────────
+    /// Proxy pool management
+    Proxy {
+        #[command(subcommand)]
+        action: ProxyAction,
+    },
+
+    // ── Request Interception ────────────────────────────────────────
+    /// Request interception and mocking
+    Intercept {
+        #[command(subcommand)]
+        action: InterceptCommandAction,
+    },
+
+    // ── Advanced Emulation ──────────────────────────────────────────
+    /// Advanced emulation (sensors, permissions, hardware)
+    AdvancedEmulation {
+        #[command(subcommand)]
+        action: AdvancedEmulationAction,
+    },
+
     // ── Offline Commands ────────────────────────────────────────────
     /// Crypto operations
     Crypto {
@@ -687,6 +708,87 @@ enum WebStorageAction {
     ClearAll,
 }
 
+#[derive(Subcommand)]
+enum ProxyAction {
+    /// Create a proxy pool from JSON config
+    CreatePool {
+        /// JSON config for the proxy pool
+        json: String,
+    },
+    /// Get Chrome launch args for a proxy pool
+    ChromeArgs {
+        /// Proxy pool JSON
+        json: String,
+    },
+    /// Rotate to the next proxy in the pool
+    Next {
+        /// Proxy pool JSON
+        json: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum InterceptCommandAction {
+    /// Set interception rules (JSON array)
+    Set {
+        /// JSON array of InterceptRule
+        rules_json: String,
+    },
+    /// Show intercepted request log
+    Log,
+    /// Clear all interception rules
+    Clear,
+}
+
+#[derive(Subcommand)]
+enum AdvancedEmulationAction {
+    /// Override device orientation sensor
+    Orientation {
+        /// Rotation around z-axis
+        alpha: f64,
+        /// Rotation around x-axis
+        beta: f64,
+        /// Rotation around y-axis
+        gamma: f64,
+    },
+    /// Override a permission query result
+    Permission {
+        /// Permission name (e.g. geolocation, camera, microphone)
+        name: String,
+        /// State: granted, denied, prompt
+        state: String,
+    },
+    /// Override battery status
+    Battery {
+        /// Battery level (0.0–1.0)
+        level: f64,
+        /// Whether the device is charging
+        #[arg(long)]
+        charging: bool,
+    },
+    /// Override Network Information API
+    Connection {
+        /// Effective type (e.g. 4g, 3g, 2g, slow-2g)
+        effective_type: String,
+        /// Downlink speed in Mbps
+        downlink: f64,
+        /// Round-trip time in ms
+        rtt: u32,
+    },
+    /// Override CPU core count
+    CpuCores {
+        /// Number of CPU cores
+        n: u32,
+    },
+    /// Override device memory
+    Memory {
+        /// Device memory in GB
+        gb: f64,
+    },
+    /// Get current navigator properties
+    NavigatorInfo,
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -983,5 +1085,44 @@ async fn main() {
 
         // ── Pages ───────────────────────────────────────────────────
         Commands::NewPage { url } => commands::browser::new_page(url.as_deref()).await,
+
+        // ── Proxy ───────────────────────────────────────────────────
+        Commands::Proxy { action } => match action {
+            ProxyAction::CreatePool { json } => commands::browser::proxy_create_pool(&json).await,
+            ProxyAction::ChromeArgs { json } => commands::browser::proxy_chrome_args(&json).await,
+            ProxyAction::Next { json } => commands::browser::proxy_next(&json).await,
+        },
+
+        // ── Request Interception ────────────────────────────────────
+        Commands::Intercept { action } => match action {
+            InterceptCommandAction::Set { rules_json } => commands::browser::intercept_set(&rules_json).await,
+            InterceptCommandAction::Log => commands::browser::intercept_log().await,
+            InterceptCommandAction::Clear => commands::browser::intercept_clear().await,
+        },
+
+        // ── Advanced Emulation ──────────────────────────────────────
+        Commands::AdvancedEmulation { action } => match action {
+            AdvancedEmulationAction::Orientation { alpha, beta, gamma } => {
+                commands::browser::adv_emulation_orientation(alpha, beta, gamma).await
+            }
+            AdvancedEmulationAction::Permission { name, state } => {
+                commands::browser::adv_emulation_permission(&name, &state).await
+            }
+            AdvancedEmulationAction::Battery { level, charging } => {
+                commands::browser::adv_emulation_battery(level, charging).await
+            }
+            AdvancedEmulationAction::Connection { effective_type, downlink, rtt } => {
+                commands::browser::adv_emulation_connection(&effective_type, downlink, rtt).await
+            }
+            AdvancedEmulationAction::CpuCores { n } => {
+                commands::browser::adv_emulation_cpu_cores(n).await
+            }
+            AdvancedEmulationAction::Memory { gb } => {
+                commands::browser::adv_emulation_memory(gb).await
+            }
+            AdvancedEmulationAction::NavigatorInfo => {
+                commands::browser::adv_emulation_navigator_info().await
+            }
+        },
     }
 }

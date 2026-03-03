@@ -229,6 +229,32 @@ export declare class NativeBrowser {
   getNavigationTiming(): Promise<string>
   /** Get resource timing entries as JSON. */
   getResourceTiming(): Promise<string>
+  /** Create a proxy pool from JSON config. Returns the pool as JSON. */
+  createProxyPool(config: string): string
+  /** Get Chrome launch args for the first proxy in the pool. */
+  getProxyChromeArgs(pool: string): Array<string>
+  /** Rotate to the next proxy in the pool. Returns updated pool JSON. */
+  nextProxy(pool: string): string
+  /** Set request interception rules (JSON array of InterceptRule). */
+  setInterceptRules(rules: string): Promise<void>
+  /** Get intercepted request log as JSON. */
+  getInterceptedRequests(): Promise<string>
+  /** Clear all interception rules and restore originals. */
+  clearInterceptRules(): Promise<void>
+  /** Override device orientation sensor. */
+  setDeviceOrientation(alpha: number, beta: number, gamma: number): Promise<void>
+  /** Override a permission query result (e.g. "geolocation", "granted"). */
+  overridePermission(permission: string, state: string): Promise<void>
+  /** Override battery status API. */
+  setBatteryStatus(level: number, charging: boolean): Promise<void>
+  /** Override Network Information API. */
+  setConnectionInfo(effectiveType: string, downlink: number, rtt: number): Promise<void>
+  /** Override hardware concurrency (CPU cores). */
+  setHardwareConcurrency(cores: number): Promise<void>
+  /** Override device memory (GB). */
+  setDeviceMemory(gb: number): Promise<void>
+  /** Get current navigator properties as JSON. */
+  getNavigatorInfo(): Promise<string>
 }
 
 /** Encrypted key-value store backed by sled + AES-256-GCM. */
