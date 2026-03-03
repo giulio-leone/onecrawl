@@ -69,3 +69,18 @@ napi-build = "2"
 
 # PyO3 bindings
 pyo3 = { version = "0.24", features = ["extension-module"] }
+
+# ── Build profiles ──────────────────────────────────────────
+[profile.release]
+opt-level = "z"
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.dev.package."*"]
+opt-level = 2

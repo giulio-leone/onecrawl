@@ -1914,7 +1914,9 @@ name = "onecrawl-mcp-rs"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "chromiumoxide",
  "clap",
+ "onecrawl-cdp",
  "onecrawl-core",
  "onecrawl-crypto",
  "onecrawl-parser",
