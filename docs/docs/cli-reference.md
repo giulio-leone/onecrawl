@@ -369,3 +369,125 @@ onecrawl graph "https://docs.example.com" --output graph.json
 onecrawl navigate "https://example.com"
 onecrawl a11y audit --format json --output a11y-report.json
 ```
+
+---
+
+## Real-World Workflows
+
+### Workflow 1: Scrape a Product Page
+
+Navigate to a product page, extract structured data, and save it as JSON.
+
+```bash
+# Navigate to the product page
+onecrawl navigate "https://shop.example.com/product/wireless-headphones"
+onecrawl wait-for-selector ".product-details"
+
+# Extract structured data into JSON
+onecrawl structured "https://shop.example.com/product/wireless-headphones" \
+  '{"name": "h1.product-name", "price": ".price-current", "sku": ".sku-value", "rating": ".star-rating@data-score", "image": "img.product-image@src"}'
+
+# Save the full page text as a backup
+onecrawl get text > product-details.txt
+```
+
+### Workflow 2: Monitor a Website for Changes
+
+Spider a site, take snapshots, and use scheduled runs to detect visual regressions.
+
+```bash
+# Step 1: Crawl and snapshot the baseline
+onecrawl spider "https://status.example.com" --depth 1 --output urls.json
+onecrawl navigate "https://status.example.com"
+onecrawl screenshot --full --output baseline.png
+
+# Step 2: Schedule a daily check
+onecrawl schedule "0 9 * * *" "navigate https://status.example.com && screenshot --full --output today.png"
+
+# Step 3: Compare snapshots for visual diffs
+onecrawl screenshot-diff baseline.png today.png --output diff.png
+```
+
+### Workflow 3: Automate Login with Passkey
+
+Use OneCrawl's built-in passkey support for modern passwordless authentication.
+
+```bash
+# Enable virtual passkey authenticator
+onecrawl auth passkey-enable
+
+# Navigate to the login page
+onecrawl navigate "https://app.example.com/login" --headed
+
+# Fill in the username and trigger passkey auth
+onecrawl fill "#username" "user@example.com"
+onecrawl click "#login-with-passkey"
+
+# Wait for authentication to complete
+onecrawl wait-for-url "**/dashboard**"
+onecrawl get text
+```
+
+### Workflow 4: Screenshot All Pages of a Site
+
+Spider a website and capture a full-page screenshot of every discovered page.
+
+```bash
+# Crawl the site to discover all pages
+onecrawl spider "https://docs.example.com" --depth 3 --output sitemap.json
+
+# Loop through each URL and screenshot it
+for url in $(cat sitemap.json | jq -r '.[].url'); do
+  slug=$(echo "$url" | sed 's|https://||; s|/|_|g')
+  onecrawl navigate "$url"
+  onecrawl wait 1000
+  onecrawl screenshot --full --output "screenshots/${slug}.png"
+done
+```
+
+### Workflow 5: Extract API Data from Network Traffic
+
+Capture network requests to extract JSON API responses made by a single-page application.
+
+```bash
+# Start network logging
+onecrawl network-log start
+
+# Navigate and interact to trigger API calls
+onecrawl navigate "https://app.example.com/dashboard"
+onecrawl wait-for-selector ".data-loaded"
+onecrawl click "#load-more"
+onecrawl wait 3000
+
+# Stop logging and export
+onecrawl network-log stop
+onecrawl network-log export network.har
+
+# Filter JSON API responses from the HAR file
+cat network.har | jq '[.log.entries[] | select(.response.content.mimeType == "application/json") | {url: .request.url, status: .response.status, body: .response.content.text}]'
+```
+
+### Workflow 6: Stealth Scraping with Fingerprint Randomization
+
+Bypass anti-bot protections using stealth injection and fingerprint spoofing.
+
+```bash
+# Inject stealth patches (hides automation signals)
+onecrawl stealth inject
+
+# Randomize browser fingerprint
+onecrawl fingerprint
+
+# Verify stealth is working
+onecrawl stealth test
+
+# Navigate with stealth active
+onecrawl navigate "https://protected-site.example.com"
+onecrawl wait-for-selector ".content-loaded"
+
+# Detect if a CAPTCHA appeared
+onecrawl stealth detect-captcha
+
+# Extract the data
+onecrawl get text > scraped-content.txt
+```

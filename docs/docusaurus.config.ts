@@ -46,6 +46,11 @@ const config: Config = {
     },
     navbar: {
       title: 'OneCrawl',
+      logo: {
+        alt: 'OneCrawl Logo',
+        src: 'img/logo.svg',
+        srcDark: 'img/logo-dark.svg',
+      },
       items: [
         {
           type: 'docSidebar',
@@ -92,7 +97,7 @@ const config: Config = {
     prism: {
       theme: prismThemes.github,
       darkTheme: prismThemes.dracula,
-      additionalLanguages: ['rust', 'bash', 'toml', 'json'],
+      additionalLanguages: ['rust', 'bash', 'toml', 'json', 'python'],
     },
   } satisfies Preset.ThemeConfig,
 };

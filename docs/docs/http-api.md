@@ -552,3 +552,108 @@ All error responses follow a consistent format:
 | `404` | Resource not found (instance, tab, profile) |
 | `409` | Conflict (profile already exists) |
 | `500` | Internal server error |
+
+### Error Response Examples
+
+**404 — Resource Not Found:**
+
+```json
+{
+  "error": "instance_not_found",
+  "message": "No instance with ID 'inst_invalid' exists",
+  "status": 404
+}
+```
+
+**400 — Bad Request:**
+
+```json
+{
+  "error": "bad_request",
+  "message": "Missing required field 'url' in request body",
+  "status": 400
+}
+```
+
+**500 — Internal Server Error:**
+
+```json
+{
+  "error": "browser_crash",
+  "message": "Chrome instance 'inst_a1b2c3' terminated unexpectedly",
+  "status": 500
+}
+```
+
+**409 — Conflict:**
+
+```json
+{
+  "error": "profile_exists",
+  "message": "A profile named 'my-profile' already exists",
+  "status": 409
+}
+```
+
+---
+
+## Complete Workflow Example
+
+The following bash script demonstrates a full automation workflow: create an instance, open a tab, navigate, take a snapshot, interact with elements, and extract text.
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE="http://localhost:9867"
+
+echo "=== OneCrawl HTTP API Workflow ==="
+
+# 1. Create a headless Chrome instance
+echo "[1/6] Creating Chrome instance..."
+INSTANCE=$(curl -sf -X POST "$BASE/instances" \
+  -H "Content-Type: application/json" \
+  -d '{"headless": true}' | jq -r '.id')
+echo "       Instance: $INSTANCE"
+
+# 2. Open a tab and navigate to the target URL
+echo "[2/6] Opening tab..."
+TAB=$(curl -sf -X POST "$BASE/instances/$INSTANCE/tabs/open" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com"}' | jq -r '.tab_id')
+echo "       Tab: $TAB"
+
+# 3. Navigate to a specific page
+echo "[3/6] Navigating to target page..."
+curl -sf -X POST "$BASE/tabs/$TAB/navigate" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://example.com/search"}' | jq .
+
+# 4. Take an accessibility snapshot to find interactive elements
+echo "[4/6] Taking accessibility snapshot..."
+SNAPSHOT=$(curl -sf "$BASE/tabs/$TAB/snapshot?filter=interactive&format=compact")
+echo "$SNAPSHOT" | jq '.elements[:5]'
+
+# 5. Interact: fill a search box and click submit
+echo "[5/6] Filling form and clicking submit..."
+curl -sf -X POST "$BASE/tabs/$TAB/actions" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "actions": [
+      {"ref": "e2", "action": "fill", "text": "OneCrawl"},
+      {"ref": "e3", "action": "click"}
+    ]
+  }' | jq .
+
+# Wait for results to load
+sleep 2
+
+# 6. Extract the page text
+echo "[6/6] Extracting page text..."
+curl -sf "$BASE/tabs/$TAB/text" | jq -r '.text' | head -20
+
+# Cleanup: destroy the instance
+echo "=== Cleaning up ==="
+curl -sf -X DELETE "$BASE/instances/$INSTANCE" | jq .
+echo "Done!"
+```
