@@ -2118,6 +2118,117 @@ impl Browser {
         }
     }
 
+    // ── Robots.txt ─────────────────────────────────────────────────
+
+    /// Parse robots.txt content. Returns JSON RobotsTxt.
+    fn robots_parse(&self, content: &str) -> PyResult<String> {
+        let robots = onecrawl_cdp::robots::parse_robots(content);
+        serde_json::to_string(&robots).map_err(py_err)
+    }
+
+    /// Check if a path is allowed for a user-agent. Accepts JSON RobotsTxt.
+    fn robots_is_allowed(
+        &self,
+        robots_json: &str,
+        user_agent: &str,
+        path: &str,
+    ) -> PyResult<bool> {
+        let robots: onecrawl_cdp::RobotsTxt =
+            serde_json::from_str(robots_json).map_err(py_err)?;
+        Ok(onecrawl_cdp::robots::is_allowed(&robots, user_agent, path))
+    }
+
+    /// Get crawl delay for a user-agent. Accepts JSON RobotsTxt.
+    fn robots_crawl_delay(
+        &self,
+        robots_json: &str,
+        user_agent: &str,
+    ) -> PyResult<Option<f64>> {
+        let robots: onecrawl_cdp::RobotsTxt =
+            serde_json::from_str(robots_json).map_err(py_err)?;
+        Ok(onecrawl_cdp::robots::get_crawl_delay(&robots, user_agent))
+    }
+
+    /// Get sitemaps from parsed robots.txt. Accepts JSON RobotsTxt, returns JSON array.
+    fn robots_sitemaps(&self, robots_json: &str) -> PyResult<String> {
+        let robots: onecrawl_cdp::RobotsTxt =
+            serde_json::from_str(robots_json).map_err(py_err)?;
+        let sitemaps = onecrawl_cdp::robots::get_sitemaps(&robots);
+        serde_json::to_string(&sitemaps).map_err(py_err)
+    }
+
+    /// Fetch and parse robots.txt from a URL. Returns JSON RobotsTxt.
+    fn robots_fetch(&self, base_url: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let robots = self
+            .rt
+            .block_on(onecrawl_cdp::robots::fetch_robots(page, base_url))
+            .map_err(py_err)?;
+        serde_json::to_string(&robots).map_err(py_err)
+    }
+
+    // ── Link Graph ─────────────────────────────────────────────────
+
+    /// Extract links from the current page. Returns JSON Vec<LinkEdge>.
+    fn graph_extract_links(&self, base_url: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let edges = self
+            .rt
+            .block_on(onecrawl_cdp::link_graph::extract_links(page, base_url))
+            .map_err(py_err)?;
+        serde_json::to_string(&edges).map_err(py_err)
+    }
+
+    /// Build a link graph from edges JSON. Returns JSON LinkGraph.
+    fn graph_build(&self, edges_json: &str) -> PyResult<String> {
+        let edges: Vec<onecrawl_cdp::LinkEdge> =
+            serde_json::from_str(edges_json).map_err(py_err)?;
+        let graph = onecrawl_cdp::link_graph::build_graph(&edges);
+        serde_json::to_string(&graph).map_err(py_err)
+    }
+
+    /// Analyze a link graph. Accepts JSON LinkGraph, returns JSON LinkStats.
+    fn graph_analyze(&self, graph_json: &str) -> PyResult<String> {
+        let graph: onecrawl_cdp::LinkGraph =
+            serde_json::from_str(graph_json).map_err(py_err)?;
+        let stats = onecrawl_cdp::link_graph::analyze_graph(&graph);
+        serde_json::to_string(&stats).map_err(py_err)
+    }
+
+    /// Find orphan pages (no inbound links). Accepts JSON LinkGraph, returns JSON array.
+    fn graph_find_orphans(&self, graph_json: &str) -> PyResult<String> {
+        let graph: onecrawl_cdp::LinkGraph =
+            serde_json::from_str(graph_json).map_err(py_err)?;
+        let orphans = onecrawl_cdp::link_graph::find_orphans(&graph);
+        serde_json::to_string(&orphans).map_err(py_err)
+    }
+
+    /// Find hub pages. Accepts JSON LinkGraph and min_outbound threshold.
+    fn graph_find_hubs(&self, graph_json: &str, min_outbound: usize) -> PyResult<String> {
+        let graph: onecrawl_cdp::LinkGraph =
+            serde_json::from_str(graph_json).map_err(py_err)?;
+        let hubs = onecrawl_cdp::link_graph::find_hubs(&graph, min_outbound);
+        serde_json::to_string(&hubs).map_err(py_err)
+    }
+
+    /// Export link graph to a JSON file.
+    fn graph_export(&self, graph_json: &str, path: &str) -> PyResult<()> {
+        let graph: onecrawl_cdp::LinkGraph =
+            serde_json::from_str(graph_json).map_err(py_err)?;
+        onecrawl_cdp::link_graph::export_graph_json(&graph, std::path::Path::new(path))
+            .map_err(py_err)
+    }
+
+    /// Build link graph from crawl results JSON. Returns JSON LinkGraph.
+    fn graph_from_crawl_results(&self, results_json: &str) -> PyResult<String> {
+        let results: Vec<onecrawl_cdp::CrawlResult> =
+            serde_json::from_str(results_json).map_err(py_err)?;
+        let graph = onecrawl_cdp::link_graph::from_crawl_results(&results);
+        serde_json::to_string(&graph).map_err(py_err)
+    }
+
     // ── Anti-Bot ────────────────────────────────────────────────────
 
     /// Inject full stealth anti-bot patches. Returns JSON array of applied patch names.
@@ -2433,6 +2544,122 @@ impl Browser {
             .block_on(onecrawl_cdp::http_client::fetch_json(page, url))
             .map_err(py_err)?;
         serde_json::to_string(&val).map_err(py_err)
+    }
+
+    // ──────────────── TLS Fingerprint ────────────────
+
+    /// List available TLS fingerprint profile names. Returns JSON array.
+    fn fingerprint_profiles(&self) -> PyResult<String> {
+        let profiles = onecrawl_cdp::tls_fingerprint::browser_profiles();
+        serde_json::to_string(&profiles).map_err(py_err)
+    }
+
+    /// Apply a named TLS fingerprint profile. Returns JSON array of overridden properties.
+    fn apply_fingerprint(&self, name: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let fp = onecrawl_cdp::tls_fingerprint::get_profile(name)
+            .ok_or_else(|| py_err(format!("unknown fingerprint profile: {name}")))?;
+        let overridden = self
+            .rt
+            .block_on(onecrawl_cdp::tls_fingerprint::apply_fingerprint(page, &fp))
+            .map_err(py_err)?;
+        serde_json::to_string(&overridden).map_err(py_err)
+    }
+
+    /// Apply a random TLS fingerprint. Returns JSON of the applied fingerprint.
+    fn apply_random_fingerprint(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let fp = onecrawl_cdp::tls_fingerprint::random_fingerprint();
+        self.rt
+            .block_on(onecrawl_cdp::tls_fingerprint::apply_fingerprint(page, &fp))
+            .map_err(py_err)?;
+        serde_json::to_string(&fp).map_err(py_err)
+    }
+
+    /// Detect current browser fingerprint. Returns JSON.
+    fn detect_fingerprint(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let fp = self
+            .rt
+            .block_on(onecrawl_cdp::tls_fingerprint::detect_fingerprint(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&fp).map_err(py_err)
+    }
+
+    /// Apply a custom fingerprint from JSON string. Returns JSON array of overridden properties.
+    fn apply_custom_fingerprint(&self, json: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let fp: onecrawl_cdp::BrowserFingerprint = serde_json::from_str(json)
+            .map_err(|e| py_err(format!("invalid fingerprint JSON: {e}")))?;
+        let overridden = self
+            .rt
+            .block_on(onecrawl_cdp::tls_fingerprint::apply_fingerprint(page, &fp))
+            .map_err(py_err)?;
+        serde_json::to_string(&overridden).map_err(py_err)
+    }
+
+    // ──────────────── Page Snapshot ────────────────
+
+    /// Take a DOM snapshot of the current page. Returns JSON.
+    fn take_snapshot(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let snap = self
+            .rt
+            .block_on(onecrawl_cdp::snapshot::take_snapshot(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&snap).map_err(py_err)
+    }
+
+    /// Compare two snapshots (JSON strings). Returns JSON diff.
+    fn compare_snapshots(&self, before_json: &str, after_json: &str) -> PyResult<String> {
+        let before: onecrawl_cdp::DomSnapshot = serde_json::from_str(before_json)
+            .map_err(|e| py_err(format!("invalid before snapshot: {e}")))?;
+        let after: onecrawl_cdp::DomSnapshot = serde_json::from_str(after_json)
+            .map_err(|e| py_err(format!("invalid after snapshot: {e}")))?;
+        let diff = onecrawl_cdp::snapshot::compare_snapshots(&before, &after);
+        serde_json::to_string(&diff).map_err(py_err)
+    }
+
+    /// Save a snapshot (JSON string) to a file.
+    fn save_snapshot(&self, snapshot_json: &str, path: &str) -> PyResult<()> {
+        let snap: onecrawl_cdp::DomSnapshot = serde_json::from_str(snapshot_json)
+            .map_err(|e| py_err(format!("invalid snapshot JSON: {e}")))?;
+        onecrawl_cdp::snapshot::save_snapshot(&snap, std::path::Path::new(path))
+            .map_err(py_err)
+    }
+
+    /// Load a snapshot from a file. Returns JSON string.
+    fn load_snapshot(&self, path: &str) -> PyResult<String> {
+        let snap = onecrawl_cdp::snapshot::load_snapshot(std::path::Path::new(path))
+            .map_err(py_err)?;
+        serde_json::to_string(&snap).map_err(py_err)
+    }
+
+    /// Watch for DOM changes at an interval. Returns JSON array of diffs.
+    #[pyo3(signature = (interval_ms, selector=None, count=None))]
+    fn watch_for_changes(
+        &self,
+        interval_ms: u64,
+        selector: Option<&str>,
+        count: Option<usize>,
+    ) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let diffs = self
+            .rt
+            .block_on(onecrawl_cdp::snapshot::watch_for_changes(
+                page,
+                interval_ms,
+                selector,
+                count.unwrap_or(3),
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&diffs).map_err(py_err)
     }
 }
 

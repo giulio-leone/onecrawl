@@ -2552,6 +2552,131 @@ impl NativeBrowser {
         Ok(count as u32)
     }
 
+    // ── Robots.txt ─────────────────────────────────────────────────
+
+    /// Parse robots.txt content. Returns JSON RobotsTxt.
+    #[napi(js_name = "robotsParse")]
+    pub fn robots_parse(&self, content: String) -> Result<String> {
+        let robots = onecrawl_cdp::robots::parse_robots(&content);
+        serde_json::to_string(&robots).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Check if a path is allowed for a user-agent. Accepts JSON RobotsTxt.
+    #[napi(js_name = "robotsIsAllowed")]
+    pub fn robots_is_allowed(
+        &self,
+        robots_json: String,
+        user_agent: String,
+        path: String,
+    ) -> Result<bool> {
+        let robots: onecrawl_cdp::RobotsTxt =
+            serde_json::from_str(&robots_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(onecrawl_cdp::robots::is_allowed(&robots, &user_agent, &path))
+    }
+
+    /// Get crawl delay for a user-agent. Accepts JSON RobotsTxt.
+    #[napi(js_name = "robotsCrawlDelay")]
+    pub fn robots_crawl_delay(
+        &self,
+        robots_json: String,
+        user_agent: String,
+    ) -> Result<Option<f64>> {
+        let robots: onecrawl_cdp::RobotsTxt =
+            serde_json::from_str(&robots_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(onecrawl_cdp::robots::get_crawl_delay(&robots, &user_agent))
+    }
+
+    /// Get sitemaps from parsed robots.txt. Accepts JSON RobotsTxt, returns JSON array.
+    #[napi(js_name = "robotsSitemaps")]
+    pub fn robots_sitemaps(&self, robots_json: String) -> Result<String> {
+        let robots: onecrawl_cdp::RobotsTxt =
+            serde_json::from_str(&robots_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let sitemaps = onecrawl_cdp::robots::get_sitemaps(&robots);
+        serde_json::to_string(&sitemaps).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Fetch and parse robots.txt from a URL. Returns JSON RobotsTxt.
+    #[napi(js_name = "robotsFetch")]
+    pub async fn robots_fetch(&self, base_url: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let robots = onecrawl_cdp::robots::fetch_robots(page, &base_url)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&robots).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Link Graph ─────────────────────────────────────────────────
+
+    /// Extract links from the current page. Returns JSON Vec<LinkEdge>.
+    #[napi(js_name = "graphExtractLinks")]
+    pub async fn graph_extract_links(&self, base_url: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let edges = onecrawl_cdp::link_graph::extract_links(page, &base_url)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&edges).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Build a link graph from edges JSON. Returns JSON LinkGraph.
+    #[napi(js_name = "graphBuild")]
+    pub fn graph_build(&self, edges_json: String) -> Result<String> {
+        let edges: Vec<onecrawl_cdp::LinkEdge> =
+            serde_json::from_str(&edges_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let graph = onecrawl_cdp::link_graph::build_graph(&edges);
+        serde_json::to_string(&graph).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Analyze a link graph. Accepts JSON LinkGraph, returns JSON LinkStats.
+    #[napi(js_name = "graphAnalyze")]
+    pub fn graph_analyze(&self, graph_json: String) -> Result<String> {
+        let graph: onecrawl_cdp::LinkGraph =
+            serde_json::from_str(&graph_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let stats = onecrawl_cdp::link_graph::analyze_graph(&graph);
+        serde_json::to_string(&stats).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Find orphan pages (no inbound links). Accepts JSON LinkGraph, returns JSON array.
+    #[napi(js_name = "graphFindOrphans")]
+    pub fn graph_find_orphans(&self, graph_json: String) -> Result<String> {
+        let graph: onecrawl_cdp::LinkGraph =
+            serde_json::from_str(&graph_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let orphans = onecrawl_cdp::link_graph::find_orphans(&graph);
+        serde_json::to_string(&orphans).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Find hub pages. Accepts JSON LinkGraph and min_outbound threshold.
+    #[napi(js_name = "graphFindHubs")]
+    pub fn graph_find_hubs(&self, graph_json: String, min_outbound: u32) -> Result<String> {
+        let graph: onecrawl_cdp::LinkGraph =
+            serde_json::from_str(&graph_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let hubs = onecrawl_cdp::link_graph::find_hubs(&graph, min_outbound as usize);
+        serde_json::to_string(&hubs).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Export link graph to a JSON file.
+    #[napi(js_name = "graphExport")]
+    pub fn graph_export(&self, graph_json: String, path: String) -> Result<()> {
+        let graph: onecrawl_cdp::LinkGraph =
+            serde_json::from_str(&graph_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        onecrawl_cdp::link_graph::export_graph_json(&graph, std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Build link graph from crawl results JSON. Returns JSON LinkGraph.
+    #[napi(js_name = "graphFromCrawlResults")]
+    pub fn graph_from_crawl_results(&self, results_json: String) -> Result<String> {
+        let results: Vec<onecrawl_cdp::CrawlResult> =
+            serde_json::from_str(&results_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let graph = onecrawl_cdp::link_graph::from_crawl_results(&results);
+        serde_json::to_string(&graph).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
     // ── Anti-Bot ────────────────────────────────────────────────────
 
     /// Inject full stealth anti-bot patches. Returns JSON array of applied patch names.
@@ -2935,6 +3060,138 @@ impl NativeBrowser {
             .await
             .map_err(|e| Error::from_reason(e.to_string()))?;
         serde_json::to_string(&val).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── TLS Fingerprint ────────────────
+
+    /// List available TLS fingerprint profile names. Returns JSON array.
+    #[napi(js_name = "fingerprintProfiles")]
+    pub fn fingerprint_profiles(&self) -> Result<String> {
+        let profiles = onecrawl_cdp::tls_fingerprint::browser_profiles();
+        serde_json::to_string(&profiles).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Apply a named TLS fingerprint profile. Returns JSON array of overridden properties.
+    #[napi(js_name = "applyFingerprint")]
+    pub async fn apply_fingerprint(&self, name: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let fp = onecrawl_cdp::tls_fingerprint::get_profile(&name)
+            .ok_or_else(|| Error::from_reason(format!("unknown fingerprint profile: {name}")))?;
+        let overridden = onecrawl_cdp::tls_fingerprint::apply_fingerprint(page, &fp)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&overridden).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Apply a random TLS fingerprint. Returns JSON of the applied fingerprint.
+    #[napi(js_name = "applyRandomFingerprint")]
+    pub async fn apply_random_fingerprint(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let fp = onecrawl_cdp::tls_fingerprint::random_fingerprint();
+        onecrawl_cdp::tls_fingerprint::apply_fingerprint(page, &fp)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&fp).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Detect current browser fingerprint. Returns JSON.
+    #[napi(js_name = "detectFingerprint")]
+    pub async fn detect_fingerprint(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let fp = onecrawl_cdp::tls_fingerprint::detect_fingerprint(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&fp).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Apply a custom fingerprint from JSON string. Returns JSON array of overridden properties.
+    #[napi(js_name = "applyCustomFingerprint")]
+    pub async fn apply_custom_fingerprint(&self, json: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let fp: onecrawl_cdp::BrowserFingerprint = serde_json::from_str(&json)
+            .map_err(|e| Error::from_reason(format!("invalid fingerprint JSON: {e}")))?;
+        let overridden = onecrawl_cdp::tls_fingerprint::apply_fingerprint(page, &fp)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&overridden).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Page Snapshot ────────────────
+
+    /// Take a DOM snapshot of the current page. Returns JSON.
+    #[napi(js_name = "takeSnapshot")]
+    pub async fn take_snapshot(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let snap = onecrawl_cdp::snapshot::take_snapshot(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&snap).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Compare two snapshots (JSON strings). Returns JSON diff.
+    #[napi(js_name = "compareSnapshots")]
+    pub fn compare_snapshots(&self, before_json: String, after_json: String) -> Result<String> {
+        let before: onecrawl_cdp::DomSnapshot = serde_json::from_str(&before_json)
+            .map_err(|e| Error::from_reason(format!("invalid before snapshot: {e}")))?;
+        let after: onecrawl_cdp::DomSnapshot = serde_json::from_str(&after_json)
+            .map_err(|e| Error::from_reason(format!("invalid after snapshot: {e}")))?;
+        let diff = onecrawl_cdp::snapshot::compare_snapshots(&before, &after);
+        serde_json::to_string(&diff).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Save a snapshot (JSON string) to a file.
+    #[napi(js_name = "saveSnapshot")]
+    pub fn save_snapshot(&self, snapshot_json: String, path: String) -> Result<()> {
+        let snap: onecrawl_cdp::DomSnapshot = serde_json::from_str(&snapshot_json)
+            .map_err(|e| Error::from_reason(format!("invalid snapshot JSON: {e}")))?;
+        onecrawl_cdp::snapshot::save_snapshot(&snap, std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Load a snapshot from a file. Returns JSON string.
+    #[napi(js_name = "loadSnapshot")]
+    pub fn load_snapshot(&self, path: String) -> Result<String> {
+        let snap = onecrawl_cdp::snapshot::load_snapshot(std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&snap).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Watch for DOM changes at an interval. Returns JSON array of diffs.
+    #[napi(js_name = "watchForChanges")]
+    pub async fn watch_for_changes(
+        &self,
+        interval_ms: u32,
+        selector: Option<String>,
+        count: Option<u32>,
+    ) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let diffs = onecrawl_cdp::snapshot::watch_for_changes(
+            page,
+            interval_ms as u64,
+            selector.as_deref(),
+            count.unwrap_or(3) as usize,
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&diffs).map_err(|e| Error::from_reason(e.to_string()))
     }
 }
 

@@ -1,0 +1,291 @@
+//! Link graph builder and analyser — extract, build, and query link graphs.
+
+use chromiumoxide::Page;
+use onecrawl_core::Result;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+/// A node in the link graph.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkNode {
+    pub url: String,
+    pub title: String,
+    pub inbound: usize,
+    pub outbound: usize,
+    pub depth: usize,
+}
+
+/// A directed edge between two pages.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkEdge {
+    pub source: String,
+    pub target: String,
+    pub anchor_text: String,
+    pub is_internal: bool,
+}
+
+/// A complete link graph.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkGraph {
+    pub nodes: Vec<LinkNode>,
+    pub edges: Vec<LinkEdge>,
+    pub total_internal: usize,
+    pub total_external: usize,
+}
+
+/// Aggregate link-graph statistics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkStats {
+    pub total_nodes: usize,
+    pub total_edges: usize,
+    pub avg_inbound: f64,
+    pub avg_outbound: f64,
+    pub max_inbound_url: String,
+    pub max_outbound_url: String,
+    pub orphan_pages: Vec<String>,
+    pub broken_links: Vec<String>,
+}
+
+// ── helpers ──────────────────────────────────────────────────────
+
+fn extract_domain(url: &str) -> String {
+    url.split("://")
+        .nth(1)
+        .unwrap_or(url)
+        .split('/')
+        .next()
+        .unwrap_or("")
+        .split(':')
+        .next()
+        .unwrap_or("")
+        .to_string()
+}
+
+// ── public API ──────────────────────────────────────────────────
+
+/// Extract all links from the current page via JavaScript.
+pub async fn extract_links(page: &Page, base_url: &str) -> Result<Vec<LinkEdge>> {
+    let js = r#"
+        Array.from(document.querySelectorAll('a[href]')).map(a => ({
+            href: a.href,
+            text: (a.textContent || '').trim().substring(0, 200)
+        })).filter(l => l.href.startsWith('http'))
+    "#;
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| onecrawl_core::Error::Browser(format!("extract_links failed: {e}")))?;
+
+    #[derive(Deserialize)]
+    struct RawLink {
+        href: String,
+        text: String,
+    }
+
+    let raw: Vec<RawLink> = val.into_value().unwrap_or_default();
+    let base_domain = extract_domain(base_url);
+    let source = base_url.to_string();
+
+    Ok(raw
+        .into_iter()
+        .map(|l| {
+            let target_domain = extract_domain(&l.href);
+            LinkEdge {
+                source: source.clone(),
+                target: l.href,
+                anchor_text: l.text,
+                is_internal: target_domain == base_domain,
+            }
+        })
+        .collect())
+}
+
+/// Build a link graph from a collection of edges.
+pub fn build_graph(edges: &[LinkEdge]) -> LinkGraph {
+    let mut inbound: HashMap<String, usize> = HashMap::new();
+    let mut outbound: HashMap<String, usize> = HashMap::new();
+    let mut total_internal: usize = 0;
+    let mut total_external: usize = 0;
+
+    for e in edges {
+        *outbound.entry(e.source.clone()).or_default() += 1;
+        *inbound.entry(e.target.clone()).or_default() += 1;
+        // Ensure both ends appear in both maps
+        inbound.entry(e.source.clone()).or_default();
+        outbound.entry(e.target.clone()).or_default();
+        if e.is_internal {
+            total_internal += 1;
+        } else {
+            total_external += 1;
+        }
+    }
+
+    let all_urls: Vec<String> = {
+        let mut set: Vec<String> = inbound.keys().chain(outbound.keys()).cloned().collect();
+        set.sort();
+        set.dedup();
+        set
+    };
+
+    let nodes: Vec<LinkNode> = all_urls
+        .into_iter()
+        .map(|url| {
+            let ib = inbound.get(&url).copied().unwrap_or(0);
+            let ob = outbound.get(&url).copied().unwrap_or(0);
+            LinkNode {
+                url,
+                title: String::new(),
+                inbound: ib,
+                outbound: ob,
+                depth: 0,
+            }
+        })
+        .collect();
+
+    LinkGraph {
+        nodes,
+        edges: edges.to_vec(),
+        total_internal,
+        total_external,
+    }
+}
+
+/// Compute statistics for a link graph.
+pub fn analyze_graph(graph: &LinkGraph) -> LinkStats {
+    let total_nodes = graph.nodes.len();
+    let total_edges = graph.edges.len();
+
+    let (sum_in, sum_out) = graph
+        .nodes
+        .iter()
+        .fold((0usize, 0usize), |(si, so), n| (si + n.inbound, so + n.outbound));
+
+    let avg_inbound = if total_nodes > 0 {
+        sum_in as f64 / total_nodes as f64
+    } else {
+        0.0
+    };
+    let avg_outbound = if total_nodes > 0 {
+        sum_out as f64 / total_nodes as f64
+    } else {
+        0.0
+    };
+
+    let max_inbound_url = graph
+        .nodes
+        .iter()
+        .max_by_key(|n| n.inbound)
+        .map(|n| n.url.clone())
+        .unwrap_or_default();
+
+    let max_outbound_url = graph
+        .nodes
+        .iter()
+        .max_by_key(|n| n.outbound)
+        .map(|n| n.url.clone())
+        .unwrap_or_default();
+
+    let orphan_pages = find_orphans(graph);
+
+    // broken_links: targets that appear only as targets (never as sources)
+    let source_set: std::collections::HashSet<&str> =
+        graph.edges.iter().map(|e| e.source.as_str()).collect();
+    let broken_links: Vec<String> = graph
+        .nodes
+        .iter()
+        .filter(|n| n.inbound > 0 && n.outbound == 0 && !source_set.contains(n.url.as_str()))
+        .map(|n| n.url.clone())
+        .collect();
+
+    LinkStats {
+        total_nodes,
+        total_edges,
+        avg_inbound,
+        avg_outbound,
+        max_inbound_url,
+        max_outbound_url,
+        orphan_pages,
+        broken_links,
+    }
+}
+
+/// Find pages with no inbound links.
+pub fn find_orphans(graph: &LinkGraph) -> Vec<String> {
+    graph
+        .nodes
+        .iter()
+        .filter(|n| n.inbound == 0)
+        .map(|n| n.url.clone())
+        .collect()
+}
+
+/// Find hub pages with outbound links >= `min_outbound`.
+pub fn find_hubs(graph: &LinkGraph, min_outbound: usize) -> Vec<LinkNode> {
+    graph
+        .nodes
+        .iter()
+        .filter(|n| n.outbound >= min_outbound)
+        .cloned()
+        .collect()
+}
+
+/// Export the graph as pretty-printed JSON.
+pub fn export_graph_json(graph: &LinkGraph, path: &std::path::Path) -> Result<()> {
+    let json = serde_json::to_string_pretty(graph)?;
+    std::fs::write(path, json)?;
+    Ok(())
+}
+
+/// Build a link graph from spider crawl results.
+pub fn from_crawl_results(results: &[crate::spider::CrawlResult]) -> LinkGraph {
+    let mut edges: Vec<LinkEdge> = Vec::new();
+    let success: Vec<&crate::spider::CrawlResult> =
+        results.iter().filter(|r| r.status == "success").collect();
+
+    // Build a set of all crawled URLs for internal detection
+    let crawled_set: std::collections::HashSet<&str> =
+        success.iter().map(|r| r.url.as_str()).collect();
+
+    // We don't have per-page link targets in CrawlResult, so we model
+    // the relationships based on what was discovered: each page links to
+    // pages that are one depth level deeper and share the same domain prefix.
+    let first_domain = success
+        .first()
+        .map(|r| extract_domain(&r.url))
+        .unwrap_or_default();
+
+    for r in &success {
+        let source_domain = extract_domain(&r.url);
+        // Create edges to all pages at depth + 1
+        for target in &success {
+            if target.depth == r.depth + 1 {
+                let target_domain = extract_domain(&target.url);
+                let is_internal =
+                    target_domain == source_domain || crawled_set.contains(target.url.as_str());
+                edges.push(LinkEdge {
+                    source: r.url.clone(),
+                    target: target.url.clone(),
+                    anchor_text: target.title.clone(),
+                    is_internal: is_internal && target_domain == first_domain,
+                });
+            }
+        }
+    }
+
+    let mut graph = build_graph(&edges);
+
+    // Enrich nodes with titles and depths from crawl results
+    let title_map: HashMap<&str, (&str, usize)> = success
+        .iter()
+        .map(|r| (r.url.as_str(), (r.title.as_str(), r.depth)))
+        .collect();
+
+    for node in &mut graph.nodes {
+        if let Some(&(title, depth)) = title_map.get(node.url.as_str()) {
+            node.title = title.to_string();
+            node.depth = depth;
+        }
+    }
+
+    graph
+}

@@ -2805,6 +2805,164 @@ pub fn spider_summary(results_file: &str) {
 }
 
 // ---------------------------------------------------------------------------
+// Robots.txt
+// ---------------------------------------------------------------------------
+
+pub async fn robots_parse(source: &str) {
+    // If it looks like a URL, fetch via browser; otherwise read as file
+    if source.starts_with("http://") || source.starts_with("https://") {
+        with_page(|page| async move {
+            let robots = onecrawl_cdp::robots::fetch_robots(&page, source)
+                .await
+                .map_err(|e| e.to_string())?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&robots).unwrap_or_default()
+            );
+            Ok(())
+        })
+        .await;
+    } else {
+        let content = match std::fs::read_to_string(source) {
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("{} Failed to read file: {}", "✗".red(), e);
+                return;
+            }
+        };
+        let robots = onecrawl_cdp::robots::parse_robots(&content);
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&robots).unwrap_or_default()
+        );
+    }
+}
+
+pub async fn robots_check(url: &str, path: &str, user_agent: &str) {
+    with_page(|page| async move {
+        let robots = onecrawl_cdp::robots::fetch_robots(&page, url)
+            .await
+            .map_err(|e| e.to_string())?;
+        let allowed = onecrawl_cdp::robots::is_allowed(&robots, user_agent, path);
+        if allowed {
+            println!("{} Path \"{}\" is {} for {}", "✓".green(), path, "ALLOWED".green(), user_agent);
+        } else {
+            println!("{} Path \"{}\" is {} for {}", "✗".red(), path, "DISALLOWED".red(), user_agent);
+        }
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn robots_sitemaps(url: &str) {
+    with_page(|page| async move {
+        let robots = onecrawl_cdp::robots::fetch_robots(&page, url)
+            .await
+            .map_err(|e| e.to_string())?;
+        let sitemaps = onecrawl_cdp::robots::get_sitemaps(&robots);
+        if sitemaps.is_empty() {
+            println!("{} No sitemaps declared", "→".cyan());
+        } else {
+            for s in &sitemaps {
+                println!("  {s}");
+            }
+        }
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Link Graph
+// ---------------------------------------------------------------------------
+
+pub async fn graph_extract(base_url: Option<&str>) {
+    with_page(|page| async move {
+        let current_url: String = page
+            .evaluate("window.location.href")
+            .await
+            .ok()
+            .and_then(|v| v.into_value::<String>().ok())
+            .unwrap_or_default();
+        let base = base_url.unwrap_or(&current_url);
+        let edges = onecrawl_cdp::link_graph::extract_links(&page, base)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&edges).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub fn graph_build(edges_file: &str) {
+    let data = match std::fs::read_to_string(edges_file) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("{} Failed to read file: {}", "✗".red(), e);
+            return;
+        }
+    };
+    let edges: Vec<onecrawl_cdp::LinkEdge> = match serde_json::from_str(&data) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("{} Invalid JSON: {}", "✗".red(), e);
+            return;
+        }
+    };
+    let graph = onecrawl_cdp::link_graph::build_graph(&edges);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&graph).unwrap_or_default()
+    );
+}
+
+pub fn graph_analyze(graph_file: &str) {
+    let data = match std::fs::read_to_string(graph_file) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("{} Failed to read file: {}", "✗".red(), e);
+            return;
+        }
+    };
+    let graph: onecrawl_cdp::LinkGraph = match serde_json::from_str(&data) {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("{} Invalid JSON: {}", "✗".red(), e);
+            return;
+        }
+    };
+    let stats = onecrawl_cdp::link_graph::analyze_graph(&graph);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&stats).unwrap_or_default()
+    );
+}
+
+pub fn graph_export(graph_file: &str, output: &str) {
+    let data = match std::fs::read_to_string(graph_file) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("{} Failed to read file: {}", "✗".red(), e);
+            return;
+        }
+    };
+    let graph: onecrawl_cdp::LinkGraph = match serde_json::from_str(&data) {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("{} Invalid JSON: {}", "✗".red(), e);
+            return;
+        }
+    };
+    match onecrawl_cdp::link_graph::export_graph_json(&graph, std::path::Path::new(output)) {
+        Ok(()) => println!("{} Graph exported to {}", "✓".green(), output),
+        Err(e) => eprintln!("{} Export failed: {}", "✗".red(), e),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Interactive Shell
 // ---------------------------------------------------------------------------
 
@@ -3074,6 +3232,127 @@ pub async fn http_fetch(json: &str) {
             "{}",
             serde_json::to_string_pretty(&resp).unwrap_or_default()
         );
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// TLS Fingerprint
+// ---------------------------------------------------------------------------
+
+pub async fn fingerprint_apply(name: &str) {
+    let n = name.to_string();
+    with_page(|page| async move {
+        let fp = if n == "random" {
+            onecrawl_cdp::tls_fingerprint::random_fingerprint()
+        } else {
+            onecrawl_cdp::tls_fingerprint::get_profile(&n)
+                .ok_or_else(|| format!("Unknown profile: {n}. Use: chrome-win, chrome-mac, firefox-win, firefox-mac, safari-mac, edge-win, random"))?
+        };
+        let overridden = onecrawl_cdp::tls_fingerprint::apply_fingerprint(&page, &fp)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Applied fingerprint: {}", "✓".green(), fp.name.cyan());
+        println!("  UA: {}", fp.user_agent.dimmed());
+        println!("  Platform: {}", fp.platform);
+        println!("  Overridden: {}", overridden.join(", "));
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn fingerprint_detect() {
+    with_page(|page| async move {
+        let fp = onecrawl_cdp::tls_fingerprint::detect_fingerprint(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&fp).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub fn fingerprint_list() {
+    let profiles = onecrawl_cdp::tls_fingerprint::browser_profiles();
+    for p in &profiles {
+        println!(
+            "  {} — {} ({}×{}, {})",
+            p.name.cyan(),
+            p.platform,
+            p.screen_width,
+            p.screen_height,
+            p.vendor
+        );
+    }
+    println!("\n{} profiles available", profiles.len());
+}
+
+// ---------------------------------------------------------------------------
+// Page Snapshot
+// ---------------------------------------------------------------------------
+
+pub async fn snapshot_take(output: Option<&str>) {
+    let out = output.map(|s| s.to_string());
+    with_page(|page| async move {
+        let snap = onecrawl_cdp::snapshot::take_snapshot(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        if let Some(path) = &out {
+            onecrawl_cdp::snapshot::save_snapshot(&snap, std::path::Path::new(path))
+                .map_err(|e| e.to_string())?;
+            println!("{} Snapshot saved to {}", "✓".green(), path.cyan());
+        } else {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&snap).unwrap_or_default()
+            );
+        }
+        Ok(())
+    })
+    .await;
+}
+
+pub fn snapshot_compare(path1: &str, path2: &str) {
+    let a = onecrawl_cdp::snapshot::load_snapshot(std::path::Path::new(path1));
+    let b = onecrawl_cdp::snapshot::load_snapshot(std::path::Path::new(path2));
+    match (a, b) {
+        (Ok(before), Ok(after)) => {
+            let diff = onecrawl_cdp::snapshot::compare_snapshots(&before, &after);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&diff).unwrap_or_default()
+            );
+        }
+        (Err(e), _) | (_, Err(e)) => {
+            eprintln!("{} {e}", "✗".red());
+            std::process::exit(1);
+        }
+    }
+}
+
+pub async fn snapshot_watch(interval_ms: u64, selector: Option<&str>, count: usize) {
+    let sel = selector.map(|s| s.to_string());
+    with_page(|page| async move {
+        let diffs = onecrawl_cdp::snapshot::watch_for_changes(
+            &page,
+            interval_ms,
+            sel.as_deref(),
+            count,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        for (i, diff) in diffs.iter().enumerate() {
+            println!("--- Diff #{} ---", i + 1);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(diff).unwrap_or_default()
+            );
+        }
+        println!("{} {} diffs captured", "✓".green(), diffs.len());
         Ok(())
     })
     .await;

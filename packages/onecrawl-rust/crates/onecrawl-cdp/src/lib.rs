@@ -30,6 +30,7 @@ pub mod iframe;
 pub mod input;
 pub mod intercept;
 pub mod keyboard;
+pub mod link_graph;
 pub mod navigation;
 pub mod network;
 pub mod network_log;
@@ -42,13 +43,16 @@ pub mod playwright_backend;
 pub mod print;
 pub mod proxy;
 pub mod request_queue;
+pub mod robots;
 pub mod screenshot;
 pub mod screenshot_diff;
 pub mod selectors;
 pub mod shell;
+pub mod snapshot;
 pub mod stealth;
 pub mod tabs;
 pub mod throttle;
+pub mod tls_fingerprint;
 pub mod tracing_cdp;
 pub mod web_storage;
 pub mod webauthn;
@@ -99,7 +103,11 @@ pub use streaming::{
     ExtractionRule, ExtractionSchema, PaginationConfig, ExtractedItem, ExtractionResult,
 };
 pub use http_client::{HttpRequest, HttpResponse};
+pub use link_graph::{LinkEdge, LinkGraph, LinkNode, LinkStats};
+pub use robots::{RobotsRule, RobotsTxt};
+pub use snapshot::{DomSnapshot, SnapshotDiff};
 pub use tabs::TabInfo;
+pub use tls_fingerprint::BrowserFingerprint;
 
 // Re-export chromiumoxide::Page for downstream consumers
 pub use chromiumoxide::Page;

@@ -488,6 +488,20 @@ enum Commands {
         action: SpiderAction,
     },
 
+    // ── Robots.txt ────────────────────────────────────────────────
+    /// Robots.txt parsing and compliance checking
+    Robots {
+        #[command(subcommand)]
+        action: RobotsAction,
+    },
+
+    // ── Link Graph ────────────────────────────────────────────────
+    /// Link graph analysis
+    Graph {
+        #[command(subcommand)]
+        action: GraphAction,
+    },
+
     // ── Interactive Shell ──────────────────────────────────────────
     /// Launch interactive scraping REPL
     Shell,
@@ -521,6 +535,20 @@ enum Commands {
         format: String,
     },
 
+    // ── TLS Fingerprint ──────────────────────────────────────────
+    /// Browser TLS fingerprint management
+    Fingerprint {
+        #[command(subcommand)]
+        action: FingerprintAction,
+    },
+
+    // ── Page Snapshot ────────────────────────────────────────────
+    /// DOM snapshot and change detection
+    Snapshot {
+        #[command(subcommand)]
+        action: SnapshotAction,
+    },
+
     // ── HTTP Client ────────────────────────────────────────────────
     /// Execute HTTP requests via the browser's fetch API
     Http {
@@ -549,6 +577,48 @@ enum DomainAction {
     List,
     /// Show available block categories
     Categories,
+}
+
+#[derive(Subcommand)]
+enum FingerprintAction {
+    /// Apply a named fingerprint profile (chrome-win, chrome-mac, firefox-win, firefox-mac, safari-mac, edge-win)
+    Apply {
+        /// Profile name or "random"
+        name: String,
+    },
+    /// Detect the current browser fingerprint
+    Detect,
+    /// List available fingerprint profiles
+    List,
+}
+
+#[derive(Subcommand)]
+enum SnapshotAction {
+    /// Take a DOM snapshot of the current page
+    Take {
+        /// Output file path (JSON)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+    /// Compare two snapshot files
+    Compare {
+        /// First snapshot file
+        path1: String,
+        /// Second snapshot file
+        path2: String,
+    },
+    /// Watch for DOM changes at regular intervals
+    Watch {
+        /// Interval in milliseconds between snapshots
+        #[arg(short, long, default_value = "1000")]
+        interval: u64,
+        /// CSS selector to watch (optional)
+        #[arg(short, long)]
+        selector: Option<String>,
+        /// Number of iterations (max 10)
+        #[arg(short, long, default_value = "3")]
+        count: usize,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1348,6 +1418,57 @@ enum SpiderAction {
     },
 }
 
+#[derive(Subcommand)]
+enum RobotsAction {
+    /// Parse robots.txt from a URL or local file
+    Parse {
+        /// URL or file path to robots.txt
+        source: String,
+    },
+    /// Check if a path is allowed by robots.txt
+    Check {
+        /// URL to the site (fetches /robots.txt)
+        url: String,
+        /// Path to check
+        path: String,
+        /// User-agent string
+        #[arg(long, default_value = "*")]
+        user_agent: String,
+    },
+    /// List sitemaps declared in robots.txt
+    Sitemaps {
+        /// URL to the site (fetches /robots.txt)
+        url: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum GraphAction {
+    /// Extract links from the current page
+    Extract {
+        /// Base URL for internal/external classification
+        #[arg(long)]
+        base_url: Option<String>,
+    },
+    /// Build a graph from edges JSON file
+    Build {
+        /// Path to edges JSON file
+        edges_json: String,
+    },
+    /// Analyze a graph JSON file
+    Analyze {
+        /// Path to graph JSON file
+        graph_json: String,
+    },
+    /// Export graph to a JSON file
+    Export {
+        /// Path to graph JSON file
+        graph_json: String,
+        /// Output file path
+        output_path: String,
+    },
+}
+
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
@@ -1879,6 +2000,42 @@ async fn main() {
             }
         },
 
+        // ── Robots.txt ─────────────────────────────────────────────
+        Commands::Robots { action } => match action {
+            RobotsAction::Parse { source } => {
+                commands::browser::robots_parse(&source).await
+            }
+            RobotsAction::Check {
+                url,
+                path,
+                user_agent,
+            } => {
+                commands::browser::robots_check(&url, &path, &user_agent).await
+            }
+            RobotsAction::Sitemaps { url } => {
+                commands::browser::robots_sitemaps(&url).await
+            }
+        },
+
+        // ── Link Graph ─────────────────────────────────────────────
+        Commands::Graph { action } => match action {
+            GraphAction::Extract { base_url } => {
+                commands::browser::graph_extract(base_url.as_deref()).await
+            }
+            GraphAction::Build { edges_json } => {
+                commands::browser::graph_build(&edges_json)
+            }
+            GraphAction::Analyze { graph_json } => {
+                commands::browser::graph_analyze(&graph_json)
+            }
+            GraphAction::Export {
+                graph_json,
+                output_path,
+            } => {
+                commands::browser::graph_export(&graph_json, &output_path)
+            }
+        },
+
         // ── Interactive Shell ──────────────────────────────────────
         Commands::Shell => commands::browser::shell_repl().await,
 
@@ -1926,6 +2083,32 @@ async fn main() {
             } => commands::browser::http_post(&url, &body, &content_type).await,
             HttpAction::Head { url } => commands::browser::http_head(&url).await,
             HttpAction::Fetch { json } => commands::browser::http_fetch(&json).await,
+        },
+
+        // ── TLS Fingerprint ──────────────────────────────────────────
+        Commands::Fingerprint { action } => match action {
+            FingerprintAction::Apply { name } => {
+                commands::browser::fingerprint_apply(&name).await;
+            }
+            FingerprintAction::Detect => commands::browser::fingerprint_detect().await,
+            FingerprintAction::List => commands::browser::fingerprint_list(),
+        },
+
+        // ── Page Snapshot ────────────────────────────────────────────
+        Commands::Snapshot { action } => match action {
+            SnapshotAction::Take { output } => {
+                commands::browser::snapshot_take(output.as_deref()).await;
+            }
+            SnapshotAction::Compare { path1, path2 } => {
+                commands::browser::snapshot_compare(&path1, &path2);
+            }
+            SnapshotAction::Watch {
+                interval,
+                selector,
+                count,
+            } => {
+                commands::browser::snapshot_watch(interval, selector.as_deref(), count).await;
+            }
         },
     }
 }
