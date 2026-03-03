@@ -9,8 +9,8 @@ members = [
     "crates/onecrawl-cli-rs",
     "crates/onecrawl-mcp-rs",
     "bindings/napi",
-    "bindings/python",
 ]
+exclude = ["bindings/python"]  # Python bindings require maturin (build with: cd bindings/python && maturin develop)
 
 [workspace.package]
 version = "0.1.0"
