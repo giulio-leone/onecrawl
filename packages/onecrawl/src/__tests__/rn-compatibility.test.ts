@@ -75,6 +75,13 @@ function collectNativeSourceFiles(srcDir: string): string[] {
     "passkey-store.ts",
     "auth-cascade.ts",
     "profile-manager.use-case.ts",
+    "oauth-pkce.ts",
+    "oauth-token-store.ts",
+    "oauth-refresh.ts",
+    "totp-adapter.ts",
+    "totp-secret-store.ts",
+    "sms-2fa-adapter.ts",
+    "twofa-detector.ts",
   ]);
 
   const files: string[] = [];

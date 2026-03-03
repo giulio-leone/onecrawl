@@ -110,7 +110,7 @@ describe("AuthCascade", () => {
       const result = await cascade.authenticate(cdp);
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain("No passkey or cookie credentials available");
+      expect(result.error).toContain("No passkey, OAuth, or cookie credentials available");
     });
   });
 

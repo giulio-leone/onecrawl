@@ -261,3 +261,9 @@ export {
   SERVICE_VERIFY_URLS,
   SERVICE_LOGGED_IN_SELECTORS,
 } from "./login.port.js";
+
+export type {
+  OAuthPort,
+  OAuthConfig,
+  OAuthTokens,
+} from "./oauth.port.js";
