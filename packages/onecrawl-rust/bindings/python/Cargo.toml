@@ -1,0 +1,20 @@
+[package]
+name = "onecrawl-python"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "onecrawl"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { workspace = true }
+onecrawl-core = { path = "../../crates/onecrawl-core" }
+onecrawl-crypto = { path = "../../crates/onecrawl-crypto" }
+onecrawl-parser = { path = "../../crates/onecrawl-parser" }
+onecrawl-storage = { path = "../../crates/onecrawl-storage" }
+base64 = { workspace = true }
+serde_json = { workspace = true }

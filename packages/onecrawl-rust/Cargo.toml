@@ -8,6 +8,7 @@ members = [
     "crates/onecrawl-cdp",
     "crates/onecrawl-cli-rs",
     "bindings/napi",
+    "bindings/python",
 ]
 
 [workspace.package]
@@ -56,3 +57,6 @@ tempfile = "3"
 napi = { version = "3", default-features = false, features = ["napi8", "async", "serde-json"] }
 napi-derive = "3"
 napi-build = "2"
+
+# PyO3 bindings
+pyo3 = { version = "0.24", features = ["extension-module"] }
