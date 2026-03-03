@@ -1772,6 +1772,298 @@ impl Browser {
         let req = onecrawl_cdp::request_queue::post_request(id, url, body);
         serde_json::to_string(&req).unwrap_or_default()
     }
+
+    // ──────────────── Smart Selectors ────────────────
+
+    /// CSS selector with pseudo-elements (::text, ::attr(name)). Returns JSON SelectorResult.
+    fn css_select(&self, selector: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::selectors::css_select(page, selector))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// XPath selector. Returns JSON SelectorResult.
+    fn xpath_select(&self, expression: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::selectors::xpath_select(page, expression))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Find elements by text content. Returns JSON SelectorResult.
+    #[pyo3(signature = (text, tag=None))]
+    fn find_by_text(&self, text: &str, tag: Option<&str>) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::selectors::find_by_text(page, text, tag))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Find elements by regex pattern. Returns JSON SelectorResult.
+    #[pyo3(signature = (pattern, tag=None))]
+    fn find_by_regex(&self, pattern: &str, tag: Option<&str>) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::selectors::find_by_regex(page, pattern, tag))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Auto-generate a unique CSS selector for an element.
+    fn auto_selector(&self, target_selector: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::selectors::auto_selector(page, target_selector))
+            .map_err(py_err)
+    }
+
+    // ──────────────── DOM Navigation ────────────────
+
+    /// Get parent element. Returns JSON NavElement or None.
+    fn get_parent(&self, selector: &str) -> PyResult<Option<String>> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::dom_nav::get_parent(page, selector))
+            .map_err(py_err)?;
+        match result {
+            Some(el) => Ok(Some(serde_json::to_string(&el).map_err(py_err)?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Get child elements. Returns JSON array of NavElement.
+    fn get_children(&self, selector: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::dom_nav::get_children(page, selector))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Get next sibling element. Returns JSON NavElement or None.
+    fn get_next_sibling(&self, selector: &str) -> PyResult<Option<String>> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::dom_nav::get_next_sibling(page, selector))
+            .map_err(py_err)?;
+        match result {
+            Some(el) => Ok(Some(serde_json::to_string(&el).map_err(py_err)?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Get previous sibling element. Returns JSON NavElement or None.
+    fn get_prev_sibling(&self, selector: &str) -> PyResult<Option<String>> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::dom_nav::get_prev_sibling(page, selector))
+            .map_err(py_err)?;
+        match result {
+            Some(el) => Ok(Some(serde_json::to_string(&el).map_err(py_err)?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Get all sibling elements. Returns JSON array of NavElement.
+    fn get_siblings(&self, selector: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::dom_nav::get_siblings(page, selector))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Find similar elements. Returns JSON array of NavElement.
+    fn find_similar(&self, selector: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::dom_nav::find_similar(page, selector))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Get elements above the target. Returns JSON array of NavElement.
+    #[pyo3(signature = (selector, limit=10))]
+    fn above_elements(&self, selector: &str, limit: usize) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::dom_nav::above_elements(page, selector, limit))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Get elements below the target. Returns JSON array of NavElement.
+    #[pyo3(signature = (selector, limit=10))]
+    fn below_elements(&self, selector: &str, limit: usize) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::dom_nav::below_elements(page, selector, limit))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ──────────────── Content Extraction ────────────────
+
+    /// Extract page content. Returns JSON ExtractResult.
+    #[pyo3(signature = (selector=None, format=None))]
+    fn extract_content(&self, selector: Option<&str>, format: Option<&str>) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let fmt = onecrawl_cdp::extract::parse_extract_format(format.unwrap_or("text"))
+            .map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::extract::extract(page, selector, fmt))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Extract content and save to file. Returns bytes written.
+    #[pyo3(signature = (output_path, selector=None))]
+    fn extract_to_file(&self, output_path: &str, selector: Option<&str>) -> PyResult<usize> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::extract::extract_to_file(
+                page,
+                selector,
+                std::path::Path::new(output_path),
+            ))
+            .map_err(py_err)
+    }
+
+    /// Get structured page metadata. Returns JSON object.
+    fn get_page_metadata(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let meta = self
+            .rt
+            .block_on(onecrawl_cdp::extract::get_page_metadata(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&meta).map_err(py_err)
+    }
+
+    // ── Network Request Logger ────────────────────────────────────
+
+    /// Start network request/response logging.
+    fn start_network_log(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::network_log::start_network_log(page))
+            .map_err(py_err)
+    }
+
+    /// Drain captured network entries as JSON string.
+    fn drain_network_log(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let entries = self
+            .rt
+            .block_on(onecrawl_cdp::network_log::drain_network_log(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&entries).map_err(py_err)
+    }
+
+    /// Get network summary statistics as JSON string.
+    fn get_network_summary(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let summary = self
+            .rt
+            .block_on(onecrawl_cdp::network_log::get_network_summary(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&summary).map_err(py_err)
+    }
+
+    /// Stop network logging and restore originals.
+    fn stop_network_log(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::network_log::stop_network_log(page))
+            .map_err(py_err)
+    }
+
+    /// Export network log to a JSON file.
+    fn export_network_log(&self, path: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::network_log::export_network_log(page, path))
+            .map_err(py_err)
+    }
+
+    // ── Page Watcher ──────────────────────────────────────────────
+
+    /// Start watching for page state changes.
+    fn start_page_watcher(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::page_watcher::start_page_watcher(page))
+            .map_err(py_err)
+    }
+
+    /// Drain accumulated page changes as JSON string.
+    fn drain_page_changes(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let changes = self
+            .rt
+            .block_on(onecrawl_cdp::page_watcher::drain_page_changes(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&changes).map_err(py_err)
+    }
+
+    /// Stop the page watcher.
+    fn stop_page_watcher(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::page_watcher::stop_page_watcher(page))
+            .map_err(py_err)
+    }
+
+    /// Get current page state snapshot as JSON string.
+    fn get_page_state(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let state = self
+            .rt
+            .block_on(onecrawl_cdp::page_watcher::get_page_state(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&state).map_err(py_err)
+    }
 }
 
 // ──────────────────────────── Module ────────────────────────────

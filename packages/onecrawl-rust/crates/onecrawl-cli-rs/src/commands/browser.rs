@@ -2137,3 +2137,371 @@ pub async fn request_batch(json: &str, concurrency: usize, delay: u64) {
     })
     .await;
 }
+
+// ---------------------------------------------------------------------------
+// Smart Selectors
+// ---------------------------------------------------------------------------
+
+pub async fn select_css(selector: &str) {
+    let selector = selector.to_string();
+    with_page(|page| async move {
+        let result = onecrawl_cdp::selectors::css_select(&page, &selector)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn select_xpath(expression: &str) {
+    let expression = expression.to_string();
+    with_page(|page| async move {
+        let result = onecrawl_cdp::selectors::xpath_select(&page, &expression)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn select_text(text: &str, tag: Option<&str>) {
+    let text = text.to_string();
+    let tag = tag.map(String::from);
+    with_page(|page| async move {
+        let result = onecrawl_cdp::selectors::find_by_text(&page, &text, tag.as_deref())
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn select_regex(pattern: &str, tag: Option<&str>) {
+    let pattern = pattern.to_string();
+    let tag = tag.map(String::from);
+    with_page(|page| async move {
+        let result = onecrawl_cdp::selectors::find_by_regex(&page, &pattern, tag.as_deref())
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn select_auto(selector: &str) {
+    let selector = selector.to_string();
+    with_page(|page| async move {
+        let result = onecrawl_cdp::selectors::auto_selector(&page, &selector)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{result}");
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// DOM Navigation
+// ---------------------------------------------------------------------------
+
+pub async fn nav_parent(selector: &str) {
+    let selector = selector.to_string();
+    with_page(|page| async move {
+        let result = onecrawl_cdp::dom_nav::get_parent(&page, &selector)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn nav_children(selector: &str) {
+    let selector = selector.to_string();
+    with_page(|page| async move {
+        let result = onecrawl_cdp::dom_nav::get_children(&page, &selector)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn nav_next_sibling(selector: &str) {
+    let selector = selector.to_string();
+    with_page(|page| async move {
+        let result = onecrawl_cdp::dom_nav::get_next_sibling(&page, &selector)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn nav_prev_sibling(selector: &str) {
+    let selector = selector.to_string();
+    with_page(|page| async move {
+        let result = onecrawl_cdp::dom_nav::get_prev_sibling(&page, &selector)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn nav_siblings(selector: &str) {
+    let selector = selector.to_string();
+    with_page(|page| async move {
+        let result = onecrawl_cdp::dom_nav::get_siblings(&page, &selector)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn nav_similar(selector: &str) {
+    let selector = selector.to_string();
+    with_page(|page| async move {
+        let result = onecrawl_cdp::dom_nav::find_similar(&page, &selector)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn nav_above(selector: &str, limit: usize) {
+    let selector = selector.to_string();
+    with_page(|page| async move {
+        let result = onecrawl_cdp::dom_nav::above_elements(&page, &selector, limit)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn nav_below(selector: &str, limit: usize) {
+    let selector = selector.to_string();
+    with_page(|page| async move {
+        let result = onecrawl_cdp::dom_nav::below_elements(&page, &selector, limit)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Content Extraction
+// ---------------------------------------------------------------------------
+
+pub async fn extract_content(format: &str, selector: Option<&str>, output: Option<&str>) {
+    let format = format.to_string();
+    let selector = selector.map(String::from);
+    let output = output.map(String::from);
+    with_page(|page| async move {
+        let fmt = onecrawl_cdp::extract::parse_extract_format(&format)
+            .map_err(|e| e.to_string())?;
+
+        if let Some(path) = output {
+            let bytes = onecrawl_cdp::extract::extract_to_file(
+                &page,
+                selector.as_deref(),
+                std::path::Path::new(&path),
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+            println!("{} Extracted {} bytes to {}", "✓".green(), bytes, path);
+        } else {
+            let result = onecrawl_cdp::extract::extract(&page, selector.as_deref(), fmt)
+                .await
+                .map_err(|e| e.to_string())?;
+            println!("{}", result.content);
+        }
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn extract_metadata() {
+    with_page(|page| async move {
+        let meta = onecrawl_cdp::extract::get_page_metadata(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&meta).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Network Log
+// ---------------------------------------------------------------------------
+
+pub async fn network_log_start() {
+    with_page(|page| async move {
+        onecrawl_cdp::network_log::start_network_log(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Network logging started", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn network_log_drain() {
+    with_page(|page| async move {
+        let entries = onecrawl_cdp::network_log::drain_network_log(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&entries).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn network_log_summary() {
+    with_page(|page| async move {
+        let summary = onecrawl_cdp::network_log::get_network_summary(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&summary).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn network_log_stop() {
+    with_page(|page| async move {
+        onecrawl_cdp::network_log::stop_network_log(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Network logging stopped", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn network_log_export(path: &str) {
+    let p = path.to_string();
+    with_page(|page| async move {
+        onecrawl_cdp::network_log::export_network_log(&page, &p)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Network log exported to {}", "✓".green(), p.cyan());
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Page Watcher
+// ---------------------------------------------------------------------------
+
+pub async fn page_watcher_start() {
+    with_page(|page| async move {
+        onecrawl_cdp::page_watcher::start_page_watcher(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Page watcher started", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn page_watcher_drain() {
+    with_page(|page| async move {
+        let changes = onecrawl_cdp::page_watcher::drain_page_changes(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&changes).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn page_watcher_stop() {
+    with_page(|page| async move {
+        onecrawl_cdp::page_watcher::stop_page_watcher(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Page watcher stopped", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn page_watcher_state() {
+    with_page(|page| async move {
+        let state = onecrawl_cdp::page_watcher::get_page_state(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&state).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}

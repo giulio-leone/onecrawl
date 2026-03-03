@@ -288,6 +288,20 @@ enum Commands {
         action: IframeAction,
     },
 
+    // ── Network Log ────────────────────────────────────────────────
+    /// Network request/response logging
+    NetworkLog {
+        #[command(subcommand)]
+        action: NetworkLogAction,
+    },
+
+    // ── Page Watcher ───────────────────────────────────────────────
+    /// Page state change watching
+    PageWatcher {
+        #[command(subcommand)]
+        action: PageWatcherAction,
+    },
+
     // ── Print (Enhanced) ───────────────────────────────────────────
     /// Enhanced PDF generation
     Print {
@@ -430,6 +444,27 @@ enum Commands {
     Bench {
         #[command(subcommand)]
         action: BenchAction,
+    },
+
+    // ── Smart Selectors ─────────────────────────────────────────────
+    /// CSS/XPath selectors with pseudo-elements (Scrapling-like)
+    Select {
+        #[command(subcommand)]
+        action: SelectAction,
+    },
+
+    // ── DOM Navigation ──────────────────────────────────────────────
+    /// DOM traversal — parent, siblings, children, above, below
+    Nav {
+        #[command(subcommand)]
+        action: NavAction,
+    },
+
+    // ── Content Extraction ──────────────────────────────────────────
+    /// Extract content as text, HTML, Markdown, or JSON
+    Extract {
+        #[command(subcommand)]
+        action: ExtractAction,
     },
 }
 
@@ -821,6 +856,35 @@ enum IframeAction {
 }
 
 #[derive(Subcommand)]
+enum NetworkLogAction {
+    /// Start network request/response logging
+    Start,
+    /// Drain captured network entries (JSON)
+    Drain,
+    /// Get network summary statistics (JSON)
+    Summary,
+    /// Stop network logging
+    Stop,
+    /// Export network log to a JSON file
+    Export {
+        /// Output file path
+        path: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum PageWatcherAction {
+    /// Start watching for page state changes
+    Start,
+    /// Drain accumulated page changes (JSON)
+    Drain,
+    /// Stop the page watcher
+    Stop,
+    /// Get current page state snapshot (JSON)
+    State,
+}
+
+#[derive(Subcommand)]
 enum PrintAction {
     /// Generate PDF with detailed options
     Pdf {
@@ -968,6 +1032,108 @@ enum AdvancedEmulationAction {
     },
     /// Get current navigator properties
     NavigatorInfo,
+}
+
+#[derive(Subcommand)]
+enum SelectAction {
+    /// CSS selector (supports ::text, ::attr(name) pseudo-elements)
+    Css {
+        /// CSS selector string
+        selector: String,
+    },
+    /// XPath selector
+    Xpath {
+        /// XPath expression
+        expression: String,
+    },
+    /// Find elements by text content
+    Text {
+        /// Text to search for
+        text: String,
+        /// Filter by tag name
+        #[arg(long)]
+        tag: Option<String>,
+    },
+    /// Find elements by regex pattern
+    Regex {
+        /// Regex pattern
+        pattern: String,
+        /// Filter by tag name
+        #[arg(long)]
+        tag: Option<String>,
+    },
+    /// Auto-generate a unique CSS selector for an element
+    AutoSelector {
+        /// Target CSS selector
+        selector: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum NavAction {
+    /// Get parent element
+    Parent {
+        /// CSS selector
+        selector: String,
+    },
+    /// Get child elements
+    Children {
+        /// CSS selector
+        selector: String,
+    },
+    /// Get next sibling element
+    NextSibling {
+        /// CSS selector
+        selector: String,
+    },
+    /// Get previous sibling element
+    PrevSibling {
+        /// CSS selector
+        selector: String,
+    },
+    /// Get all sibling elements
+    Siblings {
+        /// CSS selector
+        selector: String,
+    },
+    /// Find similar elements
+    Similar {
+        /// CSS selector
+        selector: String,
+    },
+    /// Get elements above the target
+    Above {
+        /// CSS selector
+        selector: String,
+        /// Maximum number of results
+        #[arg(long, default_value = "10")]
+        limit: usize,
+    },
+    /// Get elements below the target
+    Below {
+        /// CSS selector
+        selector: String,
+        /// Maximum number of results
+        #[arg(long, default_value = "10")]
+        limit: usize,
+    },
+}
+
+#[derive(Subcommand)]
+enum ExtractAction {
+    /// Extract content in a given format (text, html, markdown, json)
+    Content {
+        /// Output format: text, html, markdown, json
+        format: String,
+        /// CSS selector to scope extraction
+        #[arg(long)]
+        selector: Option<String>,
+        /// Save output to file
+        #[arg(long)]
+        output: Option<String>,
+    },
+    /// Get structured page metadata
+    Metadata,
 }
 
 #[tokio::main]
@@ -1194,6 +1360,25 @@ async fn main() {
             IframeAction::Content { index } => commands::browser::iframe_content(index).await,
         },
 
+        // ── Network Log ─────────────────────────────────────────────
+        Commands::NetworkLog { action } => match action {
+            NetworkLogAction::Start => commands::browser::network_log_start().await,
+            NetworkLogAction::Drain => commands::browser::network_log_drain().await,
+            NetworkLogAction::Summary => commands::browser::network_log_summary().await,
+            NetworkLogAction::Stop => commands::browser::network_log_stop().await,
+            NetworkLogAction::Export { path } => {
+                commands::browser::network_log_export(&path).await
+            }
+        },
+
+        // ── Page Watcher ────────────────────────────────────────────
+        Commands::PageWatcher { action } => match action {
+            PageWatcherAction::Start => commands::browser::page_watcher_start().await,
+            PageWatcherAction::Drain => commands::browser::page_watcher_drain().await,
+            PageWatcherAction::Stop => commands::browser::page_watcher_stop().await,
+            PageWatcherAction::State => commands::browser::page_watcher_state().await,
+        },
+
         // ── Print (Enhanced) ────────────────────────────────────────
         Commands::Print { action } => match action {
             PrintAction::Pdf {
@@ -1363,6 +1548,56 @@ async fn main() {
                 commands::browser::bench_run(iterations, module.as_deref()).await
             }
             BenchAction::Report { format } => commands::browser::bench_report(&format).await,
+        },
+
+        // ── Smart Selectors ─────────────────────────────────────────
+        Commands::Select { action } => match action {
+            SelectAction::Css { selector } => commands::browser::select_css(&selector).await,
+            SelectAction::Xpath { expression } => {
+                commands::browser::select_xpath(&expression).await
+            }
+            SelectAction::Text { text, tag } => {
+                commands::browser::select_text(&text, tag.as_deref()).await
+            }
+            SelectAction::Regex { pattern, tag } => {
+                commands::browser::select_regex(&pattern, tag.as_deref()).await
+            }
+            SelectAction::AutoSelector { selector } => {
+                commands::browser::select_auto(&selector).await
+            }
+        },
+
+        // ── DOM Navigation ──────────────────────────────────────────
+        Commands::Nav { action } => match action {
+            NavAction::Parent { selector } => commands::browser::nav_parent(&selector).await,
+            NavAction::Children { selector } => commands::browser::nav_children(&selector).await,
+            NavAction::NextSibling { selector } => {
+                commands::browser::nav_next_sibling(&selector).await
+            }
+            NavAction::PrevSibling { selector } => {
+                commands::browser::nav_prev_sibling(&selector).await
+            }
+            NavAction::Siblings { selector } => commands::browser::nav_siblings(&selector).await,
+            NavAction::Similar { selector } => commands::browser::nav_similar(&selector).await,
+            NavAction::Above { selector, limit } => {
+                commands::browser::nav_above(&selector, limit).await
+            }
+            NavAction::Below { selector, limit } => {
+                commands::browser::nav_below(&selector, limit).await
+            }
+        },
+
+        // ── Content Extraction ──────────────────────────────────────
+        Commands::Extract { action } => match action {
+            ExtractAction::Content {
+                format,
+                selector,
+                output,
+            } => {
+                commands::browser::extract_content(&format, selector.as_deref(), output.as_deref())
+                    .await
+            }
+            ExtractAction::Metadata => commands::browser::extract_metadata().await,
         },
     }
 }

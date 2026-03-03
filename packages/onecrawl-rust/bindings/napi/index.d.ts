@@ -283,6 +283,56 @@ export declare class NativeBrowser {
   createGetRequest(id: string, url: string): string
   /** Create a POST request. Returns JSON QueuedRequest. */
   createPostRequest(id: string, url: string, body: string): string
+  /** CSS selector with pseudo-elements (::text, ::attr(name)). Returns JSON SelectorResult. */
+  cssSelect(selector: string): Promise<string>
+  /** XPath selector. Returns JSON SelectorResult. */
+  xpathSelect(expression: string): Promise<string>
+  /** Find elements by text content. Returns JSON SelectorResult. */
+  findByText(text: string, tag?: string | undefined | null): Promise<string>
+  /** Find elements by regex pattern. Returns JSON SelectorResult. */
+  findByRegex(pattern: string, tag?: string | undefined | null): Promise<string>
+  /** Auto-generate a unique CSS selector for an element. Returns the selector string. */
+  autoSelector(targetSelector: string): Promise<string>
+  /** Get parent element. Returns JSON NavElement or null. */
+  getParent(selector: string): Promise<string | null>
+  /** Get child elements. Returns JSON array of NavElement. */
+  getChildren(selector: string): Promise<string>
+  /** Get next sibling element. Returns JSON NavElement or null. */
+  getNextSibling(selector: string): Promise<string | null>
+  /** Get previous sibling element. Returns JSON NavElement or null. */
+  getPrevSibling(selector: string): Promise<string | null>
+  /** Get all sibling elements. Returns JSON array of NavElement. */
+  getSiblings(selector: string): Promise<string>
+  /** Find similar elements. Returns JSON array of NavElement. */
+  findSimilar(selector: string): Promise<string>
+  /** Get elements above the target. Returns JSON array of NavElement. */
+  aboveElements(selector: string, limit?: number | undefined | null): Promise<string>
+  /** Get elements below the target. Returns JSON array of NavElement. */
+  belowElements(selector: string, limit?: number | undefined | null): Promise<string>
+  /** Extract page content. Returns JSON ExtractResult. */
+  extract(selector?: string | undefined | null, format?: string | undefined | null): Promise<string>
+  /** Extract content and save to file. Returns bytes written. */
+  extractToFile(outputPath: string, selector?: string | undefined | null): Promise<number>
+  /** Get structured page metadata. Returns JSON object. */
+  getPageMetadata(): Promise<string>
+  /** Start network request/response logging. */
+  startNetworkLog(): Promise<void>
+  /** Drain captured network entries as JSON string. */
+  drainNetworkLog(): Promise<string>
+  /** Get network summary statistics as JSON string. */
+  getNetworkSummary(): Promise<string>
+  /** Stop network logging and restore originals. */
+  stopNetworkLog(): Promise<void>
+  /** Export network log to a JSON file. */
+  exportNetworkLog(path: string): Promise<void>
+  /** Start watching for page state changes. */
+  startPageWatcher(): Promise<void>
+  /** Drain accumulated page changes as JSON string. */
+  drainPageChanges(): Promise<string>
+  /** Stop the page watcher. */
+  stopPageWatcher(): Promise<void>
+  /** Get current page state snapshot as JSON string. */
+  getPageState(): Promise<string>
 }
 
 /** Encrypted key-value store backed by sled + AES-256-GCM. */

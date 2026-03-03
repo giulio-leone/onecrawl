@@ -2127,6 +2127,368 @@ impl NativeBrowser {
         let req = onecrawl_cdp::request_queue::post_request(&id, &url, &body);
         serde_json::to_string(&req).unwrap_or_default()
     }
+
+    // ──────────────── Smart Selectors ────────────────
+
+    /// CSS selector with pseudo-elements (::text, ::attr(name)). Returns JSON SelectorResult.
+    #[napi(js_name = "cssSelect")]
+    pub async fn css_select(&self, selector: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::selectors::css_select(page, &selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// XPath selector. Returns JSON SelectorResult.
+    #[napi(js_name = "xpathSelect")]
+    pub async fn xpath_select(&self, expression: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::selectors::xpath_select(page, &expression)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Find elements by text content. Returns JSON SelectorResult.
+    #[napi(js_name = "findByText")]
+    pub async fn find_by_text(&self, text: String, tag: Option<String>) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::selectors::find_by_text(page, &text, tag.as_deref())
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Find elements by regex pattern. Returns JSON SelectorResult.
+    #[napi(js_name = "findByRegex")]
+    pub async fn find_by_regex(&self, pattern: String, tag: Option<String>) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::selectors::find_by_regex(page, &pattern, tag.as_deref())
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Auto-generate a unique CSS selector for an element. Returns the selector string.
+    #[napi(js_name = "autoSelector")]
+    pub async fn auto_selector(&self, target_selector: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::selectors::auto_selector(page, &target_selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── DOM Navigation ────────────────
+
+    /// Get parent element. Returns JSON NavElement or null.
+    #[napi(js_name = "getParent")]
+    pub async fn get_parent(&self, selector: String) -> Result<Option<String>> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::dom_nav::get_parent(page, &selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        match result {
+            Some(el) => Ok(Some(
+                serde_json::to_string(&el).map_err(|e| Error::from_reason(e.to_string()))?,
+            )),
+            None => Ok(None),
+        }
+    }
+
+    /// Get child elements. Returns JSON array of NavElement.
+    #[napi(js_name = "getChildren")]
+    pub async fn get_children(&self, selector: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::dom_nav::get_children(page, &selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get next sibling element. Returns JSON NavElement or null.
+    #[napi(js_name = "getNextSibling")]
+    pub async fn get_next_sibling(&self, selector: String) -> Result<Option<String>> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::dom_nav::get_next_sibling(page, &selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        match result {
+            Some(el) => Ok(Some(
+                serde_json::to_string(&el).map_err(|e| Error::from_reason(e.to_string()))?,
+            )),
+            None => Ok(None),
+        }
+    }
+
+    /// Get previous sibling element. Returns JSON NavElement or null.
+    #[napi(js_name = "getPrevSibling")]
+    pub async fn get_prev_sibling(&self, selector: String) -> Result<Option<String>> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::dom_nav::get_prev_sibling(page, &selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        match result {
+            Some(el) => Ok(Some(
+                serde_json::to_string(&el).map_err(|e| Error::from_reason(e.to_string()))?,
+            )),
+            None => Ok(None),
+        }
+    }
+
+    /// Get all sibling elements. Returns JSON array of NavElement.
+    #[napi(js_name = "getSiblings")]
+    pub async fn get_siblings(&self, selector: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::dom_nav::get_siblings(page, &selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Find similar elements. Returns JSON array of NavElement.
+    #[napi(js_name = "findSimilar")]
+    pub async fn find_similar(&self, selector: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result = onecrawl_cdp::dom_nav::find_similar(page, &selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get elements above the target. Returns JSON array of NavElement.
+    #[napi(js_name = "aboveElements")]
+    pub async fn above_elements(&self, selector: String, limit: Option<u32>) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result =
+            onecrawl_cdp::dom_nav::above_elements(page, &selector, limit.unwrap_or(10) as usize)
+                .await
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get elements below the target. Returns JSON array of NavElement.
+    #[napi(js_name = "belowElements")]
+    pub async fn below_elements(&self, selector: String, limit: Option<u32>) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let result =
+            onecrawl_cdp::dom_nav::below_elements(page, &selector, limit.unwrap_or(10) as usize)
+                .await
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Content Extraction ────────────────
+
+    /// Extract page content. Returns JSON ExtractResult.
+    #[napi(js_name = "extract")]
+    pub async fn extract_content(
+        &self,
+        selector: Option<String>,
+        format: Option<String>,
+    ) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let fmt = onecrawl_cdp::extract::parse_extract_format(
+            format.as_deref().unwrap_or("text"),
+        )
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        let result = onecrawl_cdp::extract::extract(page, selector.as_deref(), fmt)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Extract content and save to file. Returns bytes written.
+    #[napi(js_name = "extractToFile")]
+    pub async fn extract_to_file(
+        &self,
+        output_path: String,
+        selector: Option<String>,
+    ) -> Result<u32> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let bytes = onecrawl_cdp::extract::extract_to_file(
+            page,
+            selector.as_deref(),
+            std::path::Path::new(&output_path),
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(bytes as u32)
+    }
+
+    /// Get structured page metadata. Returns JSON object.
+    #[napi(js_name = "getPageMetadata")]
+    pub async fn get_page_metadata(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let meta = onecrawl_cdp::extract::get_page_metadata(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&meta).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Network Request Logger ─────────────────────────────────────
+
+    /// Start network request/response logging.
+    #[napi]
+    pub async fn start_network_log(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::network_log::start_network_log(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Drain captured network entries as JSON string.
+    #[napi]
+    pub async fn drain_network_log(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let entries = onecrawl_cdp::network_log::drain_network_log(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&entries).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get network summary statistics as JSON string.
+    #[napi]
+    pub async fn get_network_summary(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let summary = onecrawl_cdp::network_log::get_network_summary(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&summary).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Stop network logging and restore originals.
+    #[napi]
+    pub async fn stop_network_log(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::network_log::stop_network_log(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Export network log to a JSON file.
+    #[napi]
+    pub async fn export_network_log(&self, path: String) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::network_log::export_network_log(page, &path)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Page Watcher ───────────────────────────────────────────────
+
+    /// Start watching for page state changes.
+    #[napi]
+    pub async fn start_page_watcher(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::page_watcher::start_page_watcher(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Drain accumulated page changes as JSON string.
+    #[napi]
+    pub async fn drain_page_changes(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let changes = onecrawl_cdp::page_watcher::drain_page_changes(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&changes).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Stop the page watcher.
+    #[napi]
+    pub async fn stop_page_watcher(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::page_watcher::stop_page_watcher(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get current page state snapshot as JSON string.
+    #[napi]
+    pub async fn get_page_state(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let state = onecrawl_cdp::page_watcher::get_page_state(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&state).map_err(|e| Error::from_reason(e.to_string()))
+    }
 }
 
 fn parse_network_profile(name: &str) -> std::result::Result<onecrawl_cdp::NetworkProfile, String> {
