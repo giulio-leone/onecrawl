@@ -1,0 +1,18 @@
+[package]
+name = "onecrawl-parser"
+description = "HTML parsing, accessibility tree generation, and element extraction for OneCrawl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+onecrawl-core = { path = "../onecrawl-core" }
+lol_html = { workspace = true }
+scraper = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

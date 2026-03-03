@@ -1,0 +1,41 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/onecrawl-core",
+    "crates/onecrawl-crypto",
+    "crates/onecrawl-parser",
+    "crates/onecrawl-storage",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/giulio-leone/onecrawl"
+authors = ["Giulio Leone <giulio-leone@users.noreply.github.com>"]
+
+[workspace.dependencies]
+# Core
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+
+# Crypto
+ring = "0.17"
+base64 = "0.22"
+data-encoding = "2"
+rand = "0.9"
+zeroize = { version = "1", features = ["derive"] }
+
+# Parser
+lol_html = "2"
+scraper = "0.22"
+
+# Storage
+sled = "0.34"
+
+# Testing
+pretty_assertions = "1"
+tempfile = "3"

@@ -1,0 +1,13 @@
+[package]
+name = "onecrawl-core"
+description = "Shared types, traits, and error definitions for OneCrawl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

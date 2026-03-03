@@ -1,0 +1,19 @@
+[package]
+name = "onecrawl-crypto"
+description = "Cryptographic operations for OneCrawl: AES-256-GCM, PKCE S256, TOTP, PBKDF2"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+onecrawl-core = { path = "../onecrawl-core" }
+ring = { workspace = true }
+base64 = { workspace = true }
+data-encoding = { workspace = true }
+rand = { workspace = true }
+zeroize = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
