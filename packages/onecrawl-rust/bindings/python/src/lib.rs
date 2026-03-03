@@ -639,6 +639,65 @@ impl Browser {
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
         self.rt.block_on(onecrawl_cdp::emulation::set_color_scheme(page, scheme)).map_err(py_err)
     }
+
+    // ──── Network (advanced) ────
+
+    /// Block specific resource types (e.g., ["Image", "Font"]).
+    fn block_resources(&self, resource_types: Vec<String>) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let types: Vec<onecrawl_cdp::ResourceType> = resource_types
+            .iter()
+            .map(|s| serde_json::from_str(&format!("\"{}\"", s)))
+            .collect::<std::result::Result<_, _>>()
+            .map_err(|e| py_err(format!("Invalid resource type: {e}")))?;
+        self.rt.block_on(onecrawl_cdp::network::block_resources(page, &types)).map_err(py_err)
+    }
+
+    // ──── Screenshot & PDF (with options) ────
+
+    /// Take a screenshot with custom options.
+    #[pyo3(signature = (format=None, quality=None, full_page=None))]
+    fn screenshot_with_options(
+        &self,
+        format: Option<&str>,
+        quality: Option<u32>,
+        full_page: Option<bool>,
+    ) -> PyResult<Vec<u8>> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let fmt = match format {
+            Some("jpeg") | Some("jpg") => onecrawl_cdp::ImageFormat::Jpeg,
+            Some("webp") => onecrawl_cdp::ImageFormat::Webp,
+            _ => onecrawl_cdp::ImageFormat::Png,
+        };
+        let opts = onecrawl_cdp::ScreenshotOptions {
+            format: fmt,
+            quality,
+            full_page: full_page.unwrap_or(false),
+        };
+        self.rt.block_on(onecrawl_cdp::screenshot::screenshot_with_options(page, &opts)).map_err(py_err)
+    }
+
+    /// Generate PDF with custom options.
+    #[pyo3(signature = (landscape=None, scale=None, paper_width=None, paper_height=None))]
+    fn pdf_with_options(
+        &self,
+        landscape: Option<bool>,
+        scale: Option<f64>,
+        paper_width: Option<f64>,
+        paper_height: Option<f64>,
+    ) -> PyResult<Vec<u8>> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let opts = onecrawl_cdp::PdfOptions {
+            landscape: landscape.unwrap_or(false),
+            scale: scale.unwrap_or(1.0),
+            paper_width: paper_width.unwrap_or(8.5),
+            paper_height: paper_height.unwrap_or(11.0),
+        };
+        self.rt.block_on(onecrawl_cdp::screenshot::pdf_with_options(page, &opts)).map_err(py_err)
+    }
 }
 
 // ──────────────────────────── Module ────────────────────────────

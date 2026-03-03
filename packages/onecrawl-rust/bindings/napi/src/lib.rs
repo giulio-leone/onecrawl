@@ -860,4 +860,73 @@ impl NativeBrowser {
             .await
             .map_err(|e| Error::from_reason(e.to_string()))
     }
+
+    // ──── Network (advanced) ────
+
+    /// Block specific resource types (e.g., ["Image", "Font", "Stylesheet"]).
+    #[napi]
+    pub async fn block_resources(&self, resource_types: Vec<String>) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        let types: Vec<onecrawl_cdp::ResourceType> = resource_types
+            .iter()
+            .map(|s| serde_json::from_str(&format!("\"{}\"", s)))
+            .collect::<std::result::Result<_, _>>()
+            .map_err(|e| Error::from_reason(format!("Invalid resource type: {e}")))?;
+        onecrawl_cdp::network::block_resources(page, &types)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──── Screenshot & PDF (with options) ────
+
+    /// Take a screenshot with custom options.
+    /// format: "png" | "jpeg" | "webp", quality: 0-100 (jpeg/webp only), fullPage: boolean
+    #[napi]
+    pub async fn screenshot_with_options(
+        &self,
+        format: Option<String>,
+        quality: Option<u32>,
+        full_page: Option<bool>,
+    ) -> Result<Buffer> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        let fmt = match format.as_deref() {
+            Some("jpeg") | Some("jpg") => onecrawl_cdp::ImageFormat::Jpeg,
+            Some("webp") => onecrawl_cdp::ImageFormat::Webp,
+            _ => onecrawl_cdp::ImageFormat::Png,
+        };
+        let opts = onecrawl_cdp::ScreenshotOptions {
+            format: fmt,
+            quality,
+            full_page: full_page.unwrap_or(false),
+        };
+        let bytes = onecrawl_cdp::screenshot::screenshot_with_options(page, &opts)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(bytes.into())
+    }
+
+    /// Generate PDF with custom options (landscape, scale, paper size).
+    #[napi]
+    pub async fn pdf_with_options(
+        &self,
+        landscape: Option<bool>,
+        scale: Option<f64>,
+        paper_width: Option<f64>,
+        paper_height: Option<f64>,
+    ) -> Result<Buffer> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+        let opts = onecrawl_cdp::PdfOptions {
+            landscape: landscape.unwrap_or(false),
+            scale: scale.unwrap_or(1.0),
+            paper_width: paper_width.unwrap_or(8.5),
+            paper_height: paper_height.unwrap_or(11.0),
+        };
+        let bytes = onecrawl_cdp::screenshot::pdf_with_options(page, &opts)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(bytes.into())
+    }
 }

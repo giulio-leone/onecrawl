@@ -118,6 +118,15 @@ export declare class NativeBrowser {
   setGeolocation(latitude: number, longitude: number, accuracy?: number | undefined | null): Promise<void>
   /** Emulate color scheme preference (dark/light). */
   setColorScheme(scheme: string): Promise<void>
+  /** Block specific resource types (e.g., ["Image", "Font", "Stylesheet"]). */
+  blockResources(resourceTypes: Array<string>): Promise<void>
+  /**
+   * Take a screenshot with custom options.
+   * format: "png" | "jpeg" | "webp", quality: 0-100 (jpeg/webp only), fullPage: boolean
+   */
+  screenshotWithOptions(format?: string | undefined | null, quality?: number | undefined | null, fullPage?: boolean | undefined | null): Promise<Buffer>
+  /** Generate PDF with custom options (landscape, scale, paper size). */
+  pdfWithOptions(landscape?: boolean | undefined | null, scale?: number | undefined | null, paperWidth?: number | undefined | null, paperHeight?: number | undefined | null): Promise<Buffer>
 }
 
 /** Encrypted key-value store backed by sled + AES-256-GCM. */
