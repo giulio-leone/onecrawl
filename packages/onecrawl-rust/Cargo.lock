@@ -1976,6 +1976,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "onecrawl-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "base64",
+ "chromiumoxide",
+ "futures",
+ "onecrawl-cdp",
+ "onecrawl-core",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower-http",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "onecrawl-storage"
 version = "0.1.0"
 dependencies = [

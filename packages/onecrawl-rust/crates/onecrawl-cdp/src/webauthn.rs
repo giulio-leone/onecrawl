@@ -7,7 +7,7 @@ use chromiumoxide::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VirtualAuthenticator {
     pub id: String,
     /// `"ctap2"` or `"u2f"`
@@ -19,7 +19,7 @@ pub struct VirtualAuthenticator {
     pub is_user_verified: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VirtualCredential {
     /// base64url-encoded credential ID
     pub credential_id: String,
@@ -259,4 +259,133 @@ pub async fn remove_virtual_credential(page: &Page, credential_id: &str) -> Resu
         .ok()
         .and_then(|v| v.as_bool())
         .unwrap_or(false))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn default_authenticator() -> VirtualAuthenticator {
+        VirtualAuthenticator {
+            id: "auth-1".into(),
+            protocol: "ctap2".into(),
+            transport: "internal".into(),
+            has_resident_key: true,
+            has_user_verification: true,
+            is_user_verified: true,
+        }
+    }
+
+    fn default_credential() -> VirtualCredential {
+        VirtualCredential {
+            credential_id: "Y3JlZC0x".into(),
+            rp_id: "example.com".into(),
+            user_handle: "dXNlci0x".into(),
+            sign_count: 0,
+        }
+    }
+
+    #[test]
+    fn test_virtual_authenticator_default() {
+        let auth = default_authenticator();
+        assert_eq!(auth.id, "auth-1");
+        assert_eq!(auth.protocol, "ctap2");
+        assert_eq!(auth.transport, "internal");
+        assert!(auth.has_resident_key);
+        assert!(auth.has_user_verification);
+        assert!(auth.is_user_verified);
+    }
+
+    #[test]
+    fn test_virtual_credential_serialization() {
+        let cred = default_credential();
+        let json = serde_json::to_string(&cred).unwrap();
+        let parsed: VirtualCredential = serde_json::from_str(&json).unwrap();
+        assert_eq!(cred, parsed);
+    }
+
+    #[test]
+    fn test_authenticator_config_json() {
+        let auth = default_authenticator();
+        let json_val: serde_json::Value = serde_json::to_value(&auth).unwrap();
+        assert_eq!(json_val["id"], "auth-1");
+        assert_eq!(json_val["protocol"], "ctap2");
+        assert_eq!(json_val["transport"], "internal");
+        assert_eq!(json_val["has_resident_key"], true);
+        assert_eq!(json_val["has_user_verification"], true);
+        assert_eq!(json_val["is_user_verified"], true);
+    }
+
+    #[test]
+    fn test_credential_roundtrip() {
+        let cred = VirtualCredential {
+            credential_id: "abc123".into(),
+            rp_id: "mysite.org".into(),
+            user_handle: "aGFuZGxl".into(),
+            sign_count: 42,
+        };
+        let serialized = serde_json::to_string(&cred).unwrap();
+        let deserialized: VirtualCredential = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(cred, deserialized);
+        assert_eq!(deserialized.sign_count, 42);
+    }
+
+    #[test]
+    fn test_multiple_credentials() {
+        let creds = vec![
+            VirtualCredential {
+                credential_id: "c1".into(),
+                rp_id: "a.com".into(),
+                user_handle: "u1".into(),
+                sign_count: 0,
+            },
+            VirtualCredential {
+                credential_id: "c2".into(),
+                rp_id: "b.com".into(),
+                user_handle: "u2".into(),
+                sign_count: 5,
+            },
+            VirtualCredential {
+                credential_id: "c3".into(),
+                rp_id: "a.com".into(),
+                user_handle: "u3".into(),
+                sign_count: 10,
+            },
+        ];
+        let json = serde_json::to_string(&creds).unwrap();
+        let parsed: Vec<VirtualCredential> = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.len(), 3);
+        let a_com: Vec<_> = parsed.iter().filter(|c| c.rp_id == "a.com").collect();
+        assert_eq!(a_com.len(), 2);
+    }
+
+    #[test]
+    fn test_virtual_authenticator_protocols() {
+        let ctap2 = VirtualAuthenticator {
+            id: "ctap2-auth".into(),
+            protocol: "ctap2".into(),
+            transport: "usb".into(),
+            has_resident_key: true,
+            has_user_verification: true,
+            is_user_verified: false,
+        };
+        let u2f = VirtualAuthenticator {
+            id: "u2f-auth".into(),
+            protocol: "u2f".into(),
+            transport: "nfc".into(),
+            has_resident_key: false,
+            has_user_verification: false,
+            is_user_verified: false,
+        };
+        assert_eq!(ctap2.protocol, "ctap2");
+        assert_eq!(u2f.protocol, "u2f");
+        assert_ne!(ctap2, u2f);
+        // Verify serialization preserves protocol variants
+        let ctap2_json: serde_json::Value = serde_json::to_value(&ctap2).unwrap();
+        let u2f_json: serde_json::Value = serde_json::to_value(&u2f).unwrap();
+        assert_eq!(ctap2_json["protocol"], "ctap2");
+        assert_eq!(u2f_json["protocol"], "u2f");
+        assert_eq!(ctap2_json["transport"], "usb");
+        assert_eq!(u2f_json["transport"], "nfc");
+    }
 }

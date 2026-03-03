@@ -316,6 +316,13 @@ enum Commands {
         action: WebStorageAction,
     },
 
+    // ── Auth / Passkey ─────────────────────────────────────────────
+    /// WebAuthn/passkey virtual authenticator
+    Auth {
+        #[command(subcommand)]
+        action: AuthAction,
+    },
+
     // ── Stealth ─────────────────────────────────────────────────────
     /// Stealth operations
     Stealth {
@@ -1178,6 +1185,44 @@ enum CoverageAction {
     CssStart,
     /// Get CSS coverage report
     CssReport,
+}
+
+#[derive(Subcommand)]
+#[allow(clippy::enum_variant_names)]
+enum AuthAction {
+    /// Enable virtual WebAuthn authenticator
+    PasskeyEnable {
+        /// Protocol: ctap2 or u2f
+        #[arg(long, default_value = "ctap2")]
+        protocol: String,
+        /// Transport: internal, usb, nfc, ble
+        #[arg(long, default_value = "internal")]
+        transport: String,
+    },
+    /// Add a passkey credential
+    PasskeyAdd {
+        /// Base64url-encoded credential ID
+        #[arg(long)]
+        credential_id: String,
+        /// Relying party domain
+        #[arg(long)]
+        rp_id: String,
+        /// Optional user handle
+        #[arg(long)]
+        user_handle: Option<String>,
+    },
+    /// List stored passkey credentials
+    PasskeyList,
+    /// Show passkey operation log
+    PasskeyLog,
+    /// Disable virtual authenticator
+    PasskeyDisable,
+    /// Remove a passkey credential
+    PasskeyRemove {
+        /// Credential ID to remove
+        #[arg(long)]
+        credential_id: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2059,6 +2104,28 @@ async fn main() {
                 commands::browser::web_storage_indexeddb_list().await
             }
             WebStorageAction::ClearAll => commands::browser::web_storage_clear_all().await,
+        },
+
+        // ── Auth / Passkey ────────────────────────────────────────────
+        Commands::Auth { action } => match action {
+            AuthAction::PasskeyEnable {
+                protocol,
+                transport,
+            } => commands::browser::passkey_enable(&protocol, &transport).await,
+            AuthAction::PasskeyAdd {
+                credential_id,
+                rp_id,
+                user_handle,
+            } => {
+                commands::browser::passkey_add(&credential_id, &rp_id, user_handle.as_deref())
+                    .await
+            }
+            AuthAction::PasskeyList => commands::browser::passkey_list().await,
+            AuthAction::PasskeyLog => commands::browser::passkey_log().await,
+            AuthAction::PasskeyDisable => commands::browser::passkey_disable().await,
+            AuthAction::PasskeyRemove { credential_id } => {
+                commands::browser::passkey_remove(&credential_id).await
+            }
         },
 
         // ── Stealth ─────────────────────────────────────────────────

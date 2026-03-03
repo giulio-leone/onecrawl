@@ -282,6 +282,47 @@ pub struct RetryEnqueueParams {
     pub payload: Option<String>,
 }
 
+// ──────────────── Passkey / WebAuthn params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct PasskeyEnableParams {
+    #[schemars(description = "Protocol: 'ctap2' or 'u2f' (default ctap2)")]
+    pub protocol: Option<String>,
+    #[schemars(description = "Transport: 'internal', 'usb', 'nfc', 'ble' (default internal)")]
+    pub transport: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct PasskeyAddParams {
+    #[schemars(description = "Base64url-encoded credential ID")]
+    pub credential_id: String,
+    #[schemars(description = "Relying party domain (e.g. 'example.com')")]
+    pub rp_id: String,
+    #[schemars(description = "Optional base64url-encoded user handle")]
+    pub user_handle: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct PasskeyListParams {
+    // no params needed
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct PasskeyLogParams {
+    // no params needed
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct PasskeyDisableParams {
+    // no params needed
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct PasskeyRemoveParams {
+    #[schemars(description = "Credential ID to remove")]
+    pub credential_id: String,
+}
+
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct PdfExportParams {
     #[schemars(description = "Print background graphics (default false)")]

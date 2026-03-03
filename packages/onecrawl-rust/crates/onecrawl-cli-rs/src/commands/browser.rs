@@ -1322,6 +1322,113 @@ pub async fn web_storage_clear_all() {
 }
 
 // ---------------------------------------------------------------------------
+// Passkey / WebAuthn
+// ---------------------------------------------------------------------------
+
+pub async fn passkey_enable(protocol: &str, transport: &str) {
+    let proto = protocol.to_string();
+    let trans = transport.to_string();
+    with_page(|page| async move {
+        let config = onecrawl_cdp::webauthn::VirtualAuthenticator {
+            id: format!(
+                "auth-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis()
+            ),
+            protocol: proto,
+            transport: trans.clone(),
+            has_resident_key: true,
+            has_user_verification: true,
+            is_user_verified: true,
+        };
+        onecrawl_cdp::webauthn::enable_virtual_authenticator(&page, &config)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{} Virtual authenticator enabled (transport: {})",
+            "✓".green(),
+            trans
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn passkey_add(credential_id: &str, rp_id: &str, user_handle: Option<&str>) {
+    let cred = onecrawl_cdp::webauthn::VirtualCredential {
+        credential_id: credential_id.to_string(),
+        rp_id: rp_id.to_string(),
+        user_handle: user_handle.unwrap_or_default().to_string(),
+        sign_count: 0,
+    };
+    with_page(|page| async move {
+        onecrawl_cdp::webauthn::add_virtual_credential(&page, &cred)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Credential added: {}", "✓".green(), cred.credential_id);
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn passkey_list() {
+    with_page(|page| async move {
+        let creds = onecrawl_cdp::webauthn::get_virtual_credentials(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&creds).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn passkey_log() {
+    with_page(|page| async move {
+        let log = onecrawl_cdp::webauthn::get_webauthn_log(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&log).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn passkey_disable() {
+    with_page(|page| async move {
+        onecrawl_cdp::webauthn::disable_virtual_authenticator(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{} Virtual authenticator disabled", "✓".green());
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn passkey_remove(credential_id: &str) {
+    let cid = credential_id.to_string();
+    with_page(|page| async move {
+        let removed = onecrawl_cdp::webauthn::remove_virtual_credential(&page, &cid)
+            .await
+            .map_err(|e| e.to_string())?;
+        if removed {
+            println!("{} Credential removed: {cid}", "✓".green());
+        } else {
+            println!("{} Credential not found: {cid}", "⚠".yellow());
+        }
+        Ok(())
+    })
+    .await;
+}
+
+// ---------------------------------------------------------------------------
 // Stealth
 // ---------------------------------------------------------------------------
 

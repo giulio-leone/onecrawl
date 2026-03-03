@@ -3826,6 +3826,111 @@ impl NativeBrowser {
         *pool = loaded;
         Ok(())
     }
+
+    // ──────────────── Passkey / WebAuthn ────────────────
+
+    /// Enable virtual WebAuthn authenticator for passkey simulation.
+    #[napi]
+    pub async fn enable_passkey(
+        &self,
+        protocol: Option<String>,
+        transport: Option<String>,
+    ) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let config = onecrawl_cdp::webauthn::VirtualAuthenticator {
+            id: format!(
+                "auth-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis()
+            ),
+            protocol: protocol.unwrap_or_else(|| "ctap2".into()),
+            transport: transport.unwrap_or_else(|| "internal".into()),
+            has_resident_key: true,
+            has_user_verification: true,
+            is_user_verified: true,
+        };
+        onecrawl_cdp::webauthn::enable_virtual_authenticator(page, &config)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Add a passkey credential to the virtual authenticator.
+    #[napi]
+    pub async fn add_passkey_credential(
+        &self,
+        credential_id: String,
+        rp_id: String,
+        user_handle: Option<String>,
+    ) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let cred = onecrawl_cdp::webauthn::VirtualCredential {
+            credential_id,
+            rp_id,
+            user_handle: user_handle.unwrap_or_default(),
+            sign_count: 0,
+        };
+        onecrawl_cdp::webauthn::add_virtual_credential(page, &cred)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get all stored passkey credentials as JSON.
+    #[napi]
+    pub async fn get_passkey_credentials(&self) -> Result<String> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let creds = onecrawl_cdp::webauthn::get_virtual_credentials(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&creds).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get the WebAuthn operation log as JSON.
+    #[napi]
+    pub async fn get_passkey_log(&self) -> Result<String> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let log = onecrawl_cdp::webauthn::get_webauthn_log(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&log).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Disable the virtual WebAuthn authenticator.
+    #[napi]
+    pub async fn disable_passkey(&self) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::webauthn::disable_virtual_authenticator(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Remove a passkey credential by ID. Returns true if removed.
+    #[napi]
+    pub async fn remove_passkey_credential(&self, credential_id: String) -> Result<bool> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::webauthn::remove_virtual_credential(page, &credential_id)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
 }
 
 fn parse_network_profile(name: &str) -> std::result::Result<onecrawl_cdp::NetworkProfile, String> {

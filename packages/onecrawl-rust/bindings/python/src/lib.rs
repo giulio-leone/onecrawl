@@ -3192,6 +3192,93 @@ impl Browser {
         *pool = loaded;
         Ok(())
     }
+
+    // ──────────────── Passkey / WebAuthn ────────────────
+
+    /// Enable virtual WebAuthn authenticator for passkey simulation.
+    #[pyo3(signature = (protocol=None, transport=None))]
+    fn enable_passkey(&self, protocol: Option<String>, transport: Option<String>) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let config = onecrawl_cdp::webauthn::VirtualAuthenticator {
+            id: format!(
+                "auth-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis()
+            ),
+            protocol: protocol.unwrap_or_else(|| "ctap2".into()),
+            transport: transport.unwrap_or_else(|| "internal".into()),
+            has_resident_key: true,
+            has_user_verification: true,
+            is_user_verified: true,
+        };
+        self.rt
+            .block_on(onecrawl_cdp::webauthn::enable_virtual_authenticator(page, &config))
+            .map_err(py_err)
+    }
+
+    /// Add a passkey credential to the virtual authenticator.
+    #[pyo3(signature = (credential_id, rp_id, user_handle=None))]
+    fn add_passkey_credential(
+        &self,
+        credential_id: String,
+        rp_id: String,
+        user_handle: Option<String>,
+    ) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let cred = onecrawl_cdp::webauthn::VirtualCredential {
+            credential_id,
+            rp_id,
+            user_handle: user_handle.unwrap_or_default(),
+            sign_count: 0,
+        };
+        self.rt
+            .block_on(onecrawl_cdp::webauthn::add_virtual_credential(page, &cred))
+            .map_err(py_err)
+    }
+
+    /// Get all stored passkey credentials as JSON.
+    fn get_passkey_credentials(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let creds = self
+            .rt
+            .block_on(onecrawl_cdp::webauthn::get_virtual_credentials(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&creds).map_err(py_err)
+    }
+
+    /// Get the WebAuthn operation log as JSON.
+    fn get_passkey_log(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let log = self
+            .rt
+            .block_on(onecrawl_cdp::webauthn::get_webauthn_log(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&log).map_err(py_err)
+    }
+
+    /// Disable the virtual WebAuthn authenticator.
+    fn disable_passkey(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::webauthn::disable_virtual_authenticator(page))
+            .map_err(py_err)
+    }
+
+    /// Remove a passkey credential by ID. Returns true if removed.
+    fn remove_passkey_credential(&self, credential_id: String) -> PyResult<bool> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::webauthn::remove_virtual_credential(page, &credential_id))
+            .map_err(py_err)
+    }
 }
 
 // ──────────────────────────── Module ────────────────────────────

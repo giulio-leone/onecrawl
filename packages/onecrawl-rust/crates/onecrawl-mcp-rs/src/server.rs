@@ -319,8 +319,8 @@ impl OneCrawlMcp {
     //  CDP tools — Navigation & Page Control
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(description = "Navigate the browser to a URL. Launches a headless browser on first call.")]
-    async fn navigate(
+    #[tool(name = "navigation.goto", description = "Navigate the browser to a URL. Launches a headless browser on first call.")]
+    async fn navigation_goto(
         &self,
         Parameters(p): Parameters<NavigateParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -334,8 +334,8 @@ impl OneCrawlMcp {
         text_ok(format!("navigated to {} — title: {title}", p.url))
     }
 
-    #[tool(description = "Click an element on the page by CSS selector.")]
-    async fn click(
+    #[tool(name = "navigation.click", description = "Click an element on the page by CSS selector.")]
+    async fn navigation_click(
         &self,
         Parameters(p): Parameters<ClickParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -346,8 +346,8 @@ impl OneCrawlMcp {
         text_ok(format!("clicked {}", p.selector))
     }
 
-    #[tool(description = "Type text into an input element identified by CSS selector.")]
-    async fn type_text(
+    #[tool(name = "navigation.type", description = "Type text into an input element identified by CSS selector.")]
+    async fn navigation_type(
         &self,
         Parameters(p): Parameters<TypeTextParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -359,9 +359,10 @@ impl OneCrawlMcp {
     }
 
     #[tool(
-        description = "Take a screenshot. Returns base64-encoded PNG. Optionally target an element or full page."
+        name = "navigation.screenshot",
+        description = "Take a screenshot of the current page as base64-encoded PNG. Optionally target a specific element or capture the full scrollable page."
     )]
-    async fn screenshot(
+    async fn navigation_screenshot(
         &self,
         Parameters(p): Parameters<ScreenshotParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -386,8 +387,8 @@ impl OneCrawlMcp {
         )]))
     }
 
-    #[tool(description = "Export the current page as PDF. Returns base64-encoded PDF.")]
-    async fn pdf_export(
+    #[tool(name = "navigation.pdf", description = "Export the current page as a PDF document. Returns base64-encoded PDF data.")]
+    async fn navigation_pdf(
         &self,
         Parameters(p): Parameters<PdfExportParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -409,8 +410,8 @@ impl OneCrawlMcp {
         ))
     }
 
-    #[tool(description = "Navigate back in browser history.")]
-    async fn go_back(&self) -> Result<CallToolResult, McpError> {
+    #[tool(name = "navigation.back", description = "Navigate back in browser history.")]
+    async fn navigation_back(&self) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::navigation::go_back(&page)
             .await
@@ -418,8 +419,8 @@ impl OneCrawlMcp {
         text_ok("navigated back")
     }
 
-    #[tool(description = "Navigate forward in browser history.")]
-    async fn go_forward(&self) -> Result<CallToolResult, McpError> {
+    #[tool(name = "navigation.forward", description = "Navigate forward in browser history.")]
+    async fn navigation_forward(&self) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::navigation::go_forward(&page)
             .await
@@ -427,8 +428,8 @@ impl OneCrawlMcp {
         text_ok("navigated forward")
     }
 
-    #[tool(description = "Reload the current page.")]
-    async fn reload(&self) -> Result<CallToolResult, McpError> {
+    #[tool(name = "navigation.reload", description = "Reload the current page.")]
+    async fn navigation_reload(&self) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::navigation::reload(&page)
             .await
@@ -436,8 +437,8 @@ impl OneCrawlMcp {
         text_ok("page reloaded")
     }
 
-    #[tool(description = "Wait for a CSS selector to appear in the DOM.")]
-    async fn wait_for_selector(
+    #[tool(name = "navigation.wait", description = "Wait for a CSS selector to appear in the DOM within an optional timeout.")]
+    async fn navigation_wait(
         &self,
         Parameters(p): Parameters<WaitForSelectorParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -449,8 +450,8 @@ impl OneCrawlMcp {
         text_ok(format!("selector {} found", p.selector))
     }
 
-    #[tool(description = "Evaluate JavaScript in the browser page context. Returns the result as JSON.")]
-    async fn evaluate_js(
+    #[tool(name = "navigation.evaluate", description = "Evaluate arbitrary JavaScript in the browser page context. Returns the result as JSON.")]
+    async fn navigation_evaluate(
         &self,
         Parameters(p): Parameters<EvaluateJsParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -466,9 +467,10 @@ impl OneCrawlMcp {
     // ════════════════════════════════════════════════════════════════
 
     #[tool(
-        description = "Query the live DOM with a CSS selector (supports ::text, ::attr). Returns JSON array of elements."
+        name = "scraping.css",
+        description = "Query the live DOM with a CSS selector. Supports ::text and ::attr(name) pseudo-elements. Returns JSON array of matching elements."
     )]
-    async fn select_css(
+    async fn scraping_css(
         &self,
         Parameters(p): Parameters<CssSelectorParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -479,8 +481,8 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(description = "Query the live DOM with an XPath expression. Returns JSON array of elements.")]
-    async fn select_xpath(
+    #[tool(name = "scraping.xpath", description = "Query the live DOM with an XPath expression. Returns JSON array of matching elements.")]
+    async fn scraping_xpath(
         &self,
         Parameters(p): Parameters<XPathParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -491,8 +493,8 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(description = "Find elements by visible text content. Optionally restrict to a tag.")]
-    async fn find_by_text(
+    #[tool(name = "scraping.find_text", description = "Find elements by visible text content. Optionally restrict search to a specific HTML tag.")]
+    async fn scraping_find_text(
         &self,
         Parameters(p): Parameters<FindByTextParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -504,8 +506,8 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(description = "Extract visible text from the live page (or a selector scope).")]
-    async fn extract_text(
+    #[tool(name = "scraping.text", description = "Extract visible text content from the live page, optionally scoped to a CSS selector.")]
+    async fn scraping_text(
         &self,
         Parameters(p): Parameters<ExtractTextParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -520,8 +522,8 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(description = "Extract raw HTML from the live page (or a selector scope).")]
-    async fn extract_html(
+    #[tool(name = "scraping.html", description = "Extract raw HTML from the live page, optionally scoped to a CSS selector.")]
+    async fn scraping_html(
         &self,
         Parameters(p): Parameters<ExtractHtmlParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -536,8 +538,8 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(description = "Extract page content as Markdown (from the live page or a selector scope).")]
-    async fn extract_markdown(
+    #[tool(name = "scraping.markdown", description = "Extract page content as clean Markdown, optionally scoped to a CSS selector.")]
+    async fn scraping_markdown(
         &self,
         Parameters(p): Parameters<ExtractMarkdownParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -553,9 +555,10 @@ impl OneCrawlMcp {
     }
 
     #[tool(
-        description = "Extract structured data from the page (JSON-LD, OpenGraph, Twitter Card, meta)."
+        name = "scraping.structured",
+        description = "Extract structured data from the page including JSON-LD, OpenGraph, Twitter Card, and meta tags."
     )]
-    async fn extract_structured(&self) -> Result<CallToolResult, McpError> {
+    async fn scraping_structured(&self) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let result = onecrawl_cdp::structured_data::extract_all(&page)
             .await
@@ -564,9 +567,10 @@ impl OneCrawlMcp {
     }
 
     #[tool(
-        description = "Schema-based extraction: extract repeating items using a field schema with optional pagination."
+        name = "scraping.stream",
+        description = "Schema-based extraction of repeating items using field rules with optional pagination support."
     )]
-    async fn stream_extract(
+    async fn scraping_stream(
         &self,
         Parameters(p): Parameters<StreamExtractParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -597,8 +601,8 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(description = "Detect all forms on the current page with their fields and attributes.")]
-    async fn detect_forms(
+    #[tool(name = "scraping.detect_forms", description = "Detect all forms on the current page and enumerate their fields, types, and attributes.")]
+    async fn scraping_detect_forms(
         &self,
         Parameters(_p): Parameters<DetectFormsParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -609,8 +613,8 @@ impl OneCrawlMcp {
         json_ok(&forms)
     }
 
-    #[tool(description = "Fill form fields by name→value map and optionally submit.")]
-    async fn fill_form(
+    #[tool(name = "scraping.fill_form", description = "Fill form fields by selector-to-value mapping and optionally submit the form.")]
+    async fn scraping_fill_form(
         &self,
         Parameters(p): Parameters<FillFormParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -634,9 +638,10 @@ impl OneCrawlMcp {
     // ════════════════════════════════════════════════════════════════
 
     #[tool(
-        description = "Crawl a website starting from one or more URLs. Returns array of crawl results."
+        name = "crawling.spider",
+        description = "Crawl a website starting from one or more seed URLs. Follows links with configurable depth, domain, and pattern filters."
     )]
-    async fn spider_crawl(
+    async fn crawling_spider(
         &self,
         Parameters(p): Parameters<SpiderCrawlParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -666,8 +671,8 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(description = "Check robots.txt for a domain. Optionally test if a specific path is allowed.")]
-    async fn check_robots(
+    #[tool(name = "crawling.robots", description = "Fetch and parse robots.txt for a domain. Optionally test if a specific path is allowed for a given user-agent.")]
+    async fn crawling_robots(
         &self,
         Parameters(p): Parameters<CheckRobotsParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -688,8 +693,8 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(description = "Generate an XML sitemap from a list of URL entries.")]
-    fn generate_sitemap(
+    #[tool(name = "crawling.sitemap", description = "Generate a standards-compliant XML sitemap from a list of URL entries with priority and changefreq.")]
+    fn crawling_sitemap(
         &self,
         Parameters(p): Parameters<GenerateSitemapParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -705,8 +710,8 @@ impl OneCrawlMcp {
         text_ok(xml)
     }
 
-    #[tool(description = "Take a labeled DOM snapshot of the current page for later comparison.")]
-    async fn take_snapshot(
+    #[tool(name = "crawling.snapshot", description = "Take a labeled DOM snapshot of the current page for later comparison with crawling.compare.")]
+    async fn crawling_snapshot(
         &self,
         Parameters(p): Parameters<TakeSnapshotParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -719,8 +724,8 @@ impl OneCrawlMcp {
         text_ok(format!("snapshot '{}' saved", p.label))
     }
 
-    #[tool(description = "Compare two previously taken DOM snapshots by label. Returns diff report.")]
-    async fn compare_snapshots(
+    #[tool(name = "crawling.compare", description = "Compare two previously taken DOM snapshots by label and return a structured diff report.")]
+    async fn crawling_compare(
         &self,
         Parameters(p): Parameters<CompareSnapshotsParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -742,9 +747,10 @@ impl OneCrawlMcp {
     // ════════════════════════════════════════════════════════════════
 
     #[tool(
-        description = "Inject full stealth anti-bot patches into the browser page. Returns list of applied patches."
+        name = "stealth.inject",
+        description = "Inject comprehensive stealth anti-bot patches into the browser page. Returns list of applied patches."
     )]
-    async fn inject_stealth(
+    async fn stealth_inject(
         &self,
         Parameters(_p): Parameters<InjectStealthParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -759,9 +765,10 @@ impl OneCrawlMcp {
     }
 
     #[tool(
-        description = "Run bot detection tests on the current page. Returns detection score and results."
+        name = "stealth.test",
+        description = "Run bot detection tests on the current page. Returns a detection score and detailed test results."
     )]
-    async fn bot_detection_test(
+    async fn stealth_test(
         &self,
         Parameters(_p): Parameters<BotDetectionTestParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -772,8 +779,8 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(description = "Generate and apply a realistic browser fingerprint to evade detection.")]
-    async fn apply_fingerprint(
+    #[tool(name = "stealth.fingerprint", description = "Generate and apply a realistic browser fingerprint with configurable user-agent to evade bot detection.")]
+    async fn stealth_fingerprint(
         &self,
         Parameters(p): Parameters<ApplyFingerprintParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -793,9 +800,10 @@ impl OneCrawlMcp {
     }
 
     #[tool(
-        description = "Block network requests to specified domains or a built-in category (ads, trackers, social)."
+        name = "stealth.block_domains",
+        description = "Block network requests to specified domains or a built-in category such as ads, trackers, or social widgets."
     )]
-    async fn block_domains(
+    async fn stealth_block_domains(
         &self,
         Parameters(p): Parameters<BlockDomainsParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -816,8 +824,8 @@ impl OneCrawlMcp {
         text_ok(format!("{count} domains blocked"))
     }
 
-    #[tool(description = "Detect CAPTCHAs on the current page. Returns detection type and confidence.")]
-    async fn detect_captcha(
+    #[tool(name = "stealth.detect_captcha", description = "Detect CAPTCHAs on the current page. Returns the CAPTCHA type, provider, and confidence score.")]
+    async fn stealth_detect_captcha(
         &self,
         Parameters(_p): Parameters<DetectCaptchaParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -832,8 +840,8 @@ impl OneCrawlMcp {
     //  CDP tools — Data Processing
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(description = "Execute a data pipeline (filter, transform, sort, deduplicate) on JSON input.")]
-    fn pipeline_execute(
+    #[tool(name = "data.pipeline", description = "Execute a multi-step data pipeline with filter, transform, sort, and deduplicate operations on JSON input.")]
+    fn data_pipeline(
         &self,
         Parameters(p): Parameters<PipelineExecuteParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -849,8 +857,8 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(description = "Perform an HTTP GET request through the browser session. Returns status, headers, body.")]
-    async fn http_get(
+    #[tool(name = "data.http_get", description = "Perform an HTTP GET request through the browser session. Returns status code, headers, and response body.")]
+    async fn data_http_get(
         &self,
         Parameters(p): Parameters<HttpGetParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -868,8 +876,8 @@ impl OneCrawlMcp {
         json_ok(&resp)
     }
 
-    #[tool(description = "Perform an HTTP POST request through the browser session. Returns status, headers, body.")]
-    async fn http_post(
+    #[tool(name = "data.http_post", description = "Perform an HTTP POST request through the browser session. Returns status code, headers, and response body.")]
+    async fn data_http_post(
         &self,
         Parameters(p): Parameters<HttpPostParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -888,8 +896,8 @@ impl OneCrawlMcp {
         json_ok(&resp)
     }
 
-    #[tool(description = "Extract all links from the live page and return as link edges for graph analysis.")]
-    async fn extract_links(
+    #[tool(name = "data.links", description = "Extract all links from the live page and return as directed edges suitable for graph analysis.")]
+    async fn data_links(
         &self,
         Parameters(p): Parameters<ExtractLinksParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -900,8 +908,8 @@ impl OneCrawlMcp {
         json_ok(&edges)
     }
 
-    #[tool(description = "Analyze a link graph: compute stats, find orphans, hubs, broken links.")]
-    fn analyze_graph(
+    #[tool(name = "data.graph", description = "Analyze a link graph to compute stats, find orphan pages, identify hubs, and detect broken links.")]
+    fn data_graph(
         &self,
         Parameters(p): Parameters<AnalyzeGraphParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -916,8 +924,8 @@ impl OneCrawlMcp {
     //  CDP tools — Automation
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(description = "Check the rate limiter status. Initialises a limiter on first call.")]
-    async fn rate_limit_check(
+    #[tool(name = "automation.rate_limit", description = "Check rate limiter status and whether new requests can proceed. Initializes the limiter on first call.")]
+    async fn automation_rate_limit(
         &self,
         Parameters(p): Parameters<RateLimitCheckParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -941,8 +949,8 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(description = "Enqueue a URL/operation into the retry queue with exponential backoff.")]
-    async fn retry_enqueue(
+    #[tool(name = "automation.retry", description = "Enqueue a failed URL or operation into the retry queue with exponential backoff and jitter.")]
+    async fn automation_retry(
         &self,
         Parameters(p): Parameters<RetryEnqueueParams>,
     ) -> Result<CallToolResult, McpError> {
@@ -968,6 +976,100 @@ impl OneCrawlMcp {
             "id": id,
             "queue_stats": stats,
         }))
+    }
+
+    //  Passkey / WebAuthn tools
+
+    #[tool(description = "Enable a virtual WebAuthn authenticator for passkey simulation.")]
+    async fn auth_passkey_enable(
+        &self,
+        Parameters(p): Parameters<PasskeyEnableParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let config = onecrawl_cdp::webauthn::VirtualAuthenticator {
+            id: format!(
+                "auth-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis()
+            ),
+            protocol: p.protocol.unwrap_or_else(|| "ctap2".into()),
+            transport: p.transport.unwrap_or_else(|| "internal".into()),
+            has_resident_key: true,
+            has_user_verification: true,
+            is_user_verified: true,
+        };
+        onecrawl_cdp::webauthn::enable_virtual_authenticator(&page, &config)
+            .await
+            .map_err(|e| mcp_err(e.to_string()))?;
+        text_ok("Virtual authenticator enabled")
+    }
+
+    #[tool(description = "Add a passkey credential to the virtual authenticator.")]
+    async fn auth_passkey_add(
+        &self,
+        Parameters(p): Parameters<PasskeyAddParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let cred = onecrawl_cdp::webauthn::VirtualCredential {
+            credential_id: p.credential_id,
+            rp_id: p.rp_id,
+            user_handle: p.user_handle.unwrap_or_default(),
+            sign_count: 0,
+        };
+        onecrawl_cdp::webauthn::add_virtual_credential(&page, &cred)
+            .await
+            .map_err(|e| mcp_err(e.to_string()))?;
+        text_ok("Credential added")
+    }
+
+    #[tool(description = "List all stored passkey credentials.")]
+    async fn auth_passkey_list(
+        &self,
+        Parameters(_p): Parameters<PasskeyListParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let creds = onecrawl_cdp::webauthn::get_virtual_credentials(&page)
+            .await
+            .map_err(|e| mcp_err(e.to_string()))?;
+        json_ok(&creds)
+    }
+
+    #[tool(description = "Get the WebAuthn operation log.")]
+    async fn auth_passkey_log(
+        &self,
+        Parameters(_p): Parameters<PasskeyLogParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let log = onecrawl_cdp::webauthn::get_webauthn_log(&page)
+            .await
+            .map_err(|e| mcp_err(e.to_string()))?;
+        json_ok(&log)
+    }
+
+    #[tool(description = "Disable the virtual WebAuthn authenticator.")]
+    async fn auth_passkey_disable(
+        &self,
+        Parameters(_p): Parameters<PasskeyDisableParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        onecrawl_cdp::webauthn::disable_virtual_authenticator(&page)
+            .await
+            .map_err(|e| mcp_err(e.to_string()))?;
+        text_ok("Virtual authenticator disabled")
+    }
+
+    #[tool(description = "Remove a passkey credential by ID.")]
+    async fn auth_passkey_remove(
+        &self,
+        Parameters(p): Parameters<PasskeyRemoveParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let removed = onecrawl_cdp::webauthn::remove_virtual_credential(&page, &p.credential_id)
+            .await
+            .map_err(|e| mcp_err(e.to_string()))?;
+        json_ok(&serde_json::json!({ "removed": removed }))
     }
 }
 

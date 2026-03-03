@@ -1,0 +1,22 @@
+[package]
+name = "onecrawl-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "PinchTab-style HTTP API server for browser automation"
+
+[dependencies]
+onecrawl-core = { path = "../onecrawl-core" }
+onecrawl-cdp = { path = "../onecrawl-cdp" }
+chromiumoxide = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+futures = { workspace = true }
+axum = { version = "0.8", features = ["json", "query"] }
+tower-http = { version = "0.6", features = ["cors"] }
+uuid = { version = "1", features = ["v4"] }
+base64 = { workspace = true }
