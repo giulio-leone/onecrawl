@@ -113,27 +113,32 @@ pub async fn observe_console(page: &Page, tx: broadcast::Sender<BrowserEvent>) -
 
 /// Drain buffered console messages into the event stream.
 pub async fn drain_console(page: &Page, tx: &broadcast::Sender<BrowserEvent>) -> Result<usize> {
-    let val = page
+    let result = page
         .evaluate(
             r#"
             (() => {
                 const logs = window.__onecrawl_console_log || [];
                 window.__onecrawl_console_log = [];
-                return JSON.stringify(logs);
+                return logs;
             })()
             "#,
         )
         .await
-        .map_err(|e| Error::Browser(format!("drain_console failed: {e}")))?
-        .into_value::<serde_json::Value>()
-        .map_err(|e| Error::Browser(format!("drain_console parse: {e}")))?;
+        .map_err(|e| Error::Browser(format!("drain_console failed: {e}")))?;
 
-    let logs_str = match val {
-        serde_json::Value::String(s) => s,
-        other => other.to_string(),
+    // Try to parse as Value; if it fails, return 0 (no messages)
+    let val: serde_json::Value = match result.into_value() {
+        Ok(v) => v,
+        Err(_) => return Ok(0),
     };
 
-    let logs: Vec<serde_json::Value> = serde_json::from_str(&logs_str).unwrap_or_default();
+    let logs = match val {
+        serde_json::Value::Array(arr) => arr,
+        serde_json::Value::String(s) => {
+            serde_json::from_str::<Vec<serde_json::Value>>(&s).unwrap_or_default()
+        }
+        _ => return Ok(0),
+    };
     let count = logs.len();
 
     for log in logs {
@@ -188,27 +193,31 @@ pub async fn observe_errors(page: &Page, tx: broadcast::Sender<BrowserEvent>) ->
 
 /// Drain buffered page errors into the event stream.
 pub async fn drain_errors(page: &Page, tx: &broadcast::Sender<BrowserEvent>) -> Result<usize> {
-    let val = page
+    let result = page
         .evaluate(
             r#"
             (() => {
                 const errs = window.__onecrawl_page_errors || [];
                 window.__onecrawl_page_errors = [];
-                return JSON.stringify(errs);
+                return errs;
             })()
             "#,
         )
         .await
-        .map_err(|e| Error::Browser(format!("drain_errors failed: {e}")))?
-        .into_value::<serde_json::Value>()
-        .map_err(|e| Error::Browser(format!("drain_errors parse: {e}")))?;
+        .map_err(|e| Error::Browser(format!("drain_errors failed: {e}")))?;
 
-    let errs_str = match val {
-        serde_json::Value::String(s) => s,
-        other => other.to_string(),
+    let val: serde_json::Value = match result.into_value() {
+        Ok(v) => v,
+        Err(_) => return Ok(0),
     };
 
-    let errs: Vec<serde_json::Value> = serde_json::from_str(&errs_str).unwrap_or_default();
+    let errs = match val {
+        serde_json::Value::Array(arr) => arr,
+        serde_json::Value::String(s) => {
+            serde_json::from_str::<Vec<serde_json::Value>>(&s).unwrap_or_default()
+        }
+        _ => return Ok(0),
+    };
     let count = errs.len();
 
     for err in errs {

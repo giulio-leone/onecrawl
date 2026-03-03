@@ -250,6 +250,7 @@ pub struct FingerprintInfo {
 pub struct NativeBrowser {
     session: Arc<onecrawl_cdp::BrowserSession>,
     page: Arc<TokioMutex<Option<onecrawl_cdp::Page>>>,
+    event_stream: Arc<TokioMutex<Option<onecrawl_cdp::EventStream>>>,
 }
 
 #[napi]
@@ -273,6 +274,7 @@ impl NativeBrowser {
         Ok(Self {
             session: Arc::new(session),
             page: Arc::new(TokioMutex::new(Some(page))),
+            event_stream: Arc::new(TokioMutex::new(None)),
         })
     }
 
@@ -291,6 +293,7 @@ impl NativeBrowser {
         Ok(Self {
             session: Arc::new(session),
             page: Arc::new(TokioMutex::new(Some(page))),
+            event_stream: Arc::new(TokioMutex::new(None)),
         })
     }
 
@@ -928,5 +931,64 @@ impl NativeBrowser {
             .await
             .map_err(|e| Error::from_reason(e.to_string()))?;
         Ok(bytes.into())
+    }
+
+    // ──── Event Streaming ────
+
+    /// Start event observation (console + errors). Call drainEvents() to poll.
+    #[napi]
+    pub async fn start_event_stream(&self) -> Result<()> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+
+        let stream = onecrawl_cdp::EventStream::new(256);
+        let tx = stream.sender();
+
+        onecrawl_cdp::events::observe_console(page, tx.clone())
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        onecrawl_cdp::events::observe_errors(page, tx.clone())
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+
+        let mut es = self.event_stream.lock().await;
+        *es = Some(stream);
+        Ok(())
+    }
+
+    /// Drain buffered events (console messages + page errors). Returns JSON array.
+    #[napi]
+    pub async fn drain_events(&self) -> Result<String> {
+        let guard: tokio::sync::MutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("browser closed"))?;
+
+        let es = self.event_stream.lock().await;
+        let stream = es.as_ref().ok_or_else(|| Error::from_reason("event stream not started — call startEventStream() first"))?;
+        let tx = stream.sender();
+
+        let console_count = onecrawl_cdp::events::drain_console(page, &tx)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let error_count = onecrawl_cdp::events::drain_errors(page, &tx)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+
+        Ok(serde_json::json!({
+            "console_messages": console_count,
+            "page_errors": error_count,
+            "total": console_count + error_count,
+        }).to_string())
+    }
+
+    /// Emit a custom event into the stream.
+    #[napi]
+    pub async fn emit_event(&self, name: String, data: String) -> Result<()> {
+        let es = self.event_stream.lock().await;
+        let stream = es.as_ref().ok_or_else(|| Error::from_reason("event stream not started"))?;
+        let tx = stream.sender();
+        let json_data: serde_json::Value = serde_json::from_str(&data)
+            .unwrap_or(serde_json::Value::String(data));
+        onecrawl_cdp::events::emit_custom(&tx, &name, json_data)
+            .map_err(|e| Error::from_reason(e.to_string()))
     }
 }

@@ -127,6 +127,12 @@ export declare class NativeBrowser {
   screenshotWithOptions(format?: string | undefined | null, quality?: number | undefined | null, fullPage?: boolean | undefined | null): Promise<Buffer>
   /** Generate PDF with custom options (landscape, scale, paper size). */
   pdfWithOptions(landscape?: boolean | undefined | null, scale?: number | undefined | null, paperWidth?: number | undefined | null, paperHeight?: number | undefined | null): Promise<Buffer>
+  /** Start event observation (console + errors). Call drainEvents() to poll. */
+  startEventStream(): Promise<void>
+  /** Drain buffered events (console messages + page errors). Returns JSON array. */
+  drainEvents(): Promise<string>
+  /** Emit a custom event into the stream. */
+  emitEvent(name: string, data: string): Promise<void>
 }
 
 /** Encrypted key-value store backed by sled + AES-256-GCM. */

@@ -214,6 +214,7 @@ struct Browser {
     rt: Arc<tokio::runtime::Runtime>,
     session: Arc<onecrawl_cdp::BrowserSession>,
     page: Arc<std::sync::Mutex<Option<onecrawl_cdp::Page>>>,
+    event_stream: Arc<std::sync::Mutex<Option<onecrawl_cdp::EventStream>>>,
 }
 
 fn py_err(e: impl std::fmt::Display) -> PyErr {
@@ -239,6 +240,7 @@ impl Browser {
             rt: Arc::new(rt),
             session: Arc::new(session),
             page: Arc::new(std::sync::Mutex::new(Some(page))),
+            event_stream: Arc::new(std::sync::Mutex::new(None)),
         })
     }
 
@@ -252,6 +254,7 @@ impl Browser {
             rt: Arc::new(rt),
             session: Arc::new(session),
             page: Arc::new(std::sync::Mutex::new(Some(page))),
+            event_stream: Arc::new(std::sync::Mutex::new(None)),
         })
     }
 
@@ -697,6 +700,53 @@ impl Browser {
             paper_height: paper_height.unwrap_or(11.0),
         };
         self.rt.block_on(onecrawl_cdp::screenshot::pdf_with_options(page, &opts)).map_err(py_err)
+    }
+
+    // ──── Event Streaming ────
+
+    /// Start event observation (console + errors). Call drain_events() to poll.
+    fn start_event_stream(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+
+        let stream = onecrawl_cdp::EventStream::new(256);
+        let tx = stream.sender();
+
+        self.rt.block_on(onecrawl_cdp::events::observe_console(page, tx.clone())).map_err(py_err)?;
+        self.rt.block_on(onecrawl_cdp::events::observe_errors(page, tx.clone())).map_err(py_err)?;
+
+        let mut es = self.event_stream.lock().map_err(py_err)?;
+        *es = Some(stream);
+        Ok(())
+    }
+
+    /// Drain buffered events. Returns JSON string with counts.
+    fn drain_events(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+
+        let es = self.event_stream.lock().map_err(py_err)?;
+        let stream = es.as_ref().ok_or_else(|| py_err("event stream not started — call start_event_stream() first"))?;
+        let tx = stream.sender();
+
+        let console_count = self.rt.block_on(onecrawl_cdp::events::drain_console(page, &tx)).map_err(py_err)?;
+        let error_count = self.rt.block_on(onecrawl_cdp::events::drain_errors(page, &tx)).map_err(py_err)?;
+
+        Ok(serde_json::json!({
+            "console_messages": console_count,
+            "page_errors": error_count,
+            "total": console_count + error_count,
+        }).to_string())
+    }
+
+    /// Emit a custom event into the stream.
+    fn emit_event(&self, name: &str, data: &str) -> PyResult<()> {
+        let es = self.event_stream.lock().map_err(py_err)?;
+        let stream = es.as_ref().ok_or_else(|| py_err("event stream not started"))?;
+        let tx = stream.sender();
+        let json_data: serde_json::Value = serde_json::from_str(data)
+            .unwrap_or(serde_json::Value::String(data.to_string()));
+        onecrawl_cdp::events::emit_custom(&tx, name, json_data).map_err(py_err)
     }
 }
 
