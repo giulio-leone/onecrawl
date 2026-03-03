@@ -16,13 +16,24 @@ const COMMAND_FILES = fs.readdirSync(COMMANDS_DIR)
 const EXPECTED_COMMANDS = [
   'assert',
   'auth',
+  'click',
+  'cookie',
+  'drag',
+  'extract',
   'find',
+  'forms',
   'get',
   'health-check',
+  'hover',
   'is',
+  'links',
   'screenshot-annotate',
   'scroll',
+  'select',
+  'session',
   'session-info',
+  'table',
+  'type',
   'wait-for',
 ];
 
@@ -52,9 +63,9 @@ test('each command file exports register()', () => {
   }
 });
 
-// ── Test 3: Registry discovers all 10 commands ──────────────────────────────
+// ── Test 3: Registry discovers all 21 commands ──────────────────────────────
 
-test('registry discovers all 10 commands', () => {
+test('registry discovers all 21 commands', () => {
   // Clear require cache for commands/index.js to get a fresh registry
   const indexPath = path.join(COMMANDS_DIR, 'index.js');
   delete require.cache[indexPath];
@@ -64,8 +75,8 @@ test('registry discovers all 10 commands', () => {
 
   assert.strictEqual(
     registry.all().length,
-    10,
-    `Expected 10 commands, got ${registry.all().length}: [${registry.all().map(c => c.name).join(', ')}]`
+    21,
+    `Expected 21 commands, got ${registry.all().length}: [${registry.all().map(c => c.name).join(', ')}]`
   );
 });
 
