@@ -69,7 +69,13 @@ function collectNativeSourceFiles(srcDir: string): string[] {
     path.join(srcDir, "utils"),
   ];
 
-  const nodeOnlyFiles = new Set(["fs-storage.adapter.ts"]);
+  const nodeOnlyFiles = new Set([
+    "fs-storage.adapter.ts",
+    "webauthn-manager.ts",
+    "passkey-store.ts",
+    "auth-cascade.ts",
+    "profile-manager.use-case.ts",
+  ]);
 
   const files: string[] = [];
   for (const dir of nativeDirs) {
