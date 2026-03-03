@@ -77,6 +77,11 @@ impl BrowserSession {
         &self.browser
     }
 
+    /// Get the CDP WebSocket URL for this browser session.
+    pub fn ws_url(&self) -> &str {
+        self.browser.websocket_address()
+    }
+
     /// Create a new page/tab.
     pub async fn new_page(&self, url: &str) -> Result<chromiumoxide::Page> {
         self.browser

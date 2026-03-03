@@ -12,7 +12,6 @@ pub mod events;
 pub mod har;
 pub mod input;
 pub mod keyboard;
-pub mod logging;
 pub mod navigation;
 pub mod network;
 pub mod page;

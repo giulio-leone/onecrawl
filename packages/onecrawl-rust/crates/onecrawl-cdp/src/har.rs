@@ -33,24 +33,12 @@ pub struct HarEntry {
 #[derive(Clone)]
 pub struct HarRecorder {
     entries: Arc<Mutex<Vec<HarEntry>>>,
-    pending: Arc<Mutex<std::collections::HashMap<String, PendingRequest>>>,
-}
-
-#[derive(Debug, Clone)]
-struct PendingRequest {
-    url: String,
-    method: String,
-    headers: serde_json::Value,
-    body_size: i64,
-    started: f64,
-    resource_type: String,
 }
 
 impl HarRecorder {
     pub fn new() -> Self {
         Self {
             entries: Arc::new(Mutex::new(Vec::new())),
-            pending: Arc::new(Mutex::new(std::collections::HashMap::new())),
         }
     }
 
@@ -62,7 +50,6 @@ impl HarRecorder {
     /// Clear all entries.
     pub async fn clear(&self) {
         self.entries.lock().await.clear();
-        self.pending.lock().await.clear();
     }
 
     /// Number of recorded entries.

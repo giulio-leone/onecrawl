@@ -123,11 +123,6 @@ pub async fn screenshot_element(page: &Page, selector: &str) -> Result<Vec<u8>> 
     Ok(bytes)
 }
 
-/// Take a full-page screenshot (alias for `screenshot_full`).
-pub async fn take_full_page_screenshot(page: &Page) -> Result<Vec<u8>> {
-    screenshot_full(page).await
-}
-
 /// Save page as PDF.
 pub async fn pdf(page: &Page) -> Result<Vec<u8>> {
     let bytes = page
