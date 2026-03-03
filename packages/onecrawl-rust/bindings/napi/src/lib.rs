@@ -1196,6 +1196,111 @@ impl NativeBrowser {
         Ok(info.to_string())
     }
 
+    // ── DOM Observer ───────────────────────────────────────────────
+
+    /// Start observing DOM mutations (optional CSS selector target).
+    #[napi]
+    pub async fn start_dom_observer(&self, selector: Option<String>) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::dom_observer::start_dom_observer(page, selector.as_deref())
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Drain accumulated DOM mutations as JSON string.
+    #[napi]
+    pub async fn drain_dom_mutations(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let mutations = onecrawl_cdp::dom_observer::drain_dom_mutations(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&mutations).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Stop the DOM observer.
+    #[napi]
+    pub async fn stop_dom_observer(&self) -> Result<()> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::dom_observer::stop_dom_observer(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get a snapshot of the current DOM as HTML string.
+    #[napi]
+    pub async fn get_dom_snapshot(&self, selector: Option<String>) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::dom_observer::get_dom_snapshot(page, selector.as_deref())
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Iframe Management ──────────────────────────────────────────
+
+    /// List all iframes on the page as JSON string.
+    #[napi]
+    pub async fn list_iframes(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let iframes = onecrawl_cdp::iframe::list_iframes(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&iframes).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Execute JavaScript inside a specific iframe by index. Returns JSON string.
+    #[napi]
+    pub async fn eval_in_iframe(&self, index: u32, expression: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let val = onecrawl_cdp::iframe::eval_in_iframe(page, index as usize, &expression)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&val).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get the inner HTML content of an iframe by index.
+    #[napi]
+    pub async fn get_iframe_content(&self, index: u32) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::iframe::get_iframe_content(page, index as usize)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Print / PDF (Enhanced) ─────────────────────────────────────
+
+    /// Generate PDF with detailed options (JSON string of DetailedPdfOptions). Returns base64 PDF data.
+    #[napi]
+    pub async fn print_to_pdf(&self, options: Option<String>) -> Result<Buffer> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let opts: onecrawl_cdp::DetailedPdfOptions = match options {
+            Some(ref json) => serde_json::from_str(json).map_err(|e| Error::from_reason(e.to_string()))?,
+            None => Default::default(),
+        };
+        let bytes = onecrawl_cdp::print::print_to_pdf(page, &opts)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(bytes.into())
+    }
+
+    /// Get page print preview metrics as JSON string.
+    #[napi]
+    pub async fn get_print_metrics(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let val = onecrawl_cdp::print::get_print_metrics(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&val).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
     // ── Web Storage ────────────────────────────────────────────────
 
     /// Get all localStorage contents as JSON string.

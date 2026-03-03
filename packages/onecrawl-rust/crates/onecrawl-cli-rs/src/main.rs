@@ -274,6 +274,27 @@ enum Commands {
         action: WorkerAction,
     },
 
+    // ── DOM Observer ────────────────────────────────────────────────
+    /// DOM mutation observation
+    Dom {
+        #[command(subcommand)]
+        action: DomAction,
+    },
+
+    // ── Iframe ─────────────────────────────────────────────────────
+    /// Iframe management
+    Iframe {
+        #[command(subcommand)]
+        action: IframeAction,
+    },
+
+    // ── Print (Enhanced) ───────────────────────────────────────────
+    /// Enhanced PDF generation
+    Print {
+        #[command(subcommand)]
+        action: PrintAction,
+    },
+
     // ── Web Storage ─────────────────────────────────────────────────
     /// Web Storage operations (localStorage, sessionStorage, IndexedDB)
     WebStorage {
@@ -560,6 +581,83 @@ enum WorkerAction {
 }
 
 #[derive(Subcommand)]
+enum DomAction {
+    /// Start observing DOM mutations
+    Observe {
+        /// CSS selector for the target element
+        #[arg(short, long)]
+        selector: Option<String>,
+    },
+    /// Drain accumulated DOM mutations (JSON)
+    Mutations,
+    /// Stop the DOM observer
+    Stop,
+    /// Get a snapshot of the current DOM as HTML
+    Snapshot {
+        /// CSS selector to snapshot (default: full document)
+        #[arg(short, long)]
+        selector: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum IframeAction {
+    /// List all iframes on the page (JSON)
+    List,
+    /// Execute JavaScript inside an iframe
+    Eval {
+        /// Iframe index (0-based)
+        index: usize,
+        /// JavaScript expression to evaluate
+        expression: String,
+    },
+    /// Get the HTML content of an iframe
+    Content {
+        /// Iframe index (0-based)
+        index: usize,
+    },
+}
+
+#[derive(Subcommand)]
+enum PrintAction {
+    /// Generate PDF with detailed options
+    Pdf {
+        /// Output file path
+        #[arg(short, long, default_value = "output.pdf")]
+        output: String,
+        /// Landscape orientation
+        #[arg(long)]
+        landscape: bool,
+        /// Print background graphics
+        #[arg(long)]
+        background: bool,
+        /// Page scale factor
+        #[arg(long)]
+        scale: Option<f64>,
+        /// Paper width in inches
+        #[arg(long)]
+        paper_width: Option<f64>,
+        /// Paper height in inches
+        #[arg(long)]
+        paper_height: Option<f64>,
+        /// Margins as "top,bottom,left,right" in inches
+        #[arg(long)]
+        margins: Option<String>,
+        /// Page ranges (e.g. "1-3,5")
+        #[arg(long)]
+        page_ranges: Option<String>,
+        /// Header HTML template
+        #[arg(long)]
+        header: Option<String>,
+        /// Footer HTML template
+        #[arg(long)]
+        footer: Option<String>,
+    },
+    /// Get page print preview metrics (JSON)
+    Metrics,
+}
+
+#[derive(Subcommand)]
 enum WebStorageAction {
     /// Get all localStorage contents (JSON)
     LocalGet,
@@ -805,6 +903,52 @@ async fn main() {
             WorkerAction::List => commands::browser::worker_list().await,
             WorkerAction::Unregister => commands::browser::worker_unregister().await,
             WorkerAction::Info => commands::browser::worker_info().await,
+        },
+
+        // ── DOM Observer ────────────────────────────────────────────
+        Commands::Dom { action } => match action {
+            DomAction::Observe { selector } => {
+                commands::browser::dom_observe(selector.as_deref()).await
+            }
+            DomAction::Mutations => commands::browser::dom_mutations().await,
+            DomAction::Stop => commands::browser::dom_stop().await,
+            DomAction::Snapshot { selector } => {
+                commands::browser::dom_snapshot(selector.as_deref()).await
+            }
+        },
+
+        // ── Iframe ──────────────────────────────────────────────────
+        Commands::Iframe { action } => match action {
+            IframeAction::List => commands::browser::iframe_list().await,
+            IframeAction::Eval { index, expression } => {
+                commands::browser::iframe_eval(index, &expression).await
+            }
+            IframeAction::Content { index } => {
+                commands::browser::iframe_content(index).await
+            }
+        },
+
+        // ── Print (Enhanced) ────────────────────────────────────────
+        Commands::Print { action } => match action {
+            PrintAction::Pdf {
+                output,
+                landscape,
+                background,
+                scale,
+                paper_width,
+                paper_height,
+                margins,
+                page_ranges,
+                header,
+                footer,
+            } => {
+                commands::browser::print_pdf(
+                    &output, landscape, background, scale, paper_width, paper_height,
+                    margins.as_deref(), page_ranges, header, footer,
+                )
+                .await
+            }
+            PrintAction::Metrics => commands::browser::print_metrics().await,
         },
 
         // ── Web Storage ─────────────────────────────────────────────

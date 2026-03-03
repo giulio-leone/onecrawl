@@ -165,6 +165,24 @@ export declare class NativeBrowser {
   unregisterServiceWorkers(): Promise<number>
   /** Get worker info as JSON string. */
   getWorkerInfo(): Promise<string>
+  /** Start observing DOM mutations (optional CSS selector target). */
+  startDomObserver(selector?: string | undefined | null): Promise<void>
+  /** Drain accumulated DOM mutations as JSON string. */
+  drainDomMutations(): Promise<string>
+  /** Stop the DOM observer. */
+  stopDomObserver(): Promise<void>
+  /** Get a snapshot of the current DOM as HTML string. */
+  getDomSnapshot(selector?: string | undefined | null): Promise<string>
+  /** List all iframes on the page as JSON string. */
+  listIframes(): Promise<string>
+  /** Execute JavaScript inside a specific iframe by index. Returns JSON string. */
+  evalInIframe(index: number, expression: string): Promise<string>
+  /** Get the inner HTML content of an iframe by index. */
+  getIframeContent(index: number): Promise<string>
+  /** Generate PDF with detailed options (JSON string of DetailedPdfOptions). Returns base64 PDF data. */
+  printToPdf(options?: string | undefined | null): Promise<Buffer>
+  /** Get page print preview metrics as JSON string. */
+  getPrintMetrics(): Promise<string>
   /** Get all localStorage contents as JSON string. */
   getLocalStorage(): Promise<string>
   /** Set a localStorage item. */

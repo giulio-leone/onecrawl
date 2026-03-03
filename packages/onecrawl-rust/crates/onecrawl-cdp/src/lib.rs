@@ -9,10 +9,12 @@ pub mod console;
 pub mod cookie;
 pub mod coverage;
 pub mod dialog;
+pub mod dom_observer;
 pub mod element;
 pub mod emulation;
 pub mod events;
 pub mod har;
+pub mod iframe;
 pub mod input;
 pub mod keyboard;
 pub mod navigation;
@@ -20,6 +22,7 @@ pub mod network;
 pub mod page;
 #[cfg(feature = "playwright")]
 pub mod playwright_backend;
+pub mod print;
 pub mod screenshot;
 pub mod stealth;
 pub mod throttle;
@@ -45,6 +48,9 @@ pub use throttle::NetworkProfile;
 pub use tracing_cdp::PerformanceMetric;
 pub use websocket::WsRecorder;
 pub use workers::ServiceWorkerInfo;
+pub use dom_observer::DomMutation;
+pub use iframe::IframeInfo;
+pub use print::DetailedPdfOptions;
 
 // Re-export chromiumoxide::Page for downstream consumers
 pub use chromiumoxide::Page;

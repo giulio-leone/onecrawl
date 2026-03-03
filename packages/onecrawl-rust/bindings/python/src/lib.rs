@@ -913,6 +913,83 @@ impl Browser {
         Ok(info.to_string())
     }
 
+    // ── DOM Observer ──────────────────────────────────────────────
+
+    /// Start observing DOM mutations (optional CSS selector target).
+    fn start_dom_observer(&self, selector: Option<&str>) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::dom_observer::start_dom_observer(page, selector)).map_err(py_err)
+    }
+
+    /// Drain accumulated DOM mutations as JSON string.
+    fn drain_dom_mutations(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let mutations = self.rt.block_on(onecrawl_cdp::dom_observer::drain_dom_mutations(page)).map_err(py_err)?;
+        serde_json::to_string(&mutations).map_err(py_err)
+    }
+
+    /// Stop the DOM observer.
+    fn stop_dom_observer(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::dom_observer::stop_dom_observer(page)).map_err(py_err)
+    }
+
+    /// Get a snapshot of the current DOM as HTML string.
+    fn get_dom_snapshot(&self, selector: Option<&str>) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::dom_observer::get_dom_snapshot(page, selector)).map_err(py_err)
+    }
+
+    // ── Iframe Management ─────────────────────────────────────────
+
+    /// List all iframes on the page as JSON string.
+    fn list_iframes(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let iframes = self.rt.block_on(onecrawl_cdp::iframe::list_iframes(page)).map_err(py_err)?;
+        serde_json::to_string(&iframes).map_err(py_err)
+    }
+
+    /// Execute JavaScript inside a specific iframe by index.
+    fn eval_in_iframe(&self, index: usize, expression: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let val = self.rt.block_on(onecrawl_cdp::iframe::eval_in_iframe(page, index, expression)).map_err(py_err)?;
+        serde_json::to_string(&val).map_err(py_err)
+    }
+
+    /// Get the inner HTML content of an iframe by index.
+    fn get_iframe_content(&self, index: usize) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt.block_on(onecrawl_cdp::iframe::get_iframe_content(page, index)).map_err(py_err)
+    }
+
+    // ── Print / PDF (Enhanced) ────────────────────────────────────
+
+    /// Generate PDF with detailed options (JSON string). Returns PDF bytes.
+    fn print_to_pdf(&self, options: Option<&str>) -> PyResult<Vec<u8>> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let opts: onecrawl_cdp::DetailedPdfOptions = match options {
+            Some(json) => serde_json::from_str(json).map_err(py_err)?,
+            None => Default::default(),
+        };
+        self.rt.block_on(onecrawl_cdp::print::print_to_pdf(page, &opts)).map_err(py_err)
+    }
+
+    /// Get page print preview metrics as JSON string.
+    fn get_print_metrics(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let val = self.rt.block_on(onecrawl_cdp::print::get_print_metrics(page)).map_err(py_err)?;
+        serde_json::to_string(&val).map_err(py_err)
+    }
+
     // ── Web Storage ───────────────────────────────────────────────
 
     /// Get all localStorage contents as JSON string.
