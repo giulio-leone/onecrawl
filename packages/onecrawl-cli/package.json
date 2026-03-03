@@ -7,7 +7,9 @@
   "bin": {
     "onecrawl": "onecrawl-cli.js"
   },
-  "scripts": {},
+  "scripts": {
+    "test": "node --test test/unit/commands.test.js"
+  },
   "files": [
     "onecrawl-cli.js",
     "stealth-loader.js",
