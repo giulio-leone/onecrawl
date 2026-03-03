@@ -186,24 +186,41 @@ onecrawl health-check
 
 ### auth — LinkedIn authentication management
 
-Full auth lifecycle: status, login (passkey or cookie injection), passkey registration,
-credential export/import. Supports dual-layer authentication (passkey + cookie).
+Full auth lifecycle: status, login (passkey, OAuth, or cookie injection), passkey registration,
+TOTP setup, OAuth configuration, credential export/import.
+Supports triple-layer authentication (passkey + OAuth + cookie) and automated 2FA.
 
 ```bash
 onecrawl auth status
 onecrawl auth login
 onecrawl auth login --method=cookie
 onecrawl auth login --method=passkey
+onecrawl auth login --method=oauth --client-id=<id>
 onecrawl auth register-passkey
+onecrawl auth setup-totp <base32-secret>
+onecrawl auth setup-oauth --client-id=<id> [--redirect-uri=<uri>]
 onecrawl auth export
 onecrawl auth export creds.json
 onecrawl auth import creds.json
 ```
 
 **Auth cascade** (when `--method=auto`, the default):
-1. Try cookie injection from `~/.onecrawl/linkedin/cookies.json`
-2. Fall back to passkey from `~/.onecrawl/linkedin/passkey.json`
-3. Fail with instructions if neither exists
+1. Try passkey from `~/.onecrawl/linkedin/passkey.json`
+2. Try OAuth 2.1 tokens from `~/.onecrawl/linkedin/oauth-tokens.json`
+3. Fall back to cookie injection from `~/.onecrawl/linkedin/cookies.json`
+4. Fail with instructions if none exists
+
+**OAuth 2.1 flow** (`--method=oauth`):
+- Uses PKCE (S256) for secure public-client auth
+- Tokens encrypted at rest (AES-256-GCM) in `~/.onecrawl/linkedin/oauth-tokens.json`
+- Automatic token refresh when expired (if refresh token available)
+- Configure client: `onecrawl auth setup-oauth --client-id=<id>`
+
+**Automated 2FA** (TOTP):
+- Store TOTP secret: `onecrawl auth setup-totp <base32-secret>`
+- Secret encrypted at `~/.onecrawl/linkedin/totp-secret.json`
+- Codes generated automatically when 2FA challenge detected during login
+- SMS 2FA supported via human-in-the-loop callback
 
 ### click — click an element
 

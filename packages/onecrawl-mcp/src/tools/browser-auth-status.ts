@@ -3,7 +3,7 @@ import type { OneCrawlClient } from "@giulio-leone/onecrawl-client";
 
 export const browserAuthStatusTool = {
   name: "browser_auth_status" as const,
-  description: "Check authentication status: whether cookies are valid, passkey is available, and session is active.",
+  description: "Check authentication status: whether cookies are valid, passkey is available, OAuth tokens exist, TOTP is configured, and session is active.",
   inputSchema: z.object({}),
   handler: async (
     _args: Record<string, never>,

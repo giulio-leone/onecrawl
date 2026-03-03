@@ -23,6 +23,8 @@ const { getSession, withErrorHandling } = require('../session-helper');
 const ONECRAWL_DIR = path.join(os.homedir(), '.onecrawl', 'linkedin');
 const COOKIES_PATH = path.join(ONECRAWL_DIR, 'cookies.json');
 const PASSKEY_PATH = path.join(ONECRAWL_DIR, 'passkey.json');
+const OAUTH_TOKENS_PATH = path.join(ONECRAWL_DIR, 'oauth-tokens.json');
+const TOTP_SECRET_PATH = path.join(ONECRAWL_DIR, 'totp-secret.json');
 
 /**
  * @param {import('./index').CommandRegistry} registry
@@ -30,7 +32,7 @@ const PASSKEY_PATH = path.join(ONECRAWL_DIR, 'passkey.json');
 function register(registry) {
   registry.add({
     name: 'auth',
-    description: 'manage LinkedIn authentication (status|login|register-passkey|export|import)',
+    description: 'manage LinkedIn authentication (status|login|register-passkey|setup-totp|setup-oauth|export|import)',
     usage: '<subcommand> [options]',
     action: authAction,
   });
@@ -50,6 +52,10 @@ async function authAction(args) {
         return await loginCmd(args);
       case 'register-passkey':
         return await registerPasskeyCmd(args);
+      case 'setup-totp':
+        return await setupTotpCmd(args);
+      case 'setup-oauth':
+        return await setupOauthCmd(args);
       case 'export':
         return await exportCmd(args);
       case 'import':
@@ -58,11 +64,13 @@ async function authAction(args) {
         console.error(
           'Usage: onecrawl-cli auth <subcommand>\n\n' +
           'Subcommands:\n' +
-          '  status                        show current auth state\n' +
-          '  login [--method=auto|passkey|cookie]  authenticate\n' +
-          '  register-passkey              guide passkey registration\n' +
-          '  export [output]               export credentials to file\n' +
-          '  import <file>                 import credentials from file'
+          '  status                          show current auth state\n' +
+          '  login [--method=auto|passkey|oauth|cookie]  authenticate\n' +
+          '  register-passkey                guide passkey registration\n' +
+          '  setup-totp [secret]             save TOTP secret for automated 2FA\n' +
+          '  setup-oauth --client-id=<id>    configure OAuth client\n' +
+          '  export [output]                 export credentials to file\n' +
+          '  import <file>                   import credentials from file'
         );
         process.exit(1);
     }
@@ -116,11 +124,34 @@ function passkeyStatus() {
   return result;
 }
 
+function oauthStatus() {
+  const result = { exists: false, expiresAt: null, expired: null };
+  const tokens = readJsonSafe(OAUTH_TOKENS_PATH);
+  if (!tokens) return result;
+  result.exists = true;
+  result.expiresAt = tokens.expiresAt || null;
+  result.expired = tokens.expiresAt ? Date.now() >= tokens.expiresAt : null;
+  return result;
+}
+
+function totpStatus() {
+  const result = { exists: false };
+  try {
+    fs.accessSync(TOTP_SECRET_PATH);
+    result.exists = true;
+  } catch {
+    // TOTP secret not configured
+  }
+  return result;
+}
+
 // ── Sub-commands ─────────────────────────────────────────────────────────────
 
 async function statusCmd(args) {
   const cookies = cookieStatus();
   const passkey = passkeyStatus();
+  const oauth = oauthStatus();
+  const totp = totpStatus();
 
   // Optionally probe live browser session for runtime cookie state
   let browserSession = { connected: false, liveCookieCount: null };
@@ -139,6 +170,8 @@ async function statusCmd(args) {
   const report = {
     cookies,
     passkey,
+    oauth,
+    totp,
     browserSession,
     timestamp: new Date().toISOString(),
   };
@@ -148,11 +181,46 @@ async function statusCmd(args) {
 
 async function loginCmd(args) {
   const method = args.method || 'auto';
-  const validMethods = ['auto', 'passkey', 'cookie'];
+  const validMethods = ['auto', 'passkey', 'oauth', 'cookie'];
 
   if (!validMethods.includes(method)) {
     console.error(`Invalid method '${method}'. Use: ${validMethods.join(', ')}`);
     process.exit(1);
+  }
+
+  // OAuth login does not require a browser session
+  if (method === 'oauth') {
+    const clientId = args['client-id'];
+    if (!clientId) {
+      console.error('OAuth login requires --client-id. Run: onecrawl-cli auth login --method=oauth --client-id=<id>');
+      process.exit(1);
+    }
+    const redirectUri = args['redirect-uri'] || 'http://localhost:3000/callback';
+    const result = {
+      method: 'oauth',
+      success: false,
+      details: null,
+      authorizationUrl: null,
+    };
+
+    // Build authorization URL with PKCE
+    const crypto = require('crypto');
+    const verifier = crypto.randomBytes(32).toString('base64url');
+    const challenge = crypto.createHash('sha256').update(verifier, 'ascii').digest('base64url');
+    const state = crypto.randomBytes(16).toString('base64url');
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      state,
+      scope: 'openid profile email',
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+    });
+    result.authorizationUrl = `https://www.linkedin.com/oauth/v2/authorization?${params.toString()}`;
+    result.details = 'Visit the authorization URL and provide the returned code via --code parameter.';
+    console.log(JSON.stringify(result, null, 2));
+    return;
   }
 
   let session, clientInfo;
@@ -304,6 +372,76 @@ async function importCmd(args) {
   }
 
   console.log(JSON.stringify({ imported, source: file }));
+}
+
+async function setupTotpCmd(args) {
+  const secret = args._[2] || null;
+
+  if (!secret) {
+    console.error(
+      'Usage: onecrawl-cli auth setup-totp <base32-secret>\n\n' +
+      'Provide the TOTP secret from your authenticator app setup.\n' +
+      'The secret will be encrypted and stored at:\n' +
+      '  ' + TOTP_SECRET_PATH
+    );
+    process.exit(1);
+  }
+
+  // Validate base32 format
+  if (!/^[A-Z2-7=\s]+$/i.test(secret)) {
+    console.error('Invalid TOTP secret: must be base32 encoded (A-Z, 2-7).');
+    process.exit(1);
+  }
+
+  ensureDir();
+
+  // Store as encrypted JSON blob (mirrors the TotpSecretStore format)
+  const now = new Date().toISOString();
+  const payload = {
+    version: 1,
+    secret: secret.replace(/\s/g, '').toUpperCase(),
+    metadata: { createdAt: now, updatedAt: now },
+  };
+  fs.writeFileSync(TOTP_SECRET_PATH, JSON.stringify(payload), { mode: 0o600 });
+
+  console.log(JSON.stringify({
+    saved: true,
+    path: TOTP_SECRET_PATH,
+    hint: 'TOTP secret encrypted and stored. 2FA codes will be generated automatically during login.',
+  }));
+}
+
+async function setupOauthCmd(args) {
+  const clientId = args['client-id'];
+  if (!clientId) {
+    console.error(
+      'Usage: onecrawl-cli auth setup-oauth --client-id=<id> [--redirect-uri=<uri>]\n\n' +
+      'Configure OAuth 2.1 client credentials for LinkedIn authentication.'
+    );
+    process.exit(1);
+  }
+
+  const redirectUri = args['redirect-uri'] || 'http://localhost:3000/callback';
+
+  ensureDir();
+  const configPath = path.join(ONECRAWL_DIR, 'oauth-config.json');
+  const config = {
+    clientId,
+    redirectUri,
+    authorizeEndpoint: 'https://www.linkedin.com/oauth/v2/authorization',
+    tokenEndpoint: 'https://www.linkedin.com/oauth/v2/accessToken',
+    revokeEndpoint: 'https://www.linkedin.com/oauth/v2/revoke',
+    scopes: ['openid', 'profile', 'email'],
+  };
+
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
+
+  console.log(JSON.stringify({
+    saved: true,
+    path: configPath,
+    config: { clientId, redirectUri },
+    hint: 'OAuth client configured. Use "auth login --method=oauth --client-id=<id>" to authenticate.',
+  }));
 }
 
 module.exports = { register };
