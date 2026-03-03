@@ -1,5 +1,5 @@
 /**
- * OneCrawl Auth - Cookie and proxy management
+ * OneCrawl Auth - Cookie, proxy, passkey, and WebAuthn management
  */
 
 export {
@@ -29,3 +29,15 @@ export {
   type ProxyConfig,
   type ProxyProvider,
 } from "./proxy.js";
+
+export {
+  WebAuthnManager,
+  type CDPSession,
+  type AuthenticatorOptions,
+  type WebAuthnCredential,
+} from "./webauthn-manager.js";
+
+export {
+  PasskeyStore,
+  type PasskeyStoreData,
+} from "./passkey-store.js";
