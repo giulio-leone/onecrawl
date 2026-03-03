@@ -224,3 +224,94 @@ fn extract_tag(block: &str, tag: &str) -> Option<String> {
         Some(content)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_entries() -> Vec<SitemapEntry> {
+        vec![
+            SitemapEntry {
+                url: "https://example.com/".into(),
+                lastmod: Some("2024-01-01".into()),
+                changefreq: Some("daily".into()),
+                priority: Some(1.0),
+            },
+            SitemapEntry {
+                url: "https://example.com/about".into(),
+                lastmod: None,
+                changefreq: None,
+                priority: None,
+            },
+        ]
+    }
+
+    fn config_no_lastmod() -> SitemapConfig {
+        SitemapConfig {
+            base_url: "https://example.com".into(),
+            default_changefreq: "weekly".into(),
+            default_priority: 0.5,
+            include_lastmod: false,
+        }
+    }
+
+    #[test]
+    fn test_generate_sitemap_xml() {
+        let cfg = config_no_lastmod();
+        let xml = generate_sitemap(&sample_entries(), &cfg);
+        assert!(xml.starts_with("<?xml"));
+        assert!(xml.contains("<urlset"));
+        assert!(xml.contains("<loc>https://example.com/</loc>"));
+        assert!(xml.contains("<loc>https://example.com/about</loc>"));
+        assert!(xml.contains("<priority>1.0</priority>"));
+        assert!(xml.contains("<changefreq>daily</changefreq>"));
+        // Second entry uses defaults
+        assert!(xml.contains("<changefreq>weekly</changefreq>"));
+        assert!(xml.contains("<priority>0.5</priority>"));
+        assert!(xml.contains("</urlset>"));
+    }
+
+    #[test]
+    fn test_parse_sitemap_roundtrip() {
+        let cfg = config_no_lastmod();
+        let xml = generate_sitemap(&sample_entries(), &cfg);
+        let parsed = parse_sitemap(&xml).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].url, "https://example.com/");
+        assert_eq!(parsed[0].priority, Some(1.0));
+        assert_eq!(parsed[0].changefreq.as_deref(), Some("daily"));
+        assert_eq!(parsed[1].url, "https://example.com/about");
+    }
+
+    #[test]
+    fn test_save_sitemap_and_load() {
+        let cfg = config_no_lastmod();
+        let entries = sample_entries();
+        let tmp = std::env::temp_dir().join("onecrawl_sitemap_test.xml");
+        let count = save_sitemap(&entries, &cfg, &tmp).unwrap();
+        assert_eq!(count, 2);
+        let content = std::fs::read_to_string(&tmp).unwrap();
+        let parsed = parse_sitemap(&content).unwrap();
+        assert_eq!(parsed.len(), 2);
+        std::fs::remove_file(&tmp).ok();
+    }
+
+    #[test]
+    fn test_generate_sitemap_index() {
+        let urls = vec![
+            "https://example.com/sitemap1.xml".to_string(),
+            "https://example.com/sitemap2.xml".to_string(),
+        ];
+        let xml = generate_sitemap_index(&urls);
+        assert!(xml.contains("<sitemapindex"));
+        assert!(xml.contains("<loc>https://example.com/sitemap1.xml</loc>"));
+        assert!(xml.contains("<loc>https://example.com/sitemap2.xml</loc>"));
+        assert!(xml.contains("</sitemapindex>"));
+    }
+
+    #[test]
+    fn test_parse_empty_sitemap() {
+        let entries = parse_sitemap("<?xml?><urlset></urlset>").unwrap();
+        assert!(entries.is_empty());
+    }
+}

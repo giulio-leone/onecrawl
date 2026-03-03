@@ -104,15 +104,9 @@ pub fn available_commands() -> Vec<(String, String)> {
             "screenshot [path]".to_string(),
             "Take screenshot".to_string(),
         ),
-        (
-            "eval <js>".to_string(),
-            "Evaluate JavaScript".to_string(),
-        ),
+        ("eval <js>".to_string(), "Evaluate JavaScript".to_string()),
         ("cookies".to_string(), "Show current cookies".to_string()),
-        (
-            "links".to_string(),
-            "List all links on page".to_string(),
-        ),
+        ("links".to_string(), "List all links on page".to_string()),
         ("title".to_string(), "Show page title".to_string()),
         ("url".to_string(), "Show current URL".to_string()),
         ("back".to_string(), "Go back in history".to_string()),
@@ -122,22 +116,13 @@ pub fn available_commands() -> Vec<(String, String)> {
             "wait <ms>".to_string(),
             "Wait specified milliseconds".to_string(),
         ),
-        (
-            "stealth".to_string(),
-            "Apply stealth patches".to_string(),
-        ),
-        (
-            "history".to_string(),
-            "Show command history".to_string(),
-        ),
+        ("stealth".to_string(), "Apply stealth patches".to_string()),
+        ("history".to_string(), "Show command history".to_string()),
         (
             "export <path>".to_string(),
             "Export page content to file".to_string(),
         ),
-        (
-            "help".to_string(),
-            "Show available commands".to_string(),
-        ),
+        ("help".to_string(), "Show available commands".to_string()),
         ("exit".to_string(), "Exit shell".to_string()),
     ]
 }
@@ -154,4 +139,79 @@ pub fn load_history(path: &std::path::Path) -> Result<ShellHistory> {
     let json = std::fs::read_to_string(path)?;
     let history: ShellHistory = serde_json::from_str(&json)?;
     Ok(history)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_command_basic() {
+        let cmd = parse_command("goto");
+        assert_eq!(cmd.command, "goto");
+        assert!(cmd.args.is_empty());
+        assert_eq!(cmd.raw, "goto");
+    }
+
+    #[test]
+    fn test_parse_command_with_args() {
+        let cmd = parse_command("goto https://example.com --verbose");
+        assert_eq!(cmd.command, "goto");
+        assert_eq!(cmd.args, vec!["https://example.com", "--verbose"]);
+    }
+
+    #[test]
+    fn test_parse_command_trims_whitespace() {
+        let cmd = parse_command("  select  .my-class  ");
+        assert_eq!(cmd.command, "select");
+        assert_eq!(cmd.args, vec![".my-class"]);
+        assert_eq!(cmd.raw, "select  .my-class");
+    }
+
+    #[test]
+    fn test_parse_command_empty() {
+        let cmd = parse_command("");
+        assert_eq!(cmd.command, "");
+        assert!(cmd.args.is_empty());
+    }
+
+    #[test]
+    fn test_shell_history_add_and_search() {
+        let mut history = ShellHistory::new(100);
+        assert!(history.is_empty());
+
+        history.add(parse_command("goto https://a.com"));
+        history.add(parse_command("select div"));
+        history.add(parse_command("goto https://b.com"));
+
+        assert_eq!(history.commands.len(), 3);
+        assert_eq!(history.last().unwrap().command, "goto");
+
+        let results = history.search("goto");
+        assert_eq!(results.len(), 2);
+
+        let results = history.search("select");
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_shell_history_eviction() {
+        let mut history = ShellHistory::new(2);
+        history.add(parse_command("first"));
+        history.add(parse_command("second"));
+        history.add(parse_command("third"));
+        assert_eq!(history.commands.len(), 2);
+        assert_eq!(history.commands[0].command, "second");
+        assert_eq!(history.commands[1].command, "third");
+    }
+
+    #[test]
+    fn test_available_commands_non_empty() {
+        let cmds = available_commands();
+        assert!(cmds.len() >= 10);
+        let names: Vec<&str> = cmds.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(names.iter().any(|n| n.starts_with("goto")));
+        assert!(names.iter().any(|n| n.starts_with("help")));
+        assert!(names.iter().any(|n| n.starts_with("exit")));
+    }
 }

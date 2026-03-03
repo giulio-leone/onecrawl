@@ -153,7 +153,10 @@ pub async fn extract(
         sel.replace('\'', "\\'")
     );
 
-    let val = page.evaluate(js).await.map_err(|e| Error::Browser(e.to_string()))?;
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Browser(e.to_string()))?;
     let raw = val.into_value().unwrap_or(serde_json::json!({}));
 
     let format_str = match format {
@@ -185,10 +188,7 @@ pub async fn extract(
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string(),
-        word_count: raw
-            .get("word_count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as usize,
+        word_count: raw.get("word_count").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
         links,
     })
 }
@@ -243,7 +243,10 @@ pub async fn get_page_metadata(page: &Page) -> Result<serde_json::Value> {
             elementCount: document.querySelectorAll('*').length
         }))
     "#;
-    let val = page.evaluate(js).await.map_err(|e| Error::Browser(e.to_string()))?;
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Browser(e.to_string()))?;
     Ok(val.into_value().unwrap_or(serde_json::json!({})))
 }
 

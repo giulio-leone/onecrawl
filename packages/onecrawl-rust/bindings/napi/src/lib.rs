@@ -254,6 +254,8 @@ pub struct NativeBrowser {
     ws_recorder: Arc<TokioMutex<Option<onecrawl_cdp::WsRecorder>>>,
     rate_limiter: Arc<TokioMutex<onecrawl_cdp::RateLimitState>>,
     retry_queue: Arc<TokioMutex<onecrawl_cdp::RetryQueue>>,
+    scheduler: Arc<TokioMutex<onecrawl_cdp::Scheduler>>,
+    session_pool: Arc<TokioMutex<onecrawl_cdp::SessionPool>>,
 }
 
 #[napi]
@@ -280,12 +282,16 @@ impl NativeBrowser {
             event_stream: Arc::new(TokioMutex::new(None)),
             har_recorder: Arc::new(TokioMutex::new(None)),
             ws_recorder: Arc::new(TokioMutex::new(None)),
-            rate_limiter: Arc::new(TokioMutex::new(
-                onecrawl_cdp::RateLimitState::new(onecrawl_cdp::RateLimitConfig::default()),
-            )),
-            retry_queue: Arc::new(TokioMutex::new(
-                onecrawl_cdp::RetryQueue::new(onecrawl_cdp::RetryConfig::default()),
-            )),
+            rate_limiter: Arc::new(TokioMutex::new(onecrawl_cdp::RateLimitState::new(
+                onecrawl_cdp::RateLimitConfig::default(),
+            ))),
+            retry_queue: Arc::new(TokioMutex::new(onecrawl_cdp::RetryQueue::new(
+                onecrawl_cdp::RetryConfig::default(),
+            ))),
+            scheduler: Arc::new(TokioMutex::new(onecrawl_cdp::Scheduler::new())),
+            session_pool: Arc::new(TokioMutex::new(onecrawl_cdp::SessionPool::new(
+                onecrawl_cdp::PoolConfig::default(),
+            ))),
         })
     }
 
@@ -307,12 +313,16 @@ impl NativeBrowser {
             event_stream: Arc::new(TokioMutex::new(None)),
             har_recorder: Arc::new(TokioMutex::new(None)),
             ws_recorder: Arc::new(TokioMutex::new(None)),
-            rate_limiter: Arc::new(TokioMutex::new(
-                onecrawl_cdp::RateLimitState::new(onecrawl_cdp::RateLimitConfig::default()),
-            )),
-            retry_queue: Arc::new(TokioMutex::new(
-                onecrawl_cdp::RetryQueue::new(onecrawl_cdp::RetryConfig::default()),
-            )),
+            rate_limiter: Arc::new(TokioMutex::new(onecrawl_cdp::RateLimitState::new(
+                onecrawl_cdp::RateLimitConfig::default(),
+            ))),
+            retry_queue: Arc::new(TokioMutex::new(onecrawl_cdp::RetryQueue::new(
+                onecrawl_cdp::RetryConfig::default(),
+            ))),
+            scheduler: Arc::new(TokioMutex::new(onecrawl_cdp::Scheduler::new())),
+            session_pool: Arc::new(TokioMutex::new(onecrawl_cdp::SessionPool::new(
+                onecrawl_cdp::PoolConfig::default(),
+            ))),
         })
     }
 
@@ -2344,10 +2354,8 @@ impl NativeBrowser {
         let page = guard
             .as_ref()
             .ok_or_else(|| Error::from_reason("no page"))?;
-        let fmt = onecrawl_cdp::extract::parse_extract_format(
-            format.as_deref().unwrap_or("text"),
-        )
-        .map_err(|e| Error::from_reason(e.to_string()))?;
+        let fmt = onecrawl_cdp::extract::parse_extract_format(format.as_deref().unwrap_or("text"))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
         let result = onecrawl_cdp::extract::extract(page, selector.as_deref(), fmt)
             .await
             .map_err(|e| Error::from_reason(e.to_string()))?;
@@ -2585,7 +2593,11 @@ impl NativeBrowser {
     ) -> Result<bool> {
         let robots: onecrawl_cdp::RobotsTxt =
             serde_json::from_str(&robots_json).map_err(|e| Error::from_reason(e.to_string()))?;
-        Ok(onecrawl_cdp::robots::is_allowed(&robots, &user_agent, &path))
+        Ok(onecrawl_cdp::robots::is_allowed(
+            &robots,
+            &user_agent,
+            &path,
+        ))
     }
 
     /// Get crawl delay for a user-agent. Accepts JSON RobotsTxt.
@@ -2758,7 +2770,11 @@ impl NativeBrowser {
 
     /// Track multiple elements by CSS selectors (JSON array). Optionally save to path.
     #[napi]
-    pub async fn track_elements(&self, selectors: String, save_path: Option<String>) -> Result<String> {
+    pub async fn track_elements(
+        &self,
+        selectors: String,
+        save_path: Option<String>,
+    ) -> Result<String> {
         let sels: Vec<String> =
             serde_json::from_str(&selectors).map_err(|e| Error::from_reason(e.to_string()))?;
         let sel_refs: Vec<&str> = sels.iter().map(|s| s.as_str()).collect();
@@ -2767,13 +2783,9 @@ impl NativeBrowser {
             .as_ref()
             .ok_or_else(|| Error::from_reason("no page"))?;
         let path_buf = save_path.map(std::path::PathBuf::from);
-        let fps = onecrawl_cdp::adaptive::track_elements(
-            page,
-            &sel_refs,
-            path_buf.as_deref(),
-        )
-        .await
-        .map_err(|e| Error::from_reason(e.to_string()))?;
+        let fps = onecrawl_cdp::adaptive::track_elements(page, &sel_refs, path_buf.as_deref())
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
         serde_json::to_string(&fps).map_err(|e| Error::from_reason(e.to_string()))
     }
 
@@ -3003,15 +3015,11 @@ impl NativeBrowser {
 
     /// HTTP GET via browser fetch. Returns JSON HttpResponse.
     #[napi(js_name = "httpGet")]
-    pub async fn http_get(
-        &self,
-        url: String,
-        headers_json: Option<String>,
-    ) -> Result<String> {
+    pub async fn http_get(&self, url: String, headers_json: Option<String>) -> Result<String> {
         let headers: Option<std::collections::HashMap<String, String>> = match headers_json {
-            Some(h) => Some(
-                serde_json::from_str(&h).map_err(|e| Error::from_reason(e.to_string()))?,
-            ),
+            Some(h) => {
+                Some(serde_json::from_str(&h).map_err(|e| Error::from_reason(e.to_string()))?)
+            }
             None => None,
         };
         let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
@@ -3034,9 +3042,9 @@ impl NativeBrowser {
         headers_json: Option<String>,
     ) -> Result<String> {
         let headers: Option<std::collections::HashMap<String, String>> = match headers_json {
-            Some(h) => Some(
-                serde_json::from_str(&h).map_err(|e| Error::from_reason(e.to_string()))?,
-            ),
+            Some(h) => {
+                Some(serde_json::from_str(&h).map_err(|e| Error::from_reason(e.to_string()))?)
+            }
             None => None,
         };
         let ct = content_type.as_deref().unwrap_or("application/json");
@@ -3300,8 +3308,8 @@ impl NativeBrowser {
         let mut q = self.retry_queue.lock().await;
         match onecrawl_cdp::retry_queue::get_next(&mut q) {
             Some(item) => {
-                let json = serde_json::to_string(item)
-                    .map_err(|e| Error::from_reason(e.to_string()))?;
+                let json =
+                    serde_json::to_string(item).map_err(|e| Error::from_reason(e.to_string()))?;
                 Ok(Some(json))
             }
             None => Ok(None),
@@ -3493,6 +3501,330 @@ impl NativeBrowser {
             .map_err(|e| Error::from_reason(format!("invalid data JSON: {e}")))?;
         let warnings = onecrawl_cdp::structured_data::validate_schema(&data);
         serde_json::to_string(&warnings).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Proxy Health ────────────────────────────────────────────────
+
+    /// Check a single proxy health via browser fetch. Returns JSON.
+    #[napi(js_name = "proxyHealthCheck")]
+    pub async fn proxy_health_check(
+        &self,
+        proxy_url: String,
+        config_json: Option<String>,
+    ) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let config: onecrawl_cdp::ProxyHealthConfig = match config_json {
+            Some(ref j) => serde_json::from_str(j)
+                .map_err(|e| Error::from_reason(format!("invalid config JSON: {e}")))?,
+            None => onecrawl_cdp::ProxyHealthConfig::default(),
+        };
+        let result = onecrawl_cdp::proxy_health::check_proxy(page, &proxy_url, &config)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Check multiple proxies. Returns JSON array.
+    #[napi(js_name = "proxyHealthCheckAll")]
+    pub async fn proxy_health_check_all(&self, proxies_json: String) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let proxies: Vec<String> = serde_json::from_str(&proxies_json)
+            .map_err(|e| Error::from_reason(format!("invalid proxies JSON: {e}")))?;
+        let config = onecrawl_cdp::ProxyHealthConfig::default();
+        let results = onecrawl_cdp::proxy_health::check_proxies(page, &proxies, &config)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&results).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Score a single proxy health result. Returns the score (0-100).
+    #[napi(js_name = "proxyHealthScore")]
+    pub fn proxy_health_score(&self, result_json: String) -> Result<u32> {
+        let result: onecrawl_cdp::ProxyHealthResult = serde_json::from_str(&result_json)
+            .map_err(|e| Error::from_reason(format!("invalid result JSON: {e}")))?;
+        Ok(onecrawl_cdp::proxy_health::score_proxy(&result))
+    }
+
+    /// Filter proxy results by minimum score. Returns JSON array.
+    #[napi(js_name = "proxyHealthFilter")]
+    pub fn proxy_health_filter(&self, results_json: String, min_score: u32) -> Result<String> {
+        let results: Vec<onecrawl_cdp::ProxyHealthResult> = serde_json::from_str(&results_json)
+            .map_err(|e| Error::from_reason(format!("invalid results JSON: {e}")))?;
+        let filtered = onecrawl_cdp::proxy_health::filter_healthy(&results, min_score);
+        serde_json::to_string(&filtered).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Rank proxy results by score descending. Returns JSON array.
+    #[napi(js_name = "proxyHealthRank")]
+    pub fn proxy_health_rank(&self, results_json: String) -> Result<String> {
+        let results: Vec<onecrawl_cdp::ProxyHealthResult> = serde_json::from_str(&results_json)
+            .map_err(|e| Error::from_reason(format!("invalid results JSON: {e}")))?;
+        let ranked = onecrawl_cdp::proxy_health::rank_proxies(&results);
+        serde_json::to_string(&ranked).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Captcha ─────────────────────────────────────────────────────
+
+    /// Detect CAPTCHA presence on the current page. Returns JSON.
+    #[napi(js_name = "captchaDetect")]
+    pub async fn captcha_detect(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let detection = onecrawl_cdp::captcha::detect_captcha(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&detection).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Wait for a CAPTCHA to appear. Returns JSON.
+    #[napi(js_name = "captchaWait")]
+    pub async fn captcha_wait(&self, timeout_ms: Option<f64>) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let timeout = timeout_ms.unwrap_or(30000.0) as u64;
+        let detection = onecrawl_cdp::captcha::wait_for_captcha(page, timeout)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&detection).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Screenshot CAPTCHA element. Returns rect JSON or base64.
+    #[napi(js_name = "captchaScreenshot")]
+    pub async fn captcha_screenshot(&self) -> Result<String> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let detection = onecrawl_cdp::captcha::detect_captcha(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        if !detection.detected {
+            return Err(Error::from_reason("no captcha detected"));
+        }
+        let data = onecrawl_cdp::captcha::screenshot_captcha(page, &detection)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(data)
+    }
+
+    /// Inject a CAPTCHA solution token. Returns true if successful.
+    #[napi(js_name = "captchaInject")]
+    pub async fn captcha_inject(&self, solution: String) -> Result<bool> {
+        let guard: TokioMutexGuard<Option<onecrawl_cdp::Page>> = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("no page"))?;
+        let detection = onecrawl_cdp::captcha::detect_captcha(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        if !detection.detected {
+            return Err(Error::from_reason("no captcha detected"));
+        }
+        onecrawl_cdp::captcha::inject_solution(page, &detection, &solution)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// List supported CAPTCHA types. Returns JSON array of [type, description].
+    #[napi(js_name = "captchaTypes")]
+    pub fn captcha_types(&self) -> Result<String> {
+        let types = onecrawl_cdp::captcha::supported_types();
+        serde_json::to_string(&types).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Task Scheduler ────────────────
+
+    /// Add a scheduled task. Returns the task ID.
+    #[napi(js_name = "schedulerAddTask")]
+    pub async fn scheduler_add_task(
+        &self,
+        name: String,
+        task_type: String,
+        config: String,
+        schedule_json: String,
+    ) -> Result<String> {
+        let schedule: onecrawl_cdp::TaskSchedule = serde_json::from_str(&schedule_json)
+            .map_err(|e| Error::from_reason(format!("invalid schedule JSON: {e}")))?;
+        let mut sched = self.scheduler.lock().await;
+        Ok(onecrawl_cdp::scheduler::add_task(
+            &mut sched, &name, &task_type, &config, schedule,
+        ))
+    }
+
+    /// Remove a scheduled task by ID.
+    #[napi(js_name = "schedulerRemoveTask")]
+    pub async fn scheduler_remove_task(&self, id: String) -> Result<bool> {
+        let mut sched = self.scheduler.lock().await;
+        Ok(onecrawl_cdp::scheduler::remove_task(&mut sched, &id))
+    }
+
+    /// Pause a scheduled task by ID.
+    #[napi(js_name = "schedulerPauseTask")]
+    pub async fn scheduler_pause_task(&self, id: String) -> Result<bool> {
+        let mut sched = self.scheduler.lock().await;
+        Ok(onecrawl_cdp::scheduler::pause_task(&mut sched, &id))
+    }
+
+    /// Resume a paused task by ID.
+    #[napi(js_name = "schedulerResumeTask")]
+    pub async fn scheduler_resume_task(&self, id: String) -> Result<bool> {
+        let mut sched = self.scheduler.lock().await;
+        Ok(onecrawl_cdp::scheduler::resume_task(&mut sched, &id))
+    }
+
+    /// Get tasks that are due to execute. Returns JSON array.
+    #[napi(js_name = "schedulerGetDueTasks")]
+    pub async fn scheduler_get_due_tasks(&self) -> Result<String> {
+        let sched = self.scheduler.lock().await;
+        let due = onecrawl_cdp::scheduler::get_due_tasks(&sched);
+        serde_json::to_string(&due).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Record a task execution result. Input is JSON of TaskResult.
+    #[napi(js_name = "schedulerRecordResult")]
+    pub async fn scheduler_record_result(&self, result_json: String) -> Result<()> {
+        let result: onecrawl_cdp::TaskResult = serde_json::from_str(&result_json)
+            .map_err(|e| Error::from_reason(format!("invalid result JSON: {e}")))?;
+        let mut sched = self.scheduler.lock().await;
+        onecrawl_cdp::scheduler::record_result(&mut sched, result);
+        Ok(())
+    }
+
+    /// Get scheduler statistics. Returns JSON map.
+    #[napi(js_name = "schedulerGetStats")]
+    pub async fn scheduler_get_stats(&self) -> Result<String> {
+        let sched = self.scheduler.lock().await;
+        let stats = onecrawl_cdp::scheduler::get_stats(&sched);
+        serde_json::to_string(&stats).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// List all tasks. Returns JSON array.
+    #[napi(js_name = "schedulerListTasks")]
+    pub async fn scheduler_list_tasks(&self) -> Result<String> {
+        let sched = self.scheduler.lock().await;
+        serde_json::to_string(&sched.tasks).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Save scheduler state to a file.
+    #[napi(js_name = "schedulerSave")]
+    pub async fn scheduler_save(&self, path: String) -> Result<()> {
+        let sched = self.scheduler.lock().await;
+        onecrawl_cdp::scheduler::save_scheduler(&sched, std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Load scheduler state from a file.
+    #[napi(js_name = "schedulerLoad")]
+    pub async fn scheduler_load(&self, path: String) -> Result<()> {
+        let loaded = onecrawl_cdp::scheduler::load_scheduler(std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let mut sched = self.scheduler.lock().await;
+        *sched = loaded;
+        Ok(())
+    }
+
+    // ──────────────── Session Pool ────────────────
+
+    /// Add a session to the pool. Returns the session ID.
+    #[napi(js_name = "poolAddSession")]
+    pub async fn pool_add_session(
+        &self,
+        name: String,
+        tags: Option<Vec<String>>,
+    ) -> Result<String> {
+        let mut pool = self.session_pool.lock().await;
+        Ok(onecrawl_cdp::session_pool::add_session(
+            &mut pool, &name, tags,
+        ))
+    }
+
+    /// Get the next available session. Returns JSON or null.
+    #[napi(js_name = "poolGetNext")]
+    pub async fn pool_get_next(&self) -> Result<Option<String>> {
+        let mut pool = self.session_pool.lock().await;
+        match onecrawl_cdp::session_pool::get_next(&mut pool) {
+            Some(s) => {
+                let json =
+                    serde_json::to_string(s).map_err(|e| Error::from_reason(e.to_string()))?;
+                Ok(Some(json))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Mark a pool session as busy.
+    #[napi(js_name = "poolMarkBusy")]
+    pub async fn pool_mark_busy(&self, id: String) -> Result<()> {
+        let mut pool = self.session_pool.lock().await;
+        onecrawl_cdp::session_pool::mark_busy(&mut pool, &id);
+        Ok(())
+    }
+
+    /// Mark a pool session as idle.
+    #[napi(js_name = "poolMarkIdle")]
+    pub async fn pool_mark_idle(&self, id: String) -> Result<()> {
+        let mut pool = self.session_pool.lock().await;
+        onecrawl_cdp::session_pool::mark_idle(&mut pool, &id);
+        Ok(())
+    }
+
+    /// Mark a pool session as errored.
+    #[napi(js_name = "poolMarkError")]
+    pub async fn pool_mark_error(&self, id: String, error: String) -> Result<()> {
+        let mut pool = self.session_pool.lock().await;
+        onecrawl_cdp::session_pool::mark_error(&mut pool, &id, &error);
+        Ok(())
+    }
+
+    /// Close a pool session.
+    #[napi(js_name = "poolCloseSession")]
+    pub async fn pool_close_session(&self, id: String) -> Result<()> {
+        let mut pool = self.session_pool.lock().await;
+        onecrawl_cdp::session_pool::close_session(&mut pool, &id);
+        Ok(())
+    }
+
+    /// Get pool statistics. Returns JSON.
+    #[napi(js_name = "poolGetStats")]
+    pub async fn pool_get_stats(&self) -> Result<String> {
+        let pool = self.session_pool.lock().await;
+        let stats = onecrawl_cdp::session_pool::get_stats(&pool);
+        serde_json::to_string(&stats).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Clean up idle sessions past timeout. Returns number closed.
+    #[napi(js_name = "poolCleanupIdle")]
+    pub async fn pool_cleanup_idle(&self) -> Result<u32> {
+        let mut pool = self.session_pool.lock().await;
+        Ok(onecrawl_cdp::session_pool::cleanup_idle(&mut pool) as u32)
+    }
+
+    /// Save pool state to a file.
+    #[napi(js_name = "poolSave")]
+    pub async fn pool_save(&self, path: String) -> Result<()> {
+        let pool = self.session_pool.lock().await;
+        onecrawl_cdp::session_pool::save_pool(&pool, std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Load pool state from a file.
+    #[napi(js_name = "poolLoad")]
+    pub async fn pool_load(&self, path: String) -> Result<()> {
+        let loaded = onecrawl_cdp::session_pool::load_pool(std::path::Path::new(&path))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let mut pool = self.session_pool.lock().await;
+        *pool = loaded;
+        Ok(())
     }
 }
 

@@ -1358,11 +1358,19 @@ pub async fn antibot_inject(level: &str) {
         let profiles = onecrawl_cdp::antibot::stealth_profiles();
         let profile = profiles.iter().find(|p| p.level == lvl);
         let names: Vec<&str> = if let Some(p) = profile {
-            applied.iter().filter(|a| p.patches.contains(a)).map(|s| s.as_str()).collect()
+            applied
+                .iter()
+                .filter(|a| p.patches.contains(a))
+                .map(|s| s.as_str())
+                .collect()
         } else {
             applied.iter().map(|s| s.as_str()).collect()
         };
-        println!("{} Anti-bot patches injected (level: {})", "✓".green(), lvl.cyan());
+        println!(
+            "{} Anti-bot patches injected (level: {})",
+            "✓".green(),
+            lvl.cyan()
+        );
         for n in &names {
             println!("  • {}", n);
         }
@@ -1403,24 +1411,20 @@ pub async fn adaptive_fingerprint(selector: &str) {
         let fp = onecrawl_cdp::adaptive::fingerprint_element(&page, &sel)
             .await
             .map_err(|e| e.to_string())?;
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&fp).unwrap_or_default()
-        );
+        println!("{}", serde_json::to_string_pretty(&fp).unwrap_or_default());
         Ok(())
     })
     .await;
 }
 
 pub async fn adaptive_relocate(fingerprint_json: &str) {
-    let fp: onecrawl_cdp::ElementFingerprint =
-        match serde_json::from_str(fingerprint_json) {
-            Ok(fp) => fp,
-            Err(e) => {
-                eprintln!("{} Invalid fingerprint JSON: {}", "✗".red(), e);
-                std::process::exit(1);
-            }
-        };
+    let fp: onecrawl_cdp::ElementFingerprint = match serde_json::from_str(fingerprint_json) {
+        Ok(fp) => fp,
+        Err(e) => {
+            eprintln!("{} Invalid fingerprint JSON: {}", "✗".red(), e);
+            std::process::exit(1);
+        }
+    };
     with_page(|page| async move {
         let matches = onecrawl_cdp::adaptive::relocate_element(&page, &fp)
             .await
@@ -1445,31 +1449,23 @@ pub async fn adaptive_track(selectors: &str, save_path: Option<&str>) {
     let sel_refs: Vec<&str> = sels.iter().map(|s| s.as_str()).collect();
     let path_buf = save_path.map(std::path::PathBuf::from);
     with_page(|page| async move {
-        let fps = onecrawl_cdp::adaptive::track_elements(
-            &page,
-            &sel_refs,
-            path_buf.as_deref(),
-        )
-        .await
-        .map_err(|e| e.to_string())?;
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&fps).unwrap_or_default()
-        );
+        let fps = onecrawl_cdp::adaptive::track_elements(&page, &sel_refs, path_buf.as_deref())
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&fps).unwrap_or_default());
         Ok(())
     })
     .await;
 }
 
 pub async fn adaptive_relocate_all(fingerprints_json: &str) {
-    let fps: Vec<onecrawl_cdp::ElementFingerprint> =
-        match serde_json::from_str(fingerprints_json) {
-            Ok(fps) => fps,
-            Err(e) => {
-                eprintln!("{} Invalid fingerprints JSON: {}", "✗".red(), e);
-                std::process::exit(1);
-            }
-        };
+    let fps: Vec<onecrawl_cdp::ElementFingerprint> = match serde_json::from_str(fingerprints_json) {
+        Ok(fps) => fps,
+        Err(e) => {
+            eprintln!("{} Invalid fingerprints JSON: {}", "✗".red(), e);
+            std::process::exit(1);
+        }
+    };
     with_page(|page| async move {
         let results = onecrawl_cdp::adaptive::relocate_all(&page, &fps)
             .await
@@ -1484,16 +1480,20 @@ pub async fn adaptive_relocate_all(fingerprints_json: &str) {
 }
 
 pub async fn adaptive_save(fingerprints: &str, path: &str) {
-    let fps: Vec<onecrawl_cdp::ElementFingerprint> =
-        match serde_json::from_str(fingerprints) {
-            Ok(fps) => fps,
-            Err(e) => {
-                eprintln!("{} Invalid fingerprints JSON: {}", "✗".red(), e);
-                std::process::exit(1);
-            }
-        };
+    let fps: Vec<onecrawl_cdp::ElementFingerprint> = match serde_json::from_str(fingerprints) {
+        Ok(fps) => fps,
+        Err(e) => {
+            eprintln!("{} Invalid fingerprints JSON: {}", "✗".red(), e);
+            std::process::exit(1);
+        }
+    };
     match onecrawl_cdp::adaptive::save_fingerprints(&fps, std::path::Path::new(path)) {
-        Ok(_) => println!("{} Saved {} fingerprints to {}", "✓".green(), fps.len(), path.cyan()),
+        Ok(_) => println!(
+            "{} Saved {} fingerprints to {}",
+            "✓".green(),
+            fps.len(),
+            path.cyan()
+        ),
         Err(e) => {
             eprintln!("{} {}", "✗".red(), e);
             std::process::exit(1);
@@ -1504,10 +1504,7 @@ pub async fn adaptive_save(fingerprints: &str, path: &str) {
 pub async fn adaptive_load(path: &str) {
     match onecrawl_cdp::adaptive::load_fingerprints(std::path::Path::new(path)) {
         Ok(fps) => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&fps).unwrap_or_default()
-            );
+            println!("{}", serde_json::to_string_pretty(&fps).unwrap_or_default());
         }
         Err(e) => {
             eprintln!("{} {}", "✗".red(), e);
@@ -2521,8 +2518,8 @@ pub async fn extract_content(format: &str, selector: Option<&str>, output: Optio
     let selector = selector.map(String::from);
     let output = output.map(String::from);
     with_page(|page| async move {
-        let fmt = onecrawl_cdp::extract::parse_extract_format(&format)
-            .map_err(|e| e.to_string())?;
+        let fmt =
+            onecrawl_cdp::extract::parse_extract_format(&format).map_err(|e| e.to_string())?;
 
         if let Some(path) = output {
             let bytes = onecrawl_cdp::extract::extract_to_file(
@@ -2845,9 +2842,21 @@ pub async fn robots_check(url: &str, path: &str, user_agent: &str) {
             .map_err(|e| e.to_string())?;
         let allowed = onecrawl_cdp::robots::is_allowed(&robots, user_agent, path);
         if allowed {
-            println!("{} Path \"{}\" is {} for {}", "✓".green(), path, "ALLOWED".green(), user_agent);
+            println!(
+                "{} Path \"{}\" is {} for {}",
+                "✓".green(),
+                path,
+                "ALLOWED".green(),
+                user_agent
+            );
         } else {
-            println!("{} Path \"{}\" is {} for {}", "✗".red(), path, "DISALLOWED".red(), user_agent);
+            println!(
+                "{} Path \"{}\" is {} for {}",
+                "✗".red(),
+                path,
+                "DISALLOWED".red(),
+                user_agent
+            );
         }
         Ok(())
     })
@@ -2973,7 +2982,11 @@ pub async fn shell_repl() {
     let commands = onecrawl_cdp::shell::available_commands();
 
     println!("{} OneCrawl Interactive Shell", "▶".green());
-    println!("  Type {} for commands, {} to quit.\n", "help".cyan(), "exit".cyan());
+    println!(
+        "  Type {} for commands, {} to quit.\n",
+        "help".cyan(),
+        "exit".cyan()
+    );
 
     loop {
         print!("{} ", "onecrawl>".green());
@@ -3007,7 +3020,11 @@ pub async fn shell_repl() {
                 }
             }
             other => {
-                println!("{} Command '{}' would be dispatched to the browser session", "→".yellow(), other);
+                println!(
+                    "{} Command '{}' would be dispatched to the browser session",
+                    "→".yellow(),
+                    other
+                );
             }
         }
     }
@@ -3022,7 +3039,12 @@ pub async fn domain_block(domains: &[String]) {
         let count = onecrawl_cdp::domain_blocker::block_domains(&page, domains)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{} Blocked {} domain(s) — {} total on blocklist", "✓".green(), domains.len(), count);
+        println!(
+            "{} Blocked {} domain(s) — {} total on blocklist",
+            "✓".green(),
+            domains.len(),
+            count
+        );
         Ok(())
     })
     .await;
@@ -3034,7 +3056,12 @@ pub async fn domain_block_category(category: &str) {
         let count = onecrawl_cdp::domain_blocker::block_category(&page, &cat)
             .await
             .map_err(|e| e.to_string())?;
-        println!("{} Category '{}' blocked — {} total on blocklist", "✓".green(), cat.cyan(), count);
+        println!(
+            "{} Category '{}' blocked — {} total on blocklist",
+            "✓".green(),
+            cat.cyan(),
+            count
+        );
         Ok(())
     })
     .await;
@@ -3111,10 +3138,7 @@ pub async fn stream_extract(
     with_page(|page| async move {
         let rules: Vec<onecrawl_cdp::ExtractionRule> = fields
             .iter()
-            .map(|f| {
-                onecrawl_cdp::streaming::parse_field_spec(f)
-                    .map_err(|e| e.to_string())
-            })
+            .map(|f| onecrawl_cdp::streaming::parse_field_spec(f).map_err(|e| e.to_string()))
             .collect::<Result<Vec<_>, _>>()?;
 
         let pagination = paginate.map(|sel| onecrawl_cdp::PaginationConfig {
@@ -3135,23 +3159,16 @@ pub async fn stream_extract(
 
         if let Some(path) = output {
             let count = match format.as_str() {
-                "csv" => onecrawl_cdp::streaming::export_csv(
-                    &result.items,
-                    std::path::Path::new(&path),
-                )
-                .map_err(|e| e.to_string())?,
-                _ => onecrawl_cdp::streaming::export_json(
-                    &result.items,
-                    std::path::Path::new(&path),
-                )
-                .map_err(|e| e.to_string())?,
+                "csv" => {
+                    onecrawl_cdp::streaming::export_csv(&result.items, std::path::Path::new(&path))
+                        .map_err(|e| e.to_string())?
+                }
+                _ => {
+                    onecrawl_cdp::streaming::export_json(&result.items, std::path::Path::new(&path))
+                        .map_err(|e| e.to_string())?
+                }
             };
-            println!(
-                "{} Exported {} items to {}",
-                "✓".green(),
-                count,
-                path
-            );
+            println!("{} Exported {} items to {}", "✓".green(), count, path);
         } else {
             println!(
                 "{}",
@@ -3267,10 +3284,7 @@ pub async fn fingerprint_detect() {
         let fp = onecrawl_cdp::tls_fingerprint::detect_fingerprint(&page)
             .await
             .map_err(|e| e.to_string())?;
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&fp).unwrap_or_default()
-        );
+        println!("{}", serde_json::to_string_pretty(&fp).unwrap_or_default());
         Ok(())
     })
     .await;
@@ -3337,20 +3351,13 @@ pub fn snapshot_compare(path1: &str, path2: &str) {
 pub async fn snapshot_watch(interval_ms: u64, selector: Option<&str>, count: usize) {
     let sel = selector.map(|s| s.to_string());
     with_page(|page| async move {
-        let diffs = onecrawl_cdp::snapshot::watch_for_changes(
-            &page,
-            interval_ms,
-            sel.as_deref(),
-            count,
-        )
-        .await
-        .map_err(|e| e.to_string())?;
+        let diffs =
+            onecrawl_cdp::snapshot::watch_for_changes(&page, interval_ms, sel.as_deref(), count)
+                .await
+                .map_err(|e| e.to_string())?;
         for (i, diff) in diffs.iter().enumerate() {
             println!("--- Diff #{} ---", i + 1);
-            println!(
-                "{}",
-                serde_json::to_string_pretty(diff).unwrap_or_default()
-            );
+            println!("{}", serde_json::to_string_pretty(diff).unwrap_or_default());
         }
         println!("{} {} diffs captured", "✓".green(), diffs.len());
         Ok(())
@@ -3422,10 +3429,7 @@ pub fn retry_enqueue(url: &str, operation: &str, payload: Option<&str>) {
 pub fn retry_next() {
     let mut queue = onecrawl_cdp::RetryQueue::new(onecrawl_cdp::RetryConfig::default());
     match onecrawl_cdp::retry_queue::get_next(&mut queue) {
-        Some(item) => println!(
-            "{}",
-            serde_json::to_string_pretty(item).unwrap_or_default()
-        ),
+        Some(item) => println!("{}", serde_json::to_string_pretty(item).unwrap_or_default()),
         None => println!("No items due for retry"),
     }
 }
@@ -3435,12 +3439,7 @@ pub fn retry_success(id: &str) {
 }
 
 pub fn retry_fail(id: &str, error: &str) {
-    println!(
-        "{} Marked {} as failed: {}",
-        "✓".green(),
-        id.cyan(),
-        error
-    );
+    println!("{} Marked {} as failed: {}", "✓".green(), id.cyan(), error);
 }
 
 pub fn retry_stats() {
@@ -3487,13 +3486,14 @@ pub fn retry_load(path: &str) {
 // ──────────────── Data Pipeline ────────────────
 
 pub fn pipeline_run(pipeline_path: &str, data_path: &str, output: Option<&str>, format: &str) {
-    let pipeline = match onecrawl_cdp::data_pipeline::load_pipeline(std::path::Path::new(pipeline_path)) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("{} Failed to load pipeline: {e}", "✗".red());
-            std::process::exit(1);
-        }
-    };
+    let pipeline =
+        match onecrawl_cdp::data_pipeline::load_pipeline(std::path::Path::new(pipeline_path)) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("{} Failed to load pipeline: {e}", "✗".red());
+                std::process::exit(1);
+            }
+        };
 
     let data_str = match std::fs::read_to_string(data_path) {
         Ok(s) => s,
@@ -3503,13 +3503,14 @@ pub fn pipeline_run(pipeline_path: &str, data_path: &str, output: Option<&str>, 
         }
     };
 
-    let items: Vec<std::collections::HashMap<String, String>> = match serde_json::from_str(&data_str) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("{} Invalid data JSON: {e}", "✗".red());
-            std::process::exit(1);
-        }
-    };
+    let items: Vec<std::collections::HashMap<String, String>> =
+        match serde_json::from_str(&data_str) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("{} Invalid data JSON: {e}", "✗".red());
+                std::process::exit(1);
+            }
+        };
 
     let result = onecrawl_cdp::data_pipeline::execute_pipeline(&pipeline, items);
     println!(
@@ -3526,7 +3527,11 @@ pub fn pipeline_run(pipeline_path: &str, data_path: &str, output: Option<&str>, 
     }
 
     if let Some(out) = output {
-        match onecrawl_cdp::data_pipeline::export_processed(&result, std::path::Path::new(out), format) {
+        match onecrawl_cdp::data_pipeline::export_processed(
+            &result,
+            std::path::Path::new(out),
+            format,
+        ) {
             Ok(n) => println!("{} Exported {n} items to {}", "✓".green(), out.cyan()),
             Err(e) => {
                 eprintln!("{} Export failed: {e}", "✗".red());
@@ -3542,19 +3547,25 @@ pub fn pipeline_run(pipeline_path: &str, data_path: &str, output: Option<&str>, 
 }
 
 pub fn pipeline_validate(pipeline_path: &str) {
-    let pipeline = match onecrawl_cdp::data_pipeline::load_pipeline(std::path::Path::new(pipeline_path)) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("{} Failed to load pipeline: {e}", "✗".red());
-            std::process::exit(1);
-        }
-    };
+    let pipeline =
+        match onecrawl_cdp::data_pipeline::load_pipeline(std::path::Path::new(pipeline_path)) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("{} Failed to load pipeline: {e}", "✗".red());
+                std::process::exit(1);
+            }
+        };
 
     let errors = onecrawl_cdp::data_pipeline::validate_pipeline(&pipeline);
     if errors.is_empty() {
         println!("{} Pipeline '{}' is valid", "✓".green(), pipeline.name);
     } else {
-        eprintln!("{} Pipeline '{}' has {} error(s):", "✗".red(), pipeline.name, errors.len());
+        eprintln!(
+            "{} Pipeline '{}' has {} error(s):",
+            "✗".red(),
+            pipeline.name,
+            errors.len()
+        );
         for err in &errors {
             eprintln!("  - {err}");
         }
@@ -3682,5 +3693,311 @@ pub fn structured_validate(data_json: &str) {
         for w in &warnings {
             println!("  - {w}");
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Proxy Health
+// ---------------------------------------------------------------------------
+
+pub async fn proxy_health_check(proxy: &str, test_url: Option<&str>, timeout: u64) {
+    let proxy = proxy.to_string();
+    let mut config = onecrawl_cdp::ProxyHealthConfig::default();
+    if let Some(url) = test_url {
+        config.test_url = url.to_string();
+    }
+    config.timeout_ms = timeout;
+    with_page(|page| async move {
+        let result = onecrawl_cdp::proxy_health::check_proxy(&page, &proxy, &config)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn proxy_health_check_all(proxies_json: &str) {
+    let proxies: Vec<String> = match serde_json::from_str(proxies_json) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{} Invalid proxies JSON: {e}", "✗".red());
+            std::process::exit(1);
+        }
+    };
+    let config = onecrawl_cdp::ProxyHealthConfig::default();
+    with_page(|page| async move {
+        let results = onecrawl_cdp::proxy_health::check_proxies(&page, &proxies, &config)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&results).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub fn proxy_health_rank(results_json: &str) {
+    let results: Vec<onecrawl_cdp::ProxyHealthResult> = match serde_json::from_str(results_json) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{} Invalid results JSON: {e}", "✗".red());
+            std::process::exit(1);
+        }
+    };
+    let ranked = onecrawl_cdp::proxy_health::rank_proxies(&results);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&ranked).unwrap_or_default()
+    );
+}
+
+pub fn proxy_health_filter(results_json: &str, min_score: u32) {
+    let results: Vec<onecrawl_cdp::ProxyHealthResult> = match serde_json::from_str(results_json) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{} Invalid results JSON: {e}", "✗".red());
+            std::process::exit(1);
+        }
+    };
+    let filtered = onecrawl_cdp::proxy_health::filter_healthy(&results, min_score);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&filtered).unwrap_or_default()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Captcha
+// ---------------------------------------------------------------------------
+
+pub async fn captcha_detect() {
+    with_page(|page| async move {
+        let detection = onecrawl_cdp::captcha::detect_captcha(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&detection).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn captcha_wait(timeout: u64) {
+    with_page(|page| async move {
+        let detection = onecrawl_cdp::captcha::wait_for_captcha(&page, timeout)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&detection).unwrap_or_default()
+        );
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn captcha_screenshot() {
+    with_page(|page| async move {
+        let detection = onecrawl_cdp::captcha::detect_captcha(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        if !detection.detected {
+            println!("{} No CAPTCHA detected on current page", "⚠".yellow());
+            return Ok(());
+        }
+        let data = onecrawl_cdp::captcha::screenshot_captcha(&page, &detection)
+            .await
+            .map_err(|e| e.to_string())?;
+        println!("{data}");
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn captcha_inject(solution: &str) {
+    let sol = solution.to_string();
+    with_page(|page| async move {
+        let detection = onecrawl_cdp::captcha::detect_captcha(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+        if !detection.detected {
+            eprintln!("{} No CAPTCHA detected on current page", "✗".red());
+            std::process::exit(1);
+        }
+        let ok = onecrawl_cdp::captcha::inject_solution(&page, &detection, &sol)
+            .await
+            .map_err(|e| e.to_string())?;
+        if ok {
+            println!(
+                "{} Solution injected for {}",
+                "✓".green(),
+                detection.captcha_type.cyan()
+            );
+        } else {
+            eprintln!(
+                "{} Injection failed for {}",
+                "✗".red(),
+                detection.captcha_type
+            );
+            std::process::exit(1);
+        }
+        Ok(())
+    })
+    .await;
+}
+
+pub fn captcha_types() {
+    let types = onecrawl_cdp::captcha::supported_types();
+    for (name, desc) in &types {
+        println!("  {}: {}", name.cyan(), desc);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Task Scheduler (standalone — no Page required)
+// ---------------------------------------------------------------------------
+
+pub fn schedule_add(
+    name: &str,
+    task_type: &str,
+    config: &str,
+    interval: u64,
+    delay: u64,
+    max_runs: Option<usize>,
+) {
+    let mut sched = onecrawl_cdp::Scheduler::new();
+    let schedule = onecrawl_cdp::TaskSchedule {
+        interval_ms: interval,
+        delay_ms: delay,
+        max_runs,
+    };
+    let id = onecrawl_cdp::scheduler::add_task(&mut sched, name, task_type, config, schedule);
+    println!("{} Task added: {}", "✓".green(), id);
+}
+
+pub fn schedule_remove(id: &str) {
+    let mut sched = onecrawl_cdp::Scheduler::new();
+    if onecrawl_cdp::scheduler::remove_task(&mut sched, id) {
+        println!("{} Task removed: {id}", "✓".green());
+    } else {
+        eprintln!("{} Task not found: {id}", "✗".red());
+    }
+}
+
+pub fn schedule_pause(id: &str) {
+    let mut sched = onecrawl_cdp::Scheduler::new();
+    if onecrawl_cdp::scheduler::pause_task(&mut sched, id) {
+        println!("{} Task paused: {id}", "✓".green());
+    } else {
+        eprintln!("{} Task not found: {id}", "✗".red());
+    }
+}
+
+pub fn schedule_resume(id: &str) {
+    let mut sched = onecrawl_cdp::Scheduler::new();
+    if onecrawl_cdp::scheduler::resume_task(&mut sched, id) {
+        println!("{} Task resumed: {id}", "✓".green());
+    } else {
+        eprintln!("{} Task not found or not paused: {id}", "✗".red());
+    }
+}
+
+pub fn schedule_list() {
+    let sched = onecrawl_cdp::Scheduler::new();
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&sched.tasks).unwrap_or_default()
+    );
+}
+
+pub fn schedule_stats() {
+    let sched = onecrawl_cdp::Scheduler::new();
+    let stats = onecrawl_cdp::scheduler::get_stats(&sched);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&stats).unwrap_or_default()
+    );
+}
+
+pub fn schedule_save(path: &str) {
+    let sched = onecrawl_cdp::Scheduler::new();
+    match onecrawl_cdp::scheduler::save_scheduler(&sched, std::path::Path::new(path)) {
+        Ok(()) => println!("{} Scheduler saved to {path}", "✓".green()),
+        Err(e) => eprintln!("{} Save failed: {e}", "✗".red()),
+    }
+}
+
+pub fn schedule_load(path: &str) {
+    match onecrawl_cdp::scheduler::load_scheduler(std::path::Path::new(path)) {
+        Ok(sched) => {
+            println!(
+                "{} Scheduler loaded: {} tasks",
+                "✓".green(),
+                sched.tasks.len()
+            );
+        }
+        Err(e) => eprintln!("{} Load failed: {e}", "✗".red()),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Session Pool (standalone — no Page required)
+// ---------------------------------------------------------------------------
+
+pub fn pool_add(name: &str, tags: Option<Vec<String>>) {
+    let mut pool = onecrawl_cdp::SessionPool::new(onecrawl_cdp::PoolConfig::default());
+    let id = onecrawl_cdp::session_pool::add_session(&mut pool, name, tags);
+    println!("{} Session added: {}", "✓".green(), id);
+}
+
+pub fn pool_next() {
+    let mut pool = onecrawl_cdp::SessionPool::new(onecrawl_cdp::PoolConfig::default());
+    match onecrawl_cdp::session_pool::get_next(&mut pool) {
+        Some(s) => println!("{}", serde_json::to_string_pretty(s).unwrap_or_default()),
+        None => println!("{} No available sessions", "⚠".yellow()),
+    }
+}
+
+pub fn pool_stats() {
+    let pool = onecrawl_cdp::SessionPool::new(onecrawl_cdp::PoolConfig::default());
+    let stats = onecrawl_cdp::session_pool::get_stats(&pool);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&stats).unwrap_or_default()
+    );
+}
+
+pub fn pool_cleanup() {
+    let mut pool = onecrawl_cdp::SessionPool::new(onecrawl_cdp::PoolConfig::default());
+    let n = onecrawl_cdp::session_pool::cleanup_idle(&mut pool);
+    println!("{} Cleaned up {n} idle session(s)", "✓".green());
+}
+
+pub fn pool_save(path: &str) {
+    let pool = onecrawl_cdp::SessionPool::new(onecrawl_cdp::PoolConfig::default());
+    match onecrawl_cdp::session_pool::save_pool(&pool, std::path::Path::new(path)) {
+        Ok(()) => println!("{} Pool saved to {path}", "✓".green()),
+        Err(e) => eprintln!("{} Save failed: {e}", "✗".red()),
+    }
+}
+
+pub fn pool_load(path: &str) {
+    match onecrawl_cdp::session_pool::load_pool(std::path::Path::new(path)) {
+        Ok(pool) => {
+            println!(
+                "{} Pool loaded: {} sessions",
+                "✓".green(),
+                pool.sessions.len()
+            );
+        }
+        Err(e) => eprintln!("{} Load failed: {e}", "✗".red()),
     }
 }

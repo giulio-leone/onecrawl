@@ -40,10 +40,12 @@ pub async fn css_select(page: &Page, selector: &str) -> Result<SelectorResult> {
         real_selector.replace('\'', "\\'")
     );
 
-    let val = page.evaluate(js).await.map_err(|e| Error::Browser(e.to_string()))?;
-    let mut elements: Vec<ElementData> = serde_json::from_value(
-        val.into_value().unwrap_or(serde_json::json!([])),
-    )?;
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Browser(e.to_string()))?;
+    let mut elements: Vec<ElementData> =
+        serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))?;
 
     // Apply pseudo-element extraction
     match pseudo.as_deref() {
@@ -112,7 +114,10 @@ pub async fn xpath_select(page: &Page, expression: &str) -> Result<SelectorResul
         expr_escaped
     );
 
-    let val = page.evaluate(js).await.map_err(|e| Error::Browser(e.to_string()))?;
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Browser(e.to_string()))?;
     let elements: Vec<ElementData> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))?;
     let count = elements.len();
@@ -151,7 +156,10 @@ pub async fn find_by_text(page: &Page, text: &str, tag: Option<&str>) -> Result<
         tag_filter, text_escaped
     );
 
-    let val = page.evaluate(js).await.map_err(|e| Error::Browser(e.to_string()))?;
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Browser(e.to_string()))?;
     let elements: Vec<ElementData> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))?;
     let count = elements.len();
@@ -195,7 +203,10 @@ pub async fn find_by_regex(
         pattern_escaped, tag_filter
     );
 
-    let val = page.evaluate(js).await.map_err(|e| Error::Browser(e.to_string()))?;
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Browser(e.to_string()))?;
     let elements: Vec<ElementData> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))?;
     let count = elements.len();
@@ -250,10 +261,11 @@ pub async fn auto_selector(page: &Page, target_selector: &str) -> Result<String>
         target_selector.replace('\'', "\\'")
     );
 
-    let val = page.evaluate(js).await.map_err(|e| Error::Browser(e.to_string()))?;
-    let s = val
-        .into_value()
-        .unwrap_or(serde_json::json!(""));
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Browser(e.to_string()))?;
+    let s = val.into_value().unwrap_or(serde_json::json!(""));
     Ok(s.as_str().map(String::from).unwrap_or_default())
 }
 

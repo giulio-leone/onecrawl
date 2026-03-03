@@ -30,7 +30,10 @@ pub async fn get_parent(page: &Page, selector: &str) -> Result<Option<NavElement
     "#,
         selector.replace('\'', "\\'")
     );
-    let val = page.evaluate(js).await.map_err(|e| Error::Browser(e.to_string()))?;
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Browser(e.to_string()))?;
     let v = val.into_value().unwrap_or(serde_json::json!(null));
     if v.is_null() {
         return Ok(None);
@@ -62,7 +65,10 @@ pub async fn get_next_sibling(page: &Page, selector: &str) -> Result<Option<NavE
     "#,
         selector.replace('\'', "\\'")
     );
-    let val = page.evaluate(js).await.map_err(|e| Error::Browser(e.to_string()))?;
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Browser(e.to_string()))?;
     let v = val.into_value().unwrap_or(serde_json::json!(null));
     if v.is_null() {
         return Ok(None);
@@ -89,7 +95,10 @@ pub async fn get_prev_sibling(page: &Page, selector: &str) -> Result<Option<NavE
     "#,
         selector.replace('\'', "\\'")
     );
-    let val = page.evaluate(js).await.map_err(|e| Error::Browser(e.to_string()))?;
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Browser(e.to_string()))?;
     let v = val.into_value().unwrap_or(serde_json::json!(null));
     if v.is_null() {
         return Ok(None);
@@ -152,18 +161,17 @@ pub async fn find_similar(page: &Page, selector: &str) -> Result<Vec<NavElement>
         selector.replace('\'', "\\'")
     );
 
-    let val = page.evaluate(js).await.map_err(|e| Error::Browser(e.to_string()))?;
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Browser(e.to_string()))?;
     let elements: Vec<NavElement> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))?;
     Ok(elements)
 }
 
 /// Get elements above the target in the DOM flow.
-pub async fn above_elements(
-    page: &Page,
-    selector: &str,
-    limit: usize,
-) -> Result<Vec<NavElement>> {
+pub async fn above_elements(page: &Page, selector: &str, limit: usize) -> Result<Vec<NavElement>> {
     let js = format!(
         r#"
         (() => {{
@@ -192,18 +200,17 @@ pub async fn above_elements(
         limit
     );
 
-    let val = page.evaluate(js).await.map_err(|e| Error::Browser(e.to_string()))?;
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Browser(e.to_string()))?;
     let elements: Vec<NavElement> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))?;
     Ok(elements)
 }
 
 /// Get elements below the target in the DOM flow.
-pub async fn below_elements(
-    page: &Page,
-    selector: &str,
-    limit: usize,
-) -> Result<Vec<NavElement>> {
+pub async fn below_elements(page: &Page, selector: &str, limit: usize) -> Result<Vec<NavElement>> {
     let js = format!(
         r#"
         (() => {{
@@ -232,7 +239,10 @@ pub async fn below_elements(
         limit
     );
 
-    let val = page.evaluate(js).await.map_err(|e| Error::Browser(e.to_string()))?;
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Browser(e.to_string()))?;
     let elements: Vec<NavElement> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))?;
     Ok(elements)
@@ -257,7 +267,10 @@ async fn nav_query(page: &Page, selector: &str, collection_expr: &str) -> Result
         collection_expr
     );
 
-    let val = page.evaluate(js).await.map_err(|e| Error::Browser(e.to_string()))?;
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Browser(e.to_string()))?;
     let elements: Vec<NavElement> =
         serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))?;
     Ok(elements)

@@ -374,6 +374,13 @@ enum Commands {
         action: ProxyAction,
     },
 
+    // ── Proxy Health ────────────────────────────────────────────────
+    /// Proxy health checking and scoring
+    ProxyHealth {
+        #[command(subcommand)]
+        action: ProxyHealthAction,
+    },
+
     // ── Request Interception ────────────────────────────────────────
     /// Request interception and mocking
     Intercept {
@@ -583,6 +590,27 @@ enum Commands {
         #[command(subcommand)]
         action: StructuredAction,
     },
+
+    // ── Captcha ─────────────────────────────────────────────────────
+    /// CAPTCHA detection and solution injection
+    Captcha {
+        #[command(subcommand)]
+        action: CaptchaAction,
+    },
+
+    // ── Task Scheduler ──────────────────────────────────────────
+    /// Task scheduler for browser automation
+    Schedule {
+        #[command(subcommand)]
+        action: ScheduleAction,
+    },
+
+    // ── Session Pool ────────────────────────────────────────────
+    /// Session pool for parallel browser sessions
+    Pool {
+        #[command(subcommand)]
+        action: PoolAction,
+    },
 }
 
 #[derive(Subcommand)]
@@ -788,6 +816,108 @@ enum StructuredAction {
     Validate {
         /// JSON string of StructuredDataResult
         data_json: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum CaptchaAction {
+    /// Detect CAPTCHA presence on the current page
+    Detect,
+    /// Wait for a CAPTCHA to appear (with timeout)
+    Wait {
+        /// Timeout in ms
+        #[arg(short, long, default_value = "30000")]
+        timeout: u64,
+    },
+    /// Take a screenshot of the detected CAPTCHA element
+    Screenshot,
+    /// Inject a CAPTCHA solution token into the page
+    Inject {
+        /// Solution token
+        solution: String,
+    },
+    /// List all detectable CAPTCHA types
+    Types,
+}
+
+#[derive(Subcommand)]
+enum ScheduleAction {
+    /// Add a new scheduled task
+    Add {
+        /// Task name
+        name: String,
+        /// Task type (navigate, extract, screenshot, crawl, custom)
+        #[arg(short = 't', long)]
+        task_type: String,
+        /// JSON config for the task
+        #[arg(short, long, default_value = "{}")]
+        config: String,
+        /// Interval in ms (0 = one-shot)
+        #[arg(short, long, default_value = "0")]
+        interval: u64,
+        /// Initial delay in ms
+        #[arg(short, long, default_value = "0")]
+        delay: u64,
+        /// Maximum number of runs
+        #[arg(short, long)]
+        max_runs: Option<usize>,
+    },
+    /// Remove a task by ID
+    Remove {
+        /// Task ID
+        id: String,
+    },
+    /// Pause a task
+    Pause {
+        /// Task ID
+        id: String,
+    },
+    /// Resume a paused task
+    Resume {
+        /// Task ID
+        id: String,
+    },
+    /// List all tasks
+    List,
+    /// Show scheduler statistics
+    Stats,
+    /// Save scheduler to file
+    Save {
+        /// Output path
+        path: String,
+    },
+    /// Load scheduler from file
+    Load {
+        /// Input path
+        path: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum PoolAction {
+    /// Add a session to the pool
+    Add {
+        /// Session name
+        name: String,
+        /// Tags
+        #[arg(short, long)]
+        tags: Vec<String>,
+    },
+    /// Get next available session
+    Next,
+    /// Show pool statistics
+    Stats,
+    /// Clean up idle sessions
+    Cleanup,
+    /// Save pool to file
+    Save {
+        /// Output path
+        path: String,
+    },
+    /// Load pool from file
+    Load {
+        /// Input path
+        path: String,
     },
 }
 
@@ -1349,6 +1479,38 @@ enum ProxyAction {
 }
 
 #[derive(Subcommand)]
+enum ProxyHealthAction {
+    /// Check a single proxy URL
+    Check {
+        /// Proxy URL (e.g. "http://proxy:8080")
+        proxy: String,
+        /// Custom test URL
+        #[arg(long)]
+        test_url: Option<String>,
+        /// Timeout in ms
+        #[arg(long, default_value = "10000")]
+        timeout: u64,
+    },
+    /// Check multiple proxies from a JSON array
+    CheckAll {
+        /// JSON array of proxy URLs
+        proxies_json: String,
+    },
+    /// Rank proxy health results by score (descending)
+    Rank {
+        /// JSON array of ProxyHealthResult
+        results_json: String,
+    },
+    /// Filter proxy results by minimum score
+    Filter {
+        /// JSON array of ProxyHealthResult
+        results_json: String,
+        /// Minimum score threshold (0-100)
+        min_score: u32,
+    },
+}
+
+#[derive(Subcommand)]
 enum InterceptCommandAction {
     /// Set interception rules (JSON array)
     Set {
@@ -1839,9 +2001,7 @@ async fn main() {
             NetworkLogAction::Drain => commands::browser::network_log_drain().await,
             NetworkLogAction::Summary => commands::browser::network_log_summary().await,
             NetworkLogAction::Stop => commands::browser::network_log_stop().await,
-            NetworkLogAction::Export { path } => {
-                commands::browser::network_log_export(&path).await
-            }
+            NetworkLogAction::Export { path } => commands::browser::network_log_export(&path).await,
         },
 
         // ── Page Watcher ────────────────────────────────────────────
@@ -1908,9 +2068,7 @@ async fn main() {
 
         // ── Anti-Bot ────────────────────────────────────────────────
         Commands::Antibot { action } => match action {
-            AntibotAction::Inject { level } => {
-                commands::browser::antibot_inject(&level).await
-            }
+            AntibotAction::Inject { level } => commands::browser::antibot_inject(&level).await,
             AntibotAction::Test => commands::browser::antibot_test().await,
             AntibotAction::Profiles => commands::browser::antibot_profiles().await,
         },
@@ -1932,9 +2090,7 @@ async fn main() {
             AdaptiveAction::Save { fingerprints, path } => {
                 commands::browser::adaptive_save(&fingerprints, &path).await
             }
-            AdaptiveAction::Load { path } => {
-                commands::browser::adaptive_load(&path).await
-            }
+            AdaptiveAction::Load { path } => commands::browser::adaptive_load(&path).await,
         },
 
         // ── Wait ────────────────────────────────────────────────────
@@ -1954,6 +2110,27 @@ async fn main() {
             ProxyAction::CreatePool { json } => commands::browser::proxy_create_pool(&json).await,
             ProxyAction::ChromeArgs { json } => commands::browser::proxy_chrome_args(&json).await,
             ProxyAction::Next { json } => commands::browser::proxy_next(&json).await,
+        },
+
+        // ── Proxy Health ────────────────────────────────────────────
+        Commands::ProxyHealth { action } => match action {
+            ProxyHealthAction::Check {
+                proxy,
+                test_url,
+                timeout,
+            } => commands::browser::proxy_health_check(&proxy, test_url.as_deref(), timeout).await,
+            ProxyHealthAction::CheckAll { proxies_json } => {
+                commands::browser::proxy_health_check_all(&proxies_json).await
+            }
+            ProxyHealthAction::Rank { results_json } => {
+                commands::browser::proxy_health_rank(&results_json);
+            }
+            ProxyHealthAction::Filter {
+                results_json,
+                min_score,
+            } => {
+                commands::browser::proxy_health_filter(&results_json, min_score);
+            }
         },
 
         // ── Request Interception ────────────────────────────────────
@@ -2142,19 +2319,13 @@ async fn main() {
 
         // ── Robots.txt ─────────────────────────────────────────────
         Commands::Robots { action } => match action {
-            RobotsAction::Parse { source } => {
-                commands::browser::robots_parse(&source).await
-            }
+            RobotsAction::Parse { source } => commands::browser::robots_parse(&source).await,
             RobotsAction::Check {
                 url,
                 path,
                 user_agent,
-            } => {
-                commands::browser::robots_check(&url, &path, &user_agent).await
-            }
-            RobotsAction::Sitemaps { url } => {
-                commands::browser::robots_sitemaps(&url).await
-            }
+            } => commands::browser::robots_check(&url, &path, &user_agent).await,
+            RobotsAction::Sitemaps { url } => commands::browser::robots_sitemaps(&url).await,
         },
 
         // ── Link Graph ─────────────────────────────────────────────
@@ -2162,18 +2333,12 @@ async fn main() {
             GraphAction::Extract { base_url } => {
                 commands::browser::graph_extract(base_url.as_deref()).await
             }
-            GraphAction::Build { edges_json } => {
-                commands::browser::graph_build(&edges_json)
-            }
-            GraphAction::Analyze { graph_json } => {
-                commands::browser::graph_analyze(&graph_json)
-            }
+            GraphAction::Build { edges_json } => commands::browser::graph_build(&edges_json),
+            GraphAction::Analyze { graph_json } => commands::browser::graph_analyze(&graph_json),
             GraphAction::Export {
                 graph_json,
                 output_path,
-            } => {
-                commands::browser::graph_export(&graph_json, &output_path)
-            }
+            } => commands::browser::graph_export(&graph_json, &output_path),
         },
 
         // ── Interactive Shell ──────────────────────────────────────
@@ -2181,9 +2346,7 @@ async fn main() {
 
         // ── Domain Blocker ─────────────────────────────────────────
         Commands::Domain { action } => match action {
-            DomainAction::Block { domains } => {
-                commands::browser::domain_block(&domains).await
-            }
+            DomainAction::Block { domains } => commands::browser::domain_block(&domains).await,
             DomainAction::BlockCategory { category } => {
                 commands::browser::domain_block_category(&category).await
             }
@@ -2304,12 +2467,20 @@ async fn main() {
                 output,
                 format,
             } => {
-                commands::browser::pipeline_run(&pipeline_json, &data_json, output.as_deref(), &format);
+                commands::browser::pipeline_run(
+                    &pipeline_json,
+                    &data_json,
+                    output.as_deref(),
+                    &format,
+                );
             }
             PipelineAction::Validate { pipeline_json } => {
                 commands::browser::pipeline_validate(&pipeline_json);
             }
-            PipelineAction::Save { pipeline_json, path } => {
+            PipelineAction::Save {
+                pipeline_json,
+                path,
+            } => {
                 commands::browser::pipeline_save_file(&pipeline_json, &path);
             }
             PipelineAction::Load { path } => {
@@ -2336,6 +2507,83 @@ async fn main() {
             }
             StructuredAction::Validate { data_json } => {
                 commands::browser::structured_validate(&data_json);
+            }
+        },
+
+        // ── Captcha ─────────────────────────────────────────────────
+        Commands::Captcha { action } => match action {
+            CaptchaAction::Detect => {
+                commands::browser::captcha_detect().await;
+            }
+            CaptchaAction::Wait { timeout } => {
+                commands::browser::captcha_wait(timeout).await;
+            }
+            CaptchaAction::Screenshot => {
+                commands::browser::captcha_screenshot().await;
+            }
+            CaptchaAction::Inject { solution } => {
+                commands::browser::captcha_inject(&solution).await;
+            }
+            CaptchaAction::Types => {
+                commands::browser::captcha_types();
+            }
+        },
+
+        Commands::Schedule { action } => match action {
+            ScheduleAction::Add {
+                name,
+                task_type,
+                config,
+                interval,
+                delay,
+                max_runs,
+            } => {
+                commands::browser::schedule_add(
+                    &name, &task_type, &config, interval, delay, max_runs,
+                );
+            }
+            ScheduleAction::Remove { id } => {
+                commands::browser::schedule_remove(&id);
+            }
+            ScheduleAction::Pause { id } => {
+                commands::browser::schedule_pause(&id);
+            }
+            ScheduleAction::Resume { id } => {
+                commands::browser::schedule_resume(&id);
+            }
+            ScheduleAction::List => {
+                commands::browser::schedule_list();
+            }
+            ScheduleAction::Stats => {
+                commands::browser::schedule_stats();
+            }
+            ScheduleAction::Save { path } => {
+                commands::browser::schedule_save(&path);
+            }
+            ScheduleAction::Load { path } => {
+                commands::browser::schedule_load(&path);
+            }
+        },
+
+        Commands::Pool { action } => match action {
+            PoolAction::Add { name, tags } => {
+                let tags = if tags.is_empty() { None } else { Some(tags) };
+                commands::browser::pool_add(&name, tags);
+            }
+            PoolAction::Next => {
+                commands::browser::pool_next();
+            }
+            PoolAction::Stats => {
+                commands::browser::pool_stats();
+            }
+            PoolAction::Cleanup => {
+                commands::browser::pool_cleanup();
+            }
+            PoolAction::Save { path } => {
+                commands::browser::pool_save(&path);
+            }
+            PoolAction::Load { path } => {
+                commands::browser::pool_load(&path);
             }
         },
     }

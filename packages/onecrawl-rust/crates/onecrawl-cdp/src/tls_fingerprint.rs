@@ -185,7 +185,8 @@ return ['userAgent','platform','vendor','appVersion','oscpu','languages','hardwa
         app_version = serde_json::to_string(&fp.app_version).unwrap_or_default(),
         oscpu = serde_json::to_string(&fp.oscpu).unwrap_or_default(),
         languages = langs_json,
-        language = serde_json::to_string(fp.languages.first().map_or("en-US", |s| s.as_str())).unwrap_or_default(),
+        language = serde_json::to_string(fp.languages.first().map_or("en-US", |s| s.as_str()))
+            .unwrap_or_default(),
         hw = fp.hardware_concurrency,
         dm = fp.device_memory,
         mtp = fp.max_touch_points,
@@ -202,10 +203,9 @@ return ['userAgent','platform','vendor','appVersion','oscpu','languages','hardwa
         .await
         .map_err(|e| Error::Browser(format!("apply_fingerprint failed: {e}")))?;
 
-    let overridden: Vec<String> = serde_json::from_value(
-        val.into_value().unwrap_or(serde_json::json!([])),
-    )
-    .unwrap_or_default();
+    let overridden: Vec<String> =
+        serde_json::from_value(val.into_value().unwrap_or(serde_json::json!([])))
+            .unwrap_or_default();
 
     // Also set the CDP user-agent override so network requests match
     let ua_params =
@@ -288,10 +288,9 @@ return JSON.stringify({
         .await
         .map_err(|e| Error::Browser(format!("detect_fingerprint failed: {e}")))?;
 
-    let json_str: String = serde_json::from_value(
-        val.into_value().unwrap_or(serde_json::json!("")),
-    )
-    .unwrap_or_default();
+    let json_str: String =
+        serde_json::from_value(val.into_value().unwrap_or(serde_json::json!("")))
+            .unwrap_or_default();
 
     let mut fp: BrowserFingerprint = serde_json::from_str(&json_str)
         .map_err(|e| Error::Browser(format!("parse fingerprint: {e}")))?;
@@ -303,4 +302,61 @@ return JSON.stringify({
 pub fn get_profile(name: &str) -> Option<BrowserFingerprint> {
     let lower = name.to_lowercase();
     browser_profiles().into_iter().find(|p| p.name == lower)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_browser_profiles_count() {
+        let profiles = browser_profiles();
+        assert!(profiles.len() >= 6);
+    }
+
+    #[test]
+    fn test_browser_profiles_have_valid_data() {
+        for p in browser_profiles() {
+            assert!(!p.name.is_empty());
+            assert!(!p.user_agent.is_empty());
+            assert!(!p.platform.is_empty());
+            assert!(!p.languages.is_empty());
+            assert!(p.hardware_concurrency > 0);
+            assert!(p.device_memory > 0.0);
+            assert!(p.screen_width > 0);
+            assert!(p.screen_height > 0);
+            assert!(p.color_depth > 0);
+            assert!(p.pixel_ratio > 0.0);
+        }
+    }
+
+    #[test]
+    fn test_random_fingerprint() {
+        let fp = random_fingerprint();
+        assert_eq!(fp.name, "random");
+        assert!(!fp.user_agent.is_empty());
+        assert!(!fp.platform.is_empty());
+        assert!(fp.hardware_concurrency > 0);
+        assert!(fp.screen_width > 0);
+    }
+
+    #[test]
+    fn test_get_profile_by_name() {
+        assert!(get_profile("chrome-win").is_some());
+        assert!(get_profile("chrome-mac").is_some());
+        assert!(get_profile("firefox-win").is_some());
+        assert!(get_profile("safari-mac").is_some());
+        assert!(get_profile("edge-win").is_some());
+    }
+
+    #[test]
+    fn test_get_profile_case_insensitive() {
+        assert!(get_profile("Chrome-Win").is_some());
+        assert!(get_profile("CHROME-MAC").is_some());
+    }
+
+    #[test]
+    fn test_get_profile_unknown() {
+        assert!(get_profile("nonexistent-browser").is_none());
+    }
 }

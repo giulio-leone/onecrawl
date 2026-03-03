@@ -37,9 +37,9 @@ jobs:
       - name: Check
         run: cargo check --workspace
       - name: Clippy
-        run: cargo clippy --workspace -- -D warnings || true
+        run: cargo clippy --workspace -- -D warnings
       - name: Format check
-        run: cargo fmt --all -- --check || true
+        run: cargo fmt --all -- --check
 
   test:
     name: Tests

@@ -196,7 +196,10 @@ pub async fn relocate_element(
 }
 
 /// Save element fingerprints to file for persistence across sessions.
-pub fn save_fingerprints(fingerprints: &[ElementFingerprint], path: &std::path::Path) -> Result<()> {
+pub fn save_fingerprints(
+    fingerprints: &[ElementFingerprint],
+    path: &std::path::Path,
+) -> Result<()> {
     let json = serde_json::to_string_pretty(fingerprints)?;
     std::fs::write(path, json)?;
     Ok(())

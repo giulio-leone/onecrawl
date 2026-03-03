@@ -129,8 +129,7 @@ pub fn available_categories() -> Vec<(String, usize)> {
 ///
 /// Returns the total number of domains currently on the blocklist.
 pub async fn block_domains(page: &Page, domains: &[String]) -> Result<usize> {
-    let domains_json =
-        serde_json::to_string(domains).map_err(|e| Error::Browser(e.to_string()))?;
+    let domains_json = serde_json::to_string(domains).map_err(|e| Error::Browser(e.to_string()))?;
 
     let js = format!(
         r#"
@@ -201,9 +200,7 @@ pub async fn block_domains(page: &Page, domains: &[String]) -> Result<usize> {
 pub async fn block_category(page: &Page, category: &str) -> Result<usize> {
     let domains = get_blocklist(category);
     if domains.is_empty() {
-        return Err(Error::InvalidInput(format!(
-            "Unknown category: {category}"
-        )));
+        return Err(Error::InvalidInput(format!("Unknown category: {category}")));
     }
     block_domains(page, &domains).await
 }

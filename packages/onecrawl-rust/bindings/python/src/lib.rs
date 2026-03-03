@@ -218,6 +218,8 @@ struct Browser {
     ws_recorder: Arc<std::sync::Mutex<Option<onecrawl_cdp::WsRecorder>>>,
     rate_limiter: Arc<std::sync::Mutex<onecrawl_cdp::RateLimitState>>,
     retry_queue: Arc<std::sync::Mutex<onecrawl_cdp::RetryQueue>>,
+    scheduler: Arc<std::sync::Mutex<onecrawl_cdp::Scheduler>>,
+    session_pool: Arc<std::sync::Mutex<onecrawl_cdp::SessionPool>>,
 }
 
 fn py_err(e: impl std::fmt::Display) -> PyErr {
@@ -263,12 +265,16 @@ impl Browser {
             event_stream: Arc::new(std::sync::Mutex::new(None)),
             har_recorder: Arc::new(std::sync::Mutex::new(None)),
             ws_recorder: Arc::new(std::sync::Mutex::new(None)),
-            rate_limiter: Arc::new(std::sync::Mutex::new(
-                onecrawl_cdp::RateLimitState::new(onecrawl_cdp::RateLimitConfig::default()),
-            )),
-            retry_queue: Arc::new(std::sync::Mutex::new(
-                onecrawl_cdp::RetryQueue::new(onecrawl_cdp::RetryConfig::default()),
-            )),
+            rate_limiter: Arc::new(std::sync::Mutex::new(onecrawl_cdp::RateLimitState::new(
+                onecrawl_cdp::RateLimitConfig::default(),
+            ))),
+            retry_queue: Arc::new(std::sync::Mutex::new(onecrawl_cdp::RetryQueue::new(
+                onecrawl_cdp::RetryConfig::default(),
+            ))),
+            scheduler: Arc::new(std::sync::Mutex::new(onecrawl_cdp::Scheduler::new())),
+            session_pool: Arc::new(std::sync::Mutex::new(onecrawl_cdp::SessionPool::new(
+                onecrawl_cdp::PoolConfig::default(),
+            ))),
         })
     }
 
@@ -289,12 +295,16 @@ impl Browser {
             event_stream: Arc::new(std::sync::Mutex::new(None)),
             har_recorder: Arc::new(std::sync::Mutex::new(None)),
             ws_recorder: Arc::new(std::sync::Mutex::new(None)),
-            rate_limiter: Arc::new(std::sync::Mutex::new(
-                onecrawl_cdp::RateLimitState::new(onecrawl_cdp::RateLimitConfig::default()),
-            )),
-            retry_queue: Arc::new(std::sync::Mutex::new(
-                onecrawl_cdp::RetryQueue::new(onecrawl_cdp::RetryConfig::default()),
-            )),
+            rate_limiter: Arc::new(std::sync::Mutex::new(onecrawl_cdp::RateLimitState::new(
+                onecrawl_cdp::RateLimitConfig::default(),
+            ))),
+            retry_queue: Arc::new(std::sync::Mutex::new(onecrawl_cdp::RetryQueue::new(
+                onecrawl_cdp::RetryConfig::default(),
+            ))),
+            scheduler: Arc::new(std::sync::Mutex::new(onecrawl_cdp::Scheduler::new())),
+            session_pool: Arc::new(std::sync::Mutex::new(onecrawl_cdp::SessionPool::new(
+                onecrawl_cdp::PoolConfig::default(),
+            ))),
         })
     }
 
@@ -1840,7 +1850,10 @@ impl Browser {
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
         self.rt
-            .block_on(onecrawl_cdp::selectors::auto_selector(page, target_selector))
+            .block_on(onecrawl_cdp::selectors::auto_selector(
+                page,
+                target_selector,
+            ))
             .map_err(py_err)
     }
 
@@ -2104,15 +2117,13 @@ impl Browser {
 
     /// Save crawl state to a JSON file.
     fn save_crawl_state(&self, state_json: &str, path: &str) -> PyResult<()> {
-        let state: onecrawl_cdp::CrawlState =
-            serde_json::from_str(state_json).map_err(py_err)?;
+        let state: onecrawl_cdp::CrawlState = serde_json::from_str(state_json).map_err(py_err)?;
         onecrawl_cdp::spider::save_state(&state, std::path::Path::new(path)).map_err(py_err)
     }
 
     /// Load crawl state from a JSON file.
     fn load_crawl_state(&self, path: &str) -> PyResult<String> {
-        let state =
-            onecrawl_cdp::spider::load_state(std::path::Path::new(path)).map_err(py_err)?;
+        let state = onecrawl_cdp::spider::load_state(std::path::Path::new(path)).map_err(py_err)?;
         serde_json::to_string(&state).map_err(py_err)
     }
 
@@ -2127,7 +2138,9 @@ impl Browser {
             serde_json::from_str(results_json).map_err(py_err)?;
         let p = std::path::Path::new(path);
         match format {
-            Some("jsonl") => onecrawl_cdp::spider::export_results_jsonl(&results, p).map_err(py_err),
+            Some("jsonl") => {
+                onecrawl_cdp::spider::export_results_jsonl(&results, p).map_err(py_err)
+            }
             _ => onecrawl_cdp::spider::export_results(&results, p).map_err(py_err),
         }
     }
@@ -2141,32 +2154,20 @@ impl Browser {
     }
 
     /// Check if a path is allowed for a user-agent. Accepts JSON RobotsTxt.
-    fn robots_is_allowed(
-        &self,
-        robots_json: &str,
-        user_agent: &str,
-        path: &str,
-    ) -> PyResult<bool> {
-        let robots: onecrawl_cdp::RobotsTxt =
-            serde_json::from_str(robots_json).map_err(py_err)?;
+    fn robots_is_allowed(&self, robots_json: &str, user_agent: &str, path: &str) -> PyResult<bool> {
+        let robots: onecrawl_cdp::RobotsTxt = serde_json::from_str(robots_json).map_err(py_err)?;
         Ok(onecrawl_cdp::robots::is_allowed(&robots, user_agent, path))
     }
 
     /// Get crawl delay for a user-agent. Accepts JSON RobotsTxt.
-    fn robots_crawl_delay(
-        &self,
-        robots_json: &str,
-        user_agent: &str,
-    ) -> PyResult<Option<f64>> {
-        let robots: onecrawl_cdp::RobotsTxt =
-            serde_json::from_str(robots_json).map_err(py_err)?;
+    fn robots_crawl_delay(&self, robots_json: &str, user_agent: &str) -> PyResult<Option<f64>> {
+        let robots: onecrawl_cdp::RobotsTxt = serde_json::from_str(robots_json).map_err(py_err)?;
         Ok(onecrawl_cdp::robots::get_crawl_delay(&robots, user_agent))
     }
 
     /// Get sitemaps from parsed robots.txt. Accepts JSON RobotsTxt, returns JSON array.
     fn robots_sitemaps(&self, robots_json: &str) -> PyResult<String> {
-        let robots: onecrawl_cdp::RobotsTxt =
-            serde_json::from_str(robots_json).map_err(py_err)?;
+        let robots: onecrawl_cdp::RobotsTxt = serde_json::from_str(robots_json).map_err(py_err)?;
         let sitemaps = onecrawl_cdp::robots::get_sitemaps(&robots);
         serde_json::to_string(&sitemaps).map_err(py_err)
     }
@@ -2205,32 +2206,28 @@ impl Browser {
 
     /// Analyze a link graph. Accepts JSON LinkGraph, returns JSON LinkStats.
     fn graph_analyze(&self, graph_json: &str) -> PyResult<String> {
-        let graph: onecrawl_cdp::LinkGraph =
-            serde_json::from_str(graph_json).map_err(py_err)?;
+        let graph: onecrawl_cdp::LinkGraph = serde_json::from_str(graph_json).map_err(py_err)?;
         let stats = onecrawl_cdp::link_graph::analyze_graph(&graph);
         serde_json::to_string(&stats).map_err(py_err)
     }
 
     /// Find orphan pages (no inbound links). Accepts JSON LinkGraph, returns JSON array.
     fn graph_find_orphans(&self, graph_json: &str) -> PyResult<String> {
-        let graph: onecrawl_cdp::LinkGraph =
-            serde_json::from_str(graph_json).map_err(py_err)?;
+        let graph: onecrawl_cdp::LinkGraph = serde_json::from_str(graph_json).map_err(py_err)?;
         let orphans = onecrawl_cdp::link_graph::find_orphans(&graph);
         serde_json::to_string(&orphans).map_err(py_err)
     }
 
     /// Find hub pages. Accepts JSON LinkGraph and min_outbound threshold.
     fn graph_find_hubs(&self, graph_json: &str, min_outbound: usize) -> PyResult<String> {
-        let graph: onecrawl_cdp::LinkGraph =
-            serde_json::from_str(graph_json).map_err(py_err)?;
+        let graph: onecrawl_cdp::LinkGraph = serde_json::from_str(graph_json).map_err(py_err)?;
         let hubs = onecrawl_cdp::link_graph::find_hubs(&graph, min_outbound);
         serde_json::to_string(&hubs).map_err(py_err)
     }
 
     /// Export link graph to a JSON file.
     fn graph_export(&self, graph_json: &str, path: &str) -> PyResult<()> {
-        let graph: onecrawl_cdp::LinkGraph =
-            serde_json::from_str(graph_json).map_err(py_err)?;
+        let graph: onecrawl_cdp::LinkGraph = serde_json::from_str(graph_json).map_err(py_err)?;
         onecrawl_cdp::link_graph::export_graph_json(&graph, std::path::Path::new(path))
             .map_err(py_err)
     }
@@ -2339,8 +2336,8 @@ impl Browser {
 
     /// Load fingerprints from a file path. Returns JSON array.
     fn load_fingerprints(&self, path: &str) -> PyResult<String> {
-        let fps =
-            onecrawl_cdp::adaptive::load_fingerprints(std::path::Path::new(path)).map_err(py_err)?;
+        let fps = onecrawl_cdp::adaptive::load_fingerprints(std::path::Path::new(path))
+            .map_err(py_err)?;
         serde_json::to_string(&fps).map_err(py_err)
     }
 
@@ -2424,8 +2421,7 @@ impl Browser {
 
     /// Load shell history from file. Returns JSON.
     fn shell_load_history(&self, path: &str) -> PyResult<String> {
-        let h =
-            onecrawl_cdp::shell::load_history(std::path::Path::new(path)).map_err(py_err)?;
+        let h = onecrawl_cdp::shell::load_history(std::path::Path::new(path)).map_err(py_err)?;
         serde_json::to_string(&h).map_err(py_err)
     }
 
@@ -2452,7 +2448,9 @@ impl Browser {
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
         let result = self
             .rt
-            .block_on(onecrawl_cdp::streaming::extract_with_pagination(page, &schema))
+            .block_on(onecrawl_cdp::streaming::extract_with_pagination(
+                page, &schema,
+            ))
             .map_err(py_err)?;
         serde_json::to_string(&result).map_err(py_err)
     }
@@ -2533,7 +2531,9 @@ impl Browser {
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
         let resp = self
             .rt
-            .block_on(onecrawl_cdp::http_client::post(page, url, body, ct, headers))
+            .block_on(onecrawl_cdp::http_client::post(
+                page, url, body, ct, headers,
+            ))
             .map_err(py_err)?;
         serde_json::to_string(&resp).map_err(py_err)
     }
@@ -2643,14 +2643,13 @@ impl Browser {
     fn save_snapshot(&self, snapshot_json: &str, path: &str) -> PyResult<()> {
         let snap: onecrawl_cdp::DomSnapshot = serde_json::from_str(snapshot_json)
             .map_err(|e| py_err(format!("invalid snapshot JSON: {e}")))?;
-        onecrawl_cdp::snapshot::save_snapshot(&snap, std::path::Path::new(path))
-            .map_err(py_err)
+        onecrawl_cdp::snapshot::save_snapshot(&snap, std::path::Path::new(path)).map_err(py_err)
     }
 
     /// Load a snapshot from a file. Returns JSON string.
     fn load_snapshot(&self, path: &str) -> PyResult<String> {
-        let snap = onecrawl_cdp::snapshot::load_snapshot(std::path::Path::new(path))
-            .map_err(py_err)?;
+        let snap =
+            onecrawl_cdp::snapshot::load_snapshot(std::path::Path::new(path)).map_err(py_err)?;
         serde_json::to_string(&snap).map_err(py_err)
     }
 
@@ -2688,8 +2687,7 @@ impl Browser {
                 if let Some(cfg) = presets.get(s) {
                     cfg.clone()
                 } else {
-                    serde_json::from_str(s)
-                        .map_err(|e| py_err(format!("invalid config: {e}")))?
+                    serde_json::from_str(s).map_err(|e| py_err(format!("invalid config: {e}")))?
                 }
             }
             None => onecrawl_cdp::RateLimitConfig::default(),
@@ -2740,7 +2738,9 @@ impl Browser {
     #[pyo3(signature = (url, operation, payload=None))]
     fn retry_enqueue(&self, url: &str, operation: &str, payload: Option<&str>) -> PyResult<String> {
         let mut q = self.retry_queue.lock().map_err(py_err)?;
-        Ok(onecrawl_cdp::retry_queue::enqueue(&mut q, url, operation, payload))
+        Ok(onecrawl_cdp::retry_queue::enqueue(
+            &mut q, url, operation, payload,
+        ))
     }
 
     /// Get the next item due for retry as JSON, or None.
@@ -2824,8 +2824,8 @@ impl Browser {
 
     /// Load a pipeline definition from a JSON file. Returns JSON string.
     fn pipeline_load(&self, path: &str) -> PyResult<String> {
-        let pipeline =
-            onecrawl_cdp::data_pipeline::load_pipeline(std::path::Path::new(path)).map_err(py_err)?;
+        let pipeline = onecrawl_cdp::data_pipeline::load_pipeline(std::path::Path::new(path))
+            .map_err(py_err)?;
         serde_json::to_string(&pipeline).map_err(py_err)
     }
 
@@ -2907,6 +2907,290 @@ impl Browser {
             .map_err(|e| py_err(format!("invalid data JSON: {e}")))?;
         let warnings = onecrawl_cdp::structured_data::validate_schema(&data);
         serde_json::to_string(&warnings).map_err(py_err)
+    }
+
+    // ── Proxy Health ────────────────────────────────────────────────
+
+    /// Check a single proxy health via browser fetch. Returns JSON.
+    fn proxy_health_check(&self, proxy_url: &str, config_json: Option<&str>) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let config: onecrawl_cdp::ProxyHealthConfig = match config_json {
+            Some(j) => {
+                serde_json::from_str(j).map_err(|e| py_err(format!("invalid config JSON: {e}")))?
+            }
+            None => onecrawl_cdp::ProxyHealthConfig::default(),
+        };
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::proxy_health::check_proxy(
+                page, proxy_url, &config,
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Check multiple proxies. Returns JSON array.
+    fn proxy_health_check_all(&self, proxies_json: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let proxies: Vec<String> = serde_json::from_str(proxies_json)
+            .map_err(|e| py_err(format!("invalid proxies JSON: {e}")))?;
+        let config = onecrawl_cdp::ProxyHealthConfig::default();
+        let results = self
+            .rt
+            .block_on(onecrawl_cdp::proxy_health::check_proxies(
+                page, &proxies, &config,
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&results).map_err(py_err)
+    }
+
+    /// Score a single proxy health result. Returns the score (0-100).
+    fn proxy_health_score(&self, result_json: &str) -> PyResult<u32> {
+        let result: onecrawl_cdp::ProxyHealthResult = serde_json::from_str(result_json)
+            .map_err(|e| py_err(format!("invalid result JSON: {e}")))?;
+        Ok(onecrawl_cdp::proxy_health::score_proxy(&result))
+    }
+
+    /// Filter proxy results by minimum score. Returns JSON array.
+    fn proxy_health_filter(&self, results_json: &str, min_score: u32) -> PyResult<String> {
+        let results: Vec<onecrawl_cdp::ProxyHealthResult> = serde_json::from_str(results_json)
+            .map_err(|e| py_err(format!("invalid results JSON: {e}")))?;
+        let filtered = onecrawl_cdp::proxy_health::filter_healthy(&results, min_score);
+        serde_json::to_string(&filtered).map_err(py_err)
+    }
+
+    /// Rank proxy results by score descending. Returns JSON array.
+    fn proxy_health_rank(&self, results_json: &str) -> PyResult<String> {
+        let results: Vec<onecrawl_cdp::ProxyHealthResult> = serde_json::from_str(results_json)
+            .map_err(|e| py_err(format!("invalid results JSON: {e}")))?;
+        let ranked = onecrawl_cdp::proxy_health::rank_proxies(&results);
+        serde_json::to_string(&ranked).map_err(py_err)
+    }
+
+    // ── Captcha ─────────────────────────────────────────────────────
+
+    /// Detect CAPTCHA presence on the current page. Returns JSON.
+    fn captcha_detect(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let detection = self
+            .rt
+            .block_on(onecrawl_cdp::captcha::detect_captcha(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&detection).map_err(py_err)
+    }
+
+    /// Wait for a CAPTCHA to appear. Returns JSON.
+    fn captcha_wait(&self, timeout_ms: Option<u64>) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let timeout = timeout_ms.unwrap_or(30000);
+        let detection = self
+            .rt
+            .block_on(onecrawl_cdp::captcha::wait_for_captcha(page, timeout))
+            .map_err(py_err)?;
+        serde_json::to_string(&detection).map_err(py_err)
+    }
+
+    /// Screenshot CAPTCHA element. Returns rect JSON or base64.
+    fn captcha_screenshot(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let detection = self
+            .rt
+            .block_on(onecrawl_cdp::captcha::detect_captcha(page))
+            .map_err(py_err)?;
+        if !detection.detected {
+            return Err(py_err("no captcha detected"));
+        }
+        self.rt
+            .block_on(onecrawl_cdp::captcha::screenshot_captcha(page, &detection))
+            .map_err(py_err)
+    }
+
+    /// Inject a CAPTCHA solution token. Returns True if successful.
+    fn captcha_inject(&self, solution: &str) -> PyResult<bool> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let detection = self
+            .rt
+            .block_on(onecrawl_cdp::captcha::detect_captcha(page))
+            .map_err(py_err)?;
+        if !detection.detected {
+            return Err(py_err("no captcha detected"));
+        }
+        self.rt
+            .block_on(onecrawl_cdp::captcha::inject_solution(
+                page, &detection, solution,
+            ))
+            .map_err(py_err)
+    }
+
+    /// List supported CAPTCHA types. Returns JSON array of [type, description].
+    fn captcha_types(&self) -> PyResult<String> {
+        let types = onecrawl_cdp::captcha::supported_types();
+        serde_json::to_string(&types).map_err(py_err)
+    }
+
+    // ──────────────── Task Scheduler ────────────────
+
+    /// Add a scheduled task. Returns the task ID.
+    fn scheduler_add_task(
+        &self,
+        name: &str,
+        task_type: &str,
+        config: &str,
+        schedule_json: &str,
+    ) -> PyResult<String> {
+        let schedule: onecrawl_cdp::TaskSchedule = serde_json::from_str(schedule_json)
+            .map_err(|e| py_err(format!("invalid schedule JSON: {e}")))?;
+        let mut sched = self.scheduler.lock().map_err(py_err)?;
+        Ok(onecrawl_cdp::scheduler::add_task(
+            &mut sched, name, task_type, config, schedule,
+        ))
+    }
+
+    /// Remove a scheduled task by ID.
+    fn scheduler_remove_task(&self, id: &str) -> PyResult<bool> {
+        let mut sched = self.scheduler.lock().map_err(py_err)?;
+        Ok(onecrawl_cdp::scheduler::remove_task(&mut sched, id))
+    }
+
+    /// Pause a scheduled task by ID.
+    fn scheduler_pause_task(&self, id: &str) -> PyResult<bool> {
+        let mut sched = self.scheduler.lock().map_err(py_err)?;
+        Ok(onecrawl_cdp::scheduler::pause_task(&mut sched, id))
+    }
+
+    /// Resume a paused task by ID.
+    fn scheduler_resume_task(&self, id: &str) -> PyResult<bool> {
+        let mut sched = self.scheduler.lock().map_err(py_err)?;
+        Ok(onecrawl_cdp::scheduler::resume_task(&mut sched, id))
+    }
+
+    /// Get tasks that are due to execute. Returns JSON array.
+    fn scheduler_get_due_tasks(&self) -> PyResult<String> {
+        let sched = self.scheduler.lock().map_err(py_err)?;
+        let due = onecrawl_cdp::scheduler::get_due_tasks(&sched);
+        serde_json::to_string(&due).map_err(py_err)
+    }
+
+    /// Record a task execution result. Input is JSON of TaskResult.
+    fn scheduler_record_result(&self, result_json: &str) -> PyResult<()> {
+        let result: onecrawl_cdp::TaskResult = serde_json::from_str(result_json)
+            .map_err(|e| py_err(format!("invalid result JSON: {e}")))?;
+        let mut sched = self.scheduler.lock().map_err(py_err)?;
+        onecrawl_cdp::scheduler::record_result(&mut sched, result);
+        Ok(())
+    }
+
+    /// Get scheduler statistics. Returns JSON map.
+    fn scheduler_get_stats(&self) -> PyResult<String> {
+        let sched = self.scheduler.lock().map_err(py_err)?;
+        let stats = onecrawl_cdp::scheduler::get_stats(&sched);
+        serde_json::to_string(&stats).map_err(py_err)
+    }
+
+    /// List all tasks. Returns JSON array.
+    fn scheduler_list_tasks(&self) -> PyResult<String> {
+        let sched = self.scheduler.lock().map_err(py_err)?;
+        serde_json::to_string(&sched.tasks).map_err(py_err)
+    }
+
+    /// Save scheduler state to a file.
+    fn scheduler_save(&self, path: &str) -> PyResult<()> {
+        let sched = self.scheduler.lock().map_err(py_err)?;
+        onecrawl_cdp::scheduler::save_scheduler(&sched, std::path::Path::new(path)).map_err(py_err)
+    }
+
+    /// Load scheduler state from a file.
+    fn scheduler_load(&self, path: &str) -> PyResult<()> {
+        let loaded =
+            onecrawl_cdp::scheduler::load_scheduler(std::path::Path::new(path)).map_err(py_err)?;
+        let mut sched = self.scheduler.lock().map_err(py_err)?;
+        *sched = loaded;
+        Ok(())
+    }
+
+    // ──────────────── Session Pool ────────────────
+
+    /// Add a session to the pool. Returns the session ID.
+    #[pyo3(signature = (name, tags=None))]
+    fn pool_add_session(&self, name: &str, tags: Option<Vec<String>>) -> PyResult<String> {
+        let mut pool = self.session_pool.lock().map_err(py_err)?;
+        Ok(onecrawl_cdp::session_pool::add_session(
+            &mut pool, name, tags,
+        ))
+    }
+
+    /// Get the next available session. Returns JSON or None.
+    fn pool_get_next(&self) -> PyResult<Option<String>> {
+        let mut pool = self.session_pool.lock().map_err(py_err)?;
+        match onecrawl_cdp::session_pool::get_next(&mut pool) {
+            Some(s) => {
+                let json = serde_json::to_string(s).map_err(py_err)?;
+                Ok(Some(json))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Mark a pool session as busy.
+    fn pool_mark_busy(&self, id: &str) -> PyResult<()> {
+        let mut pool = self.session_pool.lock().map_err(py_err)?;
+        onecrawl_cdp::session_pool::mark_busy(&mut pool, id);
+        Ok(())
+    }
+
+    /// Mark a pool session as idle.
+    fn pool_mark_idle(&self, id: &str) -> PyResult<()> {
+        let mut pool = self.session_pool.lock().map_err(py_err)?;
+        onecrawl_cdp::session_pool::mark_idle(&mut pool, id);
+        Ok(())
+    }
+
+    /// Mark a pool session as errored.
+    fn pool_mark_error(&self, id: &str, error: &str) -> PyResult<()> {
+        let mut pool = self.session_pool.lock().map_err(py_err)?;
+        onecrawl_cdp::session_pool::mark_error(&mut pool, id, error);
+        Ok(())
+    }
+
+    /// Close a pool session.
+    fn pool_close_session(&self, id: &str) -> PyResult<()> {
+        let mut pool = self.session_pool.lock().map_err(py_err)?;
+        onecrawl_cdp::session_pool::close_session(&mut pool, id);
+        Ok(())
+    }
+
+    /// Get pool statistics. Returns JSON.
+    fn pool_get_stats(&self) -> PyResult<String> {
+        let pool = self.session_pool.lock().map_err(py_err)?;
+        let stats = onecrawl_cdp::session_pool::get_stats(&pool);
+        serde_json::to_string(&stats).map_err(py_err)
+    }
+
+    /// Clean up idle sessions past timeout. Returns number closed.
+    fn pool_cleanup_idle(&self) -> PyResult<usize> {
+        let mut pool = self.session_pool.lock().map_err(py_err)?;
+        Ok(onecrawl_cdp::session_pool::cleanup_idle(&mut pool))
+    }
+
+    /// Save pool state to a file.
+    fn pool_save(&self, path: &str) -> PyResult<()> {
+        let pool = self.session_pool.lock().map_err(py_err)?;
+        onecrawl_cdp::session_pool::save_pool(&pool, std::path::Path::new(path)).map_err(py_err)
+    }
+
+    /// Load pool state from a file.
+    fn pool_load(&self, path: &str) -> PyResult<()> {
+        let loaded =
+            onecrawl_cdp::session_pool::load_pool(std::path::Path::new(path)).map_err(py_err)?;
+        let mut pool = self.session_pool.lock().map_err(py_err)?;
+        *pool = loaded;
+        Ok(())
     }
 }
 

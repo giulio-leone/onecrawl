@@ -107,7 +107,12 @@ pub fn calculate_delay(config: &RetryConfig, retry_count: usize) -> u64 {
 }
 
 /// Add an item to the queue. Returns the generated item id.
-pub fn enqueue(queue: &mut RetryQueue, url: &str, operation: &str, payload: Option<&str>) -> String {
+pub fn enqueue(
+    queue: &mut RetryQueue,
+    url: &str,
+    operation: &str,
+    payload: Option<&str>,
+) -> String {
     let id = gen_id();
     let now = now_ms();
     let item = RetryItem {
@@ -181,11 +186,7 @@ pub fn mark_failure(queue: &mut RetryQueue, id: &str, error: &str) {
 
 /// Get aggregate statistics for the queue.
 pub fn get_stats(queue: &RetryQueue) -> QueueStats {
-    let pending = queue
-        .items
-        .iter()
-        .filter(|i| i.status == "pending")
-        .count();
+    let pending = queue.items.iter().filter(|i| i.status == "pending").count();
     let retrying = queue
         .items
         .iter()
@@ -357,7 +358,12 @@ mod tests {
     #[test]
     fn test_save_and_load_queue() {
         let mut q = RetryQueue::new(RetryConfig::default());
-        enqueue(&mut q, "https://example.com", "navigate", Some("test-payload"));
+        enqueue(
+            &mut q,
+            "https://example.com",
+            "navigate",
+            Some("test-payload"),
+        );
 
         let dir = std::env::temp_dir();
         let path = dir.join("onecrawl_retry_queue_test.json");

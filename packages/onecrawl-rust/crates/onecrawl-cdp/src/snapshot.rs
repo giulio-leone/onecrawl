@@ -80,13 +80,11 @@ return JSON.stringify({
         .await
         .map_err(|e| Error::Browser(format!("take_snapshot failed: {e}")))?;
 
-    let json_str: String = serde_json::from_value(
-        val.into_value().unwrap_or(serde_json::json!("")),
-    )
-    .unwrap_or_default();
+    let json_str: String =
+        serde_json::from_value(val.into_value().unwrap_or(serde_json::json!("")))
+            .unwrap_or_default();
 
-    serde_json::from_str(&json_str)
-        .map_err(|e| Error::Browser(format!("parse snapshot: {e}")))
+    serde_json::from_str(&json_str).map_err(|e| Error::Browser(format!("parse snapshot: {e}")))
 }
 
 /// Compute Jaccard word similarity between two text strings.

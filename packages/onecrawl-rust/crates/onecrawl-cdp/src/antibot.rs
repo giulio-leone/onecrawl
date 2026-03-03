@@ -19,13 +19,17 @@ pub struct AntibotProfile {
 pub async fn inject_stealth_full(page: &Page) -> Result<Vec<String>> {
     let patches: Vec<(&str, &str)> = vec![
         // 1. WebDriver detection
-        ("webdriver", r#"
+        (
+            "webdriver",
+            r#"
             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
             delete navigator.__proto__.webdriver;
-        "#),
-
+        "#,
+        ),
         // 2. Chrome runtime
-        ("chrome_runtime", r#"
+        (
+            "chrome_runtime",
+            r#"
             window.chrome = window.chrome || {};
             window.chrome.runtime = window.chrome.runtime || {
                 connect: function() {},
@@ -52,10 +56,12 @@ pub async fn inject_stealth_full(page: &Page) -> Result<Vec<String>> {
             window.chrome.csi = function() {
                 return { onloadT: Date.now(), startE: Date.now(), pageT: 0 };
             };
-        "#),
-
+        "#,
+        ),
         // 3. Plugins (headless Chrome has 0 plugins)
-        ("plugins", r#"
+        (
+            "plugins",
+            r#"
             Object.defineProperty(navigator, 'plugins', {
                 get: () => {
                     const plugins = [
@@ -67,18 +73,22 @@ pub async fn inject_stealth_full(page: &Page) -> Result<Vec<String>> {
                     return plugins;
                 }
             });
-        "#),
-
+        "#,
+        ),
         // 4. Languages
-        ("languages", r#"
+        (
+            "languages",
+            r#"
             Object.defineProperty(navigator, 'languages', {
                 get: () => ['en-US', 'en'],
                 configurable: true
             });
-        "#),
-
+        "#,
+        ),
         // 5. Permissions
-        ("permissions", r#"
+        (
+            "permissions",
+            r#"
             const origQuery = navigator.permissions.query;
             navigator.permissions.query = (params) => {
                 if (params.name === 'notifications') {
@@ -86,10 +96,12 @@ pub async fn inject_stealth_full(page: &Page) -> Result<Vec<String>> {
                 }
                 return origQuery.call(navigator.permissions, params);
             };
-        "#),
-
+        "#,
+        ),
         // 6. WebGL vendor/renderer
-        ("webgl", r#"
+        (
+            "webgl",
+            r#"
             const getParameter = WebGLRenderingContext.prototype.getParameter;
             WebGLRenderingContext.prototype.getParameter = function(parameter) {
                 if (parameter === 37445) return 'Intel Inc.';
@@ -104,10 +116,12 @@ pub async fn inject_stealth_full(page: &Page) -> Result<Vec<String>> {
                     return getParam2.call(this, parameter);
                 };
             }
-        "#),
-
+        "#,
+        ),
         // 7. Canvas fingerprint randomization
-        ("canvas", r#"
+        (
+            "canvas",
+            r#"
             const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
             HTMLCanvasElement.prototype.toDataURL = function(type) {
                 if (type === 'image/png' || !type) {
@@ -122,10 +136,12 @@ pub async fn inject_stealth_full(page: &Page) -> Result<Vec<String>> {
                 }
                 return origToDataURL.apply(this, arguments);
             };
-        "#),
-
+        "#,
+        ),
         // 8. AudioContext fingerprint
-        ("audio", r#"
+        (
+            "audio",
+            r#"
             const origCreateAnalyser = AudioContext.prototype.createAnalyser;
             AudioContext.prototype.createAnalyser = function() {
                 const analyser = origCreateAnalyser.call(this);
@@ -138,10 +154,12 @@ pub async fn inject_stealth_full(page: &Page) -> Result<Vec<String>> {
                 };
                 return analyser;
             };
-        "#),
-
+        "#,
+        ),
         // 9. Iframe contentWindow
-        ("iframe_contentwindow", r#"
+        (
+            "iframe_contentwindow",
+            r#"
             Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
                 get: function() {
                     return new Proxy(this.contentWindow || window, {
@@ -152,31 +170,38 @@ pub async fn inject_stealth_full(page: &Page) -> Result<Vec<String>> {
                     });
                 }
             });
-        "#),
-
+        "#,
+        ),
         // 10. Screen dimensions (avoid headless defaults)
-        ("screen", r#"
+        (
+            "screen",
+            r#"
             Object.defineProperty(screen, 'width', { get: () => 1920 });
             Object.defineProperty(screen, 'height', { get: () => 1080 });
             Object.defineProperty(screen, 'availWidth', { get: () => 1920 });
             Object.defineProperty(screen, 'availHeight', { get: () => 1040 });
             Object.defineProperty(screen, 'colorDepth', { get: () => 24 });
             Object.defineProperty(screen, 'pixelDepth', { get: () => 24 });
-        "#),
-
+        "#,
+        ),
         // 11. Headless detection
-        ("headless_detect", r#"
+        (
+            "headless_detect",
+            r#"
             Object.defineProperty(document, 'hidden', { get: () => false });
             Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
             window.outerWidth = window.innerWidth;
             window.outerHeight = window.innerHeight + 85;
-        "#),
-
+        "#,
+        ),
         // 12. Console.debug leak
-        ("console_debug", r#"
+        (
+            "console_debug",
+            r#"
             const origDebug = console.debug;
             console.debug = function() {};
-        "#),
+        "#,
+        ),
     ];
 
     let mut applied = Vec::new();
@@ -266,11 +291,7 @@ pub async fn bot_detection_test(page: &Page) -> Result<serde_json::Value> {
     if result.get("visibility_state").and_then(|v| v.as_str()) == Some("visible") {
         score += 10;
     }
-    if result
-        .get("window_size_match")
-        .and_then(|v| v.as_bool())
-        == Some(true)
-    {
+    if result.get("window_size_match").and_then(|v| v.as_bool()) == Some(true) {
         score += 10;
     }
     if result

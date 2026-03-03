@@ -4,11 +4,12 @@
 
 pub mod accessibility;
 pub mod adaptive;
-pub mod antibot;
 pub mod advanced_emulation;
+pub mod antibot;
 pub mod benchmark;
 pub mod bridge;
 pub mod browser;
+pub mod captcha;
 pub mod console;
 pub mod cookie;
 pub mod cookie_jar;
@@ -37,22 +38,25 @@ pub mod network;
 pub mod network_log;
 pub mod page;
 pub mod page_watcher;
-pub mod spider;
-pub mod streaming;
 #[cfg(feature = "playwright")]
 pub mod playwright_backend;
 pub mod print;
 pub mod proxy;
+pub mod proxy_health;
 pub mod rate_limiter;
 pub mod request_queue;
 pub mod retry_queue;
 pub mod robots;
+pub mod scheduler;
 pub mod screenshot;
 pub mod screenshot_diff;
 pub mod selectors;
+pub mod session_pool;
 pub mod shell;
 pub mod snapshot;
+pub mod spider;
 pub mod stealth;
+pub mod streaming;
 pub mod structured_data;
 pub mod tabs;
 pub mod throttle;
@@ -91,33 +95,37 @@ pub use webauthn::{VirtualAuthenticator, VirtualCredential};
 pub use websocket::WsRecorder;
 pub use workers::ServiceWorkerInfo;
 
+pub use captcha::{CaptchaConfig, CaptchaDetection, CaptchaResult};
 pub use cookie_jar::{CookieJar, StoredCookie};
+pub use data_pipeline::{Pipeline, PipelineResult, PipelineStep};
 pub use dom_nav::NavElement;
+pub use domain_blocker::{BlockStats, BlockedDomain};
 pub use downloads::DownloadInfo;
 pub use extract::{ExtractFormat, ExtractResult, LinkInfo};
 pub use geofencing::GeoProfile;
-pub use request_queue::{QueueConfig, QueuedRequest, RequestResult};
-pub use screenshot_diff::DiffResult;
-pub use selectors::{ElementData, SelectorResult};
-pub use page_watcher::PageChange;
-pub use shell::{ShellCommand, ShellHistory};
-pub use domain_blocker::{BlockedDomain, BlockStats};
-pub use spider::{CrawlResult, CrawlState, CrawlSummary, SpiderConfig};
-pub use streaming::{
-    ExtractionRule, ExtractionSchema, PaginationConfig, ExtractedItem, ExtractionResult,
-};
 pub use http_client::{HttpRequest, HttpResponse};
 pub use link_graph::{LinkEdge, LinkGraph, LinkNode, LinkStats};
+pub use page_watcher::PageChange;
+pub use proxy_health::{ProxyHealthConfig, ProxyHealthResult};
+pub use rate_limiter::{RateLimitConfig, RateLimitState, RateLimitStats};
+pub use request_queue::{QueueConfig, QueuedRequest, RequestResult};
+pub use retry_queue::{QueueStats as RetryQueueStats, RetryConfig, RetryItem, RetryQueue};
 pub use robots::{RobotsRule, RobotsTxt};
+pub use scheduler::{ScheduledTask, Scheduler, TaskResult, TaskSchedule};
+pub use screenshot_diff::DiffResult;
+pub use selectors::{ElementData, SelectorResult};
+pub use session_pool::{PoolConfig, PoolStats, SessionInfo, SessionPool};
+pub use shell::{ShellCommand, ShellHistory};
 pub use snapshot::{DomSnapshot, SnapshotDiff};
+pub use spider::{CrawlResult, CrawlState, CrawlSummary, SpiderConfig};
+pub use streaming::{
+    ExtractedItem, ExtractionResult, ExtractionRule, ExtractionSchema, PaginationConfig,
+};
+pub use structured_data::{
+    JsonLdData, OpenGraphData, PageMetadata, StructuredDataResult, TwitterCardData,
+};
 pub use tabs::TabInfo;
 pub use tls_fingerprint::BrowserFingerprint;
-pub use rate_limiter::{RateLimitConfig, RateLimitState, RateLimitStats};
-pub use retry_queue::{RetryConfig, RetryItem, RetryQueue, QueueStats as RetryQueueStats};
-pub use data_pipeline::{Pipeline, PipelineStep, PipelineResult};
-pub use structured_data::{
-    JsonLdData, OpenGraphData, TwitterCardData, PageMetadata, StructuredDataResult,
-};
 
 // Re-export chromiumoxide::Page for downstream consumers
 pub use chromiumoxide::Page;

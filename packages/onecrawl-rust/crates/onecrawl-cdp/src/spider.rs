@@ -115,17 +115,15 @@ fn now_epoch_ms() -> f64 {
 /// Returns `true` when the URL should be skipped (asset, mailto, etc.).
 fn is_non_page_url(url: &str) -> bool {
     let lower = url.to_ascii_lowercase();
-    if lower.starts_with("mailto:")
-        || lower.starts_with("tel:")
-        || lower.starts_with("javascript:")
+    if lower.starts_with("mailto:") || lower.starts_with("tel:") || lower.starts_with("javascript:")
     {
         return true;
     }
     let path = lower.split('?').next().unwrap_or(&lower);
     let path = path.split('#').next().unwrap_or(path);
     let asset_exts = [
-        ".jpg", ".jpeg", ".png", ".gif", ".svg", ".ico", ".css", ".js", ".woff", ".woff2",
-        ".ttf", ".eot", ".mp4", ".mp3", ".pdf", ".zip",
+        ".jpg", ".jpeg", ".png", ".gif", ".svg", ".ico", ".css", ".js", ".woff", ".woff2", ".ttf",
+        ".eot", ".mp4", ".mp3", ".pdf", ".zip",
     ];
     asset_exts.iter().any(|ext| path.ends_with(ext))
 }
@@ -133,7 +131,9 @@ fn is_non_page_url(url: &str) -> bool {
 /// Check whether `url` matches any exclude substring pattern.
 fn matches_exclude(url: &str, patterns: &[String]) -> bool {
     let lower = url.to_ascii_lowercase();
-    patterns.iter().any(|p| lower.contains(&p.to_ascii_lowercase()))
+    patterns
+        .iter()
+        .any(|p| lower.contains(&p.to_ascii_lowercase()))
 }
 
 /// Check whether `url` matches at least one include pattern (empty = allow all).
@@ -142,7 +142,9 @@ fn matches_include(url: &str, patterns: &[String]) -> bool {
         return true;
     }
     let lower = url.to_ascii_lowercase();
-    patterns.iter().any(|p| lower.contains(&p.to_ascii_lowercase()))
+    patterns
+        .iter()
+        .any(|p| lower.contains(&p.to_ascii_lowercase()))
 }
 
 // ── public API ─────────────────────────────────────────────────
@@ -363,4 +365,125 @@ pub fn export_results_jsonl(results: &[CrawlResult], path: &std::path::Path) -> 
     let count = results.len();
     std::fs::write(path, content)?;
     Ok(count)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_spider_config_defaults() {
+        let cfg = SpiderConfig::default();
+        assert_eq!(cfg.max_depth, 3);
+        assert_eq!(cfg.max_pages, 100);
+        assert_eq!(cfg.concurrency, 3);
+        assert_eq!(cfg.delay_ms, 500);
+        assert!(cfg.follow_links);
+        assert!(cfg.same_domain_only);
+        assert!(cfg.start_urls.is_empty());
+        assert!(cfg.url_patterns.is_empty());
+        assert!(cfg.exclude_patterns.is_empty());
+        assert!(cfg.extract_selector.is_none());
+        assert_eq!(cfg.extract_format, "text");
+        assert_eq!(cfg.timeout_ms, 30000);
+        assert!(cfg.user_agent.is_none());
+    }
+
+    fn make_result(url: &str, status: &str, links: usize, duration: f64) -> CrawlResult {
+        CrawlResult {
+            url: url.to_string(),
+            status: status.to_string(),
+            title: format!("Title of {url}"),
+            depth: 0,
+            links_found: links,
+            content: None,
+            error: if status == "error" {
+                Some("err".into())
+            } else {
+                None
+            },
+            duration_ms: duration,
+            timestamp: 1000.0,
+        }
+    }
+
+    #[test]
+    fn test_summarize_empty() {
+        let summary = summarize(&[]);
+        assert_eq!(summary.total_pages, 0);
+        assert_eq!(summary.successful, 0);
+        assert_eq!(summary.pages_per_second, 0.0);
+    }
+
+    #[test]
+    fn test_summarize_mixed() {
+        let results = vec![
+            make_result("https://a.com/1", "success", 5, 100.0),
+            make_result("https://a.com/2", "success", 3, 200.0),
+            make_result("https://b.com/1", "error", 0, 50.0),
+            make_result("https://a.com/3", "timeout", 0, 30000.0),
+        ];
+        let summary = summarize(&results);
+        assert_eq!(summary.total_pages, 4);
+        assert_eq!(summary.successful, 2);
+        assert_eq!(summary.failed, 2);
+        assert_eq!(summary.total_links_found, 8);
+        assert!(summary.pages_per_second > 0.0);
+        assert_eq!(*summary.domain_stats.get("a.com").unwrap(), 3);
+        assert_eq!(*summary.domain_stats.get("b.com").unwrap(), 1);
+    }
+
+    #[test]
+    fn test_save_load_state_roundtrip() {
+        let state = CrawlState {
+            config: SpiderConfig::default(),
+            visited: vec!["https://example.com".into()],
+            pending: vec![("https://example.com/page2".into(), 1)],
+            results: vec![make_result("https://example.com", "success", 2, 150.0)],
+            status: "paused".into(),
+        };
+        let tmp = std::env::temp_dir().join("onecrawl_spider_state_test.json");
+        save_state(&state, &tmp).unwrap();
+        let loaded = load_state(&tmp).unwrap();
+        assert_eq!(loaded.visited, state.visited);
+        assert_eq!(loaded.pending, state.pending);
+        assert_eq!(loaded.status, "paused");
+        assert_eq!(loaded.results.len(), 1);
+        std::fs::remove_file(&tmp).ok();
+    }
+
+    #[test]
+    fn test_export_results_json() {
+        let results = vec![
+            make_result("https://a.com", "success", 3, 100.0),
+            make_result("https://b.com", "error", 0, 50.0),
+        ];
+        let tmp = std::env::temp_dir().join("onecrawl_spider_export_test.json");
+        let count = export_results(&results, &tmp).unwrap();
+        assert_eq!(count, 2);
+        let content = std::fs::read_to_string(&tmp).unwrap();
+        let parsed: Vec<CrawlResult> = serde_json::from_str(&content).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].url, "https://a.com");
+        std::fs::remove_file(&tmp).ok();
+    }
+
+    #[test]
+    fn test_export_results_jsonl() {
+        let results = vec![
+            make_result("https://a.com", "success", 1, 100.0),
+            make_result("https://b.com", "success", 2, 200.0),
+        ];
+        let tmp = std::env::temp_dir().join("onecrawl_spider_export_test.jsonl");
+        let count = export_results_jsonl(&results, &tmp).unwrap();
+        assert_eq!(count, 2);
+        let content = std::fs::read_to_string(&tmp).unwrap();
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(lines.len(), 2);
+        let first: CrawlResult = serde_json::from_str(lines[0]).unwrap();
+        assert_eq!(first.url, "https://a.com");
+        let second: CrawlResult = serde_json::from_str(lines[1]).unwrap();
+        assert_eq!(second.url, "https://b.com");
+        std::fs::remove_file(&tmp).ok();
+    }
 }

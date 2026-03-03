@@ -155,10 +155,9 @@ pub fn analyze_graph(graph: &LinkGraph) -> LinkStats {
     let total_nodes = graph.nodes.len();
     let total_edges = graph.edges.len();
 
-    let (sum_in, sum_out) = graph
-        .nodes
-        .iter()
-        .fold((0usize, 0usize), |(si, so), n| (si + n.inbound, so + n.outbound));
+    let (sum_in, sum_out) = graph.nodes.iter().fold((0usize, 0usize), |(si, so), n| {
+        (si + n.inbound, so + n.outbound)
+    });
 
     let avg_inbound = if total_nodes > 0 {
         sum_in as f64 / total_nodes as f64
@@ -237,6 +236,7 @@ pub fn export_graph_json(graph: &LinkGraph, path: &std::path::Path) -> Result<()
 }
 
 /// Build a link graph from spider crawl results.
+#[allow(dead_code)]
 pub fn from_crawl_results(results: &[crate::spider::CrawlResult]) -> LinkGraph {
     let mut edges: Vec<LinkEdge> = Vec::new();
     let success: Vec<&crate::spider::CrawlResult> =
@@ -288,4 +288,82 @@ pub fn from_crawl_results(results: &[crate::spider::CrawlResult]) -> LinkGraph {
     }
 
     graph
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_edges() -> Vec<LinkEdge> {
+        vec![
+            LinkEdge {
+                source: "https://a.com".into(),
+                target: "https://a.com/page1".into(),
+                anchor_text: "Page 1".into(),
+                is_internal: true,
+            },
+            LinkEdge {
+                source: "https://a.com".into(),
+                target: "https://a.com/page2".into(),
+                anchor_text: "Page 2".into(),
+                is_internal: true,
+            },
+            LinkEdge {
+                source: "https://a.com/page1".into(),
+                target: "https://a.com/page2".into(),
+                anchor_text: "Page 2 link".into(),
+                is_internal: true,
+            },
+            LinkEdge {
+                source: "https://a.com".into(),
+                target: "https://external.com".into(),
+                anchor_text: "External".into(),
+                is_internal: false,
+            },
+        ]
+    }
+
+    #[test]
+    fn test_build_graph() {
+        let graph = build_graph(&sample_edges());
+        assert_eq!(graph.edges.len(), 4);
+        assert!(graph.nodes.len() >= 3);
+        assert_eq!(graph.total_internal, 3);
+        assert_eq!(graph.total_external, 1);
+    }
+
+    #[test]
+    fn test_analyze_graph() {
+        let graph = build_graph(&sample_edges());
+        let stats = analyze_graph(&graph);
+        assert_eq!(stats.total_edges, 4);
+        assert!(stats.total_nodes >= 3);
+        assert!(stats.avg_inbound > 0.0);
+        assert!(stats.avg_outbound > 0.0);
+        assert!(!stats.max_inbound_url.is_empty());
+        assert!(!stats.max_outbound_url.is_empty());
+    }
+
+    #[test]
+    fn test_find_orphans() {
+        let graph = build_graph(&sample_edges());
+        let orphans = find_orphans(&graph);
+        // "https://a.com" is a source but never a target → orphan
+        assert!(orphans.contains(&"https://a.com".to_string()));
+    }
+
+    #[test]
+    fn test_find_hubs() {
+        let graph = build_graph(&sample_edges());
+        let hubs = find_hubs(&graph, 2);
+        // "https://a.com" has 3 outbound links
+        assert!(hubs.iter().any(|n| n.url == "https://a.com"));
+    }
+
+    #[test]
+    fn test_find_hubs_high_threshold() {
+        let graph = build_graph(&sample_edges());
+        let hubs = find_hubs(&graph, 100);
+        assert!(hubs.is_empty());
+    }
 }

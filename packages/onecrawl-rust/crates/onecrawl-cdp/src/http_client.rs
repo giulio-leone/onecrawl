@@ -28,10 +28,12 @@ pub struct HttpResponse {
 }
 
 fn build_fetch_js(request: &HttpRequest) -> String {
-    let headers_json =
-        serde_json::to_string(&request.headers).unwrap_or_else(|_| "{}".to_string());
+    let headers_json = serde_json::to_string(&request.headers).unwrap_or_else(|_| "{}".to_string());
     let body_part = match &request.body {
-        Some(b) => format!(", body: {}", serde_json::to_string(b).unwrap_or_else(|_| "null".to_string())),
+        Some(b) => format!(
+            ", body: {}",
+            serde_json::to_string(b).unwrap_or_else(|_| "null".to_string())
+        ),
         None => String::new(),
     };
 
@@ -78,10 +80,7 @@ fn parse_response(raw: serde_json::Value) -> Result<HttpResponse> {
         return Err(Error::Browser(format!("fetch failed: {err}")));
     }
     Ok(HttpResponse {
-        status: raw
-            .get("status")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as u16,
+        status: raw.get("status").and_then(|v| v.as_u64()).unwrap_or(0) as u16,
         status_text: raw
             .get("status_text")
             .and_then(|v| v.as_str())

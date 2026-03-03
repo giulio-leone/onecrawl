@@ -121,7 +121,9 @@ scripts.forEach(s => {
 return JSON.stringify(results);
 })()"#;
 
-    let raw: String = page.evaluate(js).await
+    let raw: String = page
+        .evaluate(js)
+        .await
         .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?
         .into_value()
         .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?;
@@ -142,7 +144,9 @@ document.querySelectorAll('meta[property^="og:"]').forEach(m => {
 return JSON.stringify(tags);
 })()"#;
 
-    let raw: String = page.evaluate(js).await
+    let raw: String = page
+        .evaluate(js)
+        .await
         .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?
         .into_value()
         .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?;
@@ -150,7 +154,15 @@ return JSON.stringify(tags);
     let tags: HashMap<String, String> = serde_json::from_str(&raw).unwrap_or_default();
 
     let mut extra = tags.clone();
-    let known = ["title", "description", "image", "url", "site_name", "type", "locale"];
+    let known = [
+        "title",
+        "description",
+        "image",
+        "url",
+        "site_name",
+        "type",
+        "locale",
+    ];
     for k in &known {
         extra.remove(*k);
     }
@@ -179,7 +191,9 @@ document.querySelectorAll('meta[name^="twitter:"]').forEach(m => {
 return JSON.stringify(tags);
 })()"#;
 
-    let raw: String = page.evaluate(js).await
+    let raw: String = page
+        .evaluate(js)
+        .await
         .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?
         .into_value()
         .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?;
@@ -226,7 +240,9 @@ return JSON.stringify({
 });
 })()"#;
 
-    let raw: String = page.evaluate(js).await
+    let raw: String = page
+        .evaluate(js)
+        .await
         .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?
         .into_value()
         .map_err(|e| onecrawl_core::Error::Browser(e.to_string()))?;

@@ -126,11 +126,7 @@ fn path_matches(pattern: &str, path: &str) -> bool {
         }
     }
 
-    if anchored {
-        pos == path.len()
-    } else {
-        true
-    }
+    if anchored { pos == path.len() } else { true }
 }
 
 /// Find the best-matching rule for a given user-agent (case-insensitive).
@@ -197,14 +193,10 @@ pub fn get_sitemaps(robots: &RobotsTxt) -> Vec<String> {
 }
 
 /// Fetch and parse robots.txt from a URL using browser `fetch()`.
+#[allow(dead_code)]
 pub async fn fetch_robots(page: &Page, base_url: &str) -> Result<RobotsTxt> {
-    let url = format!(
-        "{}/robots.txt",
-        base_url.trim_end_matches('/')
-    );
-    let js = format!(
-        r#"fetch("{url}").then(r => r.ok ? r.text() : "").catch(() => "")"#,
-    );
+    let url = format!("{}/robots.txt", base_url.trim_end_matches('/'));
+    let js = format!(r#"fetch("{url}").then(r => r.ok ? r.text() : "").catch(() => "")"#,);
     let body = page
         .evaluate(js)
         .await
@@ -212,4 +204,117 @@ pub async fn fetch_robots(page: &Page, base_url: &str) -> Result<RobotsTxt> {
         .into_value::<String>()
         .unwrap_or_default();
     Ok(parse_robots(&body))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_simple_robots() {
+        let txt = "\
+User-agent: *
+Disallow: /admin
+Allow: /admin/public
+Crawl-delay: 2
+Sitemap: https://example.com/sitemap.xml
+";
+        let robots = parse_robots(txt);
+        assert_eq!(robots.rules.len(), 1);
+        assert_eq!(robots.rules[0].user_agent, "*");
+        assert_eq!(robots.rules[0].disallow, vec!["/admin"]);
+        assert_eq!(robots.rules[0].allow, vec!["/admin/public"]);
+        assert_eq!(robots.rules[0].crawl_delay, Some(2.0));
+        assert_eq!(robots.sitemaps, vec!["https://example.com/sitemap.xml"]);
+    }
+
+    #[test]
+    fn test_parse_multiple_user_agents() {
+        let txt = "\
+User-agent: Googlebot
+Disallow: /private
+Allow: /
+
+User-agent: Bingbot
+Disallow: /secret
+";
+        let robots = parse_robots(txt);
+        assert_eq!(robots.rules.len(), 2);
+        assert_eq!(robots.rules[0].user_agent, "Googlebot");
+        assert_eq!(robots.rules[1].user_agent, "Bingbot");
+    }
+
+    #[test]
+    fn test_is_allowed_wildcard() {
+        let txt = "User-agent: *\nDisallow: /admin\n";
+        let robots = parse_robots(txt);
+        assert!(is_allowed(&robots, "MyBot", "/public"));
+        assert!(!is_allowed(&robots, "MyBot", "/admin"));
+        assert!(!is_allowed(&robots, "MyBot", "/admin/page"));
+    }
+
+    #[test]
+    fn test_is_allowed_specific_ua() {
+        let txt = "\
+User-agent: *
+Disallow: /
+
+User-agent: Googlebot
+Allow: /
+";
+        let robots = parse_robots(txt);
+        assert!(is_allowed(&robots, "Googlebot", "/page"));
+        assert!(!is_allowed(&robots, "RandomBot", "/page"));
+    }
+
+    #[test]
+    fn test_disallow_precedence_longest_match() {
+        let txt = "\
+User-agent: *
+Allow: /admin/public
+Disallow: /admin
+";
+        let robots = parse_robots(txt);
+        // /admin/public is longer match for allow → allowed
+        assert!(is_allowed(&robots, "Bot", "/admin/public"));
+        // /admin matches disallow, no allow match → denied
+        assert!(!is_allowed(&robots, "Bot", "/admin"));
+    }
+
+    #[test]
+    fn test_get_crawl_delay() {
+        let txt = "User-agent: *\nCrawl-delay: 5\n";
+        let robots = parse_robots(txt);
+        assert_eq!(get_crawl_delay(&robots, "AnyBot"), Some(5.0));
+    }
+
+    #[test]
+    fn test_get_crawl_delay_none() {
+        let txt = "User-agent: *\nDisallow: /x\n";
+        let robots = parse_robots(txt);
+        assert_eq!(get_crawl_delay(&robots, "AnyBot"), None);
+    }
+
+    #[test]
+    fn test_get_sitemaps() {
+        let txt = "\
+User-agent: *
+Disallow: /
+
+Sitemap: https://example.com/sitemap1.xml
+Sitemap: https://example.com/sitemap2.xml
+";
+        let robots = parse_robots(txt);
+        let sitemaps = get_sitemaps(&robots);
+        assert_eq!(sitemaps.len(), 2);
+        assert!(sitemaps.contains(&"https://example.com/sitemap1.xml".to_string()));
+    }
+
+    #[test]
+    fn test_empty_robots_allows_all() {
+        let robots = parse_robots("");
+        assert!(is_allowed(&robots, "AnyBot", "/anything"));
+        assert!(robots.rules.is_empty());
+        assert!(robots.sitemaps.is_empty());
+    }
 }

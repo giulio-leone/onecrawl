@@ -267,9 +267,7 @@ pub async fn extract_with_pagination(
                 .evaluate(click_js)
                 .await
                 .map_err(|e| Error::Browser(e.to_string()))?;
-            let clicked: bool = click_val
-                .into_value()
-                .unwrap_or(false);
+            let clicked: bool = click_val.into_value().unwrap_or(false);
             if !clicked {
                 break;
             }
