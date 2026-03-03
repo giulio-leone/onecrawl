@@ -8,9 +8,10 @@ allowed-tools: Bash(onecrawl:*)
 
 OneCrawl CLI wraps Microsoft's playwright-cli with **three layers** of anti-detection stealth,
 applied at runtime via `Module._load` hooks (zero files modified on disk).
-On top of every Playwright built-in command it adds **10 custom commands** designed for
-AI-agent workflows: element discovery, property extraction, state checks, assertions,
-smart scrolling, annotated screenshots, session diagnostics, and auth management.
+On top of every Playwright built-in command it adds **21 custom commands** designed for
+AI-agent workflows: element discovery, browser interaction, data extraction, session management,
+property extraction, state checks, assertions, smart scrolling, annotated screenshots,
+session diagnostics, and auth management.
 
 > **Backward compatibility**: All standard Playwright CLI commands (`open`, `goto`, `click`,
 > `fill`, `snapshot`, `screenshot`, `eval`, `cookie-*`, `tab-*`, etc.) work unchanged.
@@ -62,7 +63,7 @@ Bezier-curve mouse movement simulation injected as browser initScript:
 
 ---
 
-## Custom OneCrawl Commands (10)
+## Custom OneCrawl Commands (21)
 
 ### scroll — scroll the page
 
@@ -203,6 +204,130 @@ onecrawl auth import creds.json
 1. Try cookie injection from `~/.onecrawl/linkedin/cookies.json`
 2. Fall back to passkey from `~/.onecrawl/linkedin/passkey.json`
 3. Fail with instructions if neither exists
+
+### click — click an element
+
+Click by ref number (from `find`) or CSS selector.
+
+```bash
+onecrawl click 1                 # click ref 1
+onecrawl click ".submit-btn"     # click by CSS
+onecrawl click 2 --right         # right-click
+onecrawl click 3 --double        # double-click
+onecrawl click 4 --force         # force click (bypass visibility)
+```
+
+### type — type into an element
+
+Type text into a focused or targeted element.
+
+```bash
+onecrawl type 1 "Hello world"           # type into ref 1
+onecrawl type ".search-input" "query"    # type by CSS
+onecrawl type 2 "new value" --clear      # clear field first, then type
+onecrawl type 1 "slow" --delay=100       # human-like typing (ms per char)
+```
+
+### select — select dropdown option
+
+Select a dropdown value by ref or CSS selector.
+
+```bash
+onecrawl select 1 "option-value"            # by value (default)
+onecrawl select ".dropdown" "Italy" --by=label   # by visible label
+onecrawl select 2 "3" --by=index            # by index
+```
+
+### hover — hover over element
+
+Hover to trigger tooltips, dropdowns, or hover states.
+
+```bash
+onecrawl hover 1
+onecrawl hover ".tooltip-trigger"
+```
+
+### drag — drag and drop
+
+Drag from one element to another.
+
+```bash
+onecrawl drag 1 2                           # drag ref 1 to ref 2
+onecrawl drag ".item" ".dropzone"           # by CSS selectors
+```
+
+### extract — structured data extraction
+
+Extract structured data from repeated elements on the page.
+
+```bash
+onecrawl extract --selector=".job-card"                          # auto-extract all data
+onecrawl extract --selector=".job-card" --fields=title,company   # specific fields
+onecrawl extract                                                 # extract from full page
+```
+
+Output: JSON array of objects with extracted data.
+
+### table — extract HTML tables
+
+Extract `<table>` data as JSON or CSV.
+
+```bash
+onecrawl table                        # first table, JSON format
+onecrawl table ".results-table"       # specific table
+onecrawl table --format=csv           # CSV output
+```
+
+### links — extract page links
+
+List all links on the page with filtering.
+
+```bash
+onecrawl links                        # all links
+onecrawl links --external             # only external links
+onecrawl links --internal             # only same-origin links
+onecrawl links --filter="linkedin"    # regex filter on href
+```
+
+Output: JSON array of `{href, text, rel, target, external}`.
+
+### forms — list page forms
+
+Describe all forms and their fields.
+
+```bash
+onecrawl forms                        # all forms
+onecrawl forms --selector="#login"    # specific form
+```
+
+Output: JSON array with form action, method, and fields (name, type, required, value, placeholder, options).
+
+### session — session state management
+
+Save, restore, and manage named browser sessions.
+
+```bash
+onecrawl session list                 # list saved sessions
+onecrawl session save my-linkedin     # save current state
+onecrawl session restore my-linkedin  # restore saved state
+onecrawl session delete my-linkedin   # delete saved session
+onecrawl session clone backup         # clone current session
+```
+
+Saves full state (URL, cookies, localStorage, viewport) to `~/.onecrawl/sessions/<name>.json`.
+
+### cookie — cookie management
+
+List, export, import, and clear cookies.
+
+```bash
+onecrawl cookie list                          # all cookies
+onecrawl cookie list --domain=linkedin.com    # filter by domain
+onecrawl cookie export cookies.json           # export to file
+onecrawl cookie import cookies.json           # import from file
+onecrawl cookie clear                         # clear all
+onecrawl cookie clear --domain=linkedin.com   # clear specific domain
+```
 
 ---
 
