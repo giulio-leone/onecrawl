@@ -24,6 +24,7 @@ pub mod element;
 pub mod emulation;
 pub mod events;
 pub mod extract;
+pub mod form_filler;
 pub mod geofencing;
 pub mod http_client;
 
@@ -53,6 +54,7 @@ pub mod screenshot_diff;
 pub mod selectors;
 pub mod session_pool;
 pub mod shell;
+pub mod sitemap;
 pub mod snapshot;
 pub mod spider;
 pub mod stealth;

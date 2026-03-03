@@ -1,3 +1,4 @@
+mod cdp_tools;
 mod server;
 
 use clap::Parser;
