@@ -17,6 +17,6 @@ serde_json = { workspace = true }
 tracing = { workspace = true }
 futures = { workspace = true }
 axum = { version = "0.8", features = ["json", "query"] }
-tower-http = { version = "0.6", features = ["cors"] }
+tower-http = { version = "0.6", features = ["cors", "compression-gzip"] }
 uuid = { version = "1", features = ["v4"] }
 base64 = { workspace = true }

@@ -65,7 +65,7 @@ tempfile = "3"
 assert_cmd = "2"
 predicates = "3"
 serial_test = "3"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "gzip"] }
 port_check = "0.2"
 
 # NAPI bindings

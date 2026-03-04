@@ -11,7 +11,7 @@ pub struct InstanceInfo {
     pub id: String,
     pub profile: Option<String>,
     pub headless: bool,
-    pub status: String,
+    pub status: &'static str,
     pub port: u16,
     pub start_time: String,
     pub tabs: Vec<TabSummary>,
@@ -92,10 +92,18 @@ impl Instance {
     }
 
     /// Build an InstanceInfo snapshot (requires async for tab URLs).
+    /// Clones Page handles (cheap channel handles), drops the lock, then
+    /// fetches URL/title concurrently via `join_all` — O(rtt) not O(n*rtt).
     pub async fn info(&self) -> InstanceInfo {
-        let tabs_guard = self.tabs.read().await;
-        let mut tab_summaries = Vec::with_capacity(tabs_guard.len());
-        for (tid, page) in tabs_guard.iter() {
+        let pages: Vec<(String, Page)> = {
+            let tabs_guard = self.tabs.read().await;
+            tabs_guard
+                .iter()
+                .map(|(tid, page)| (tid.clone(), page.clone()))
+                .collect()
+        }; // lock dropped here
+
+        let futs = pages.into_iter().map(|(tid, page)| async move {
             let url = page.url().await.ok().flatten().unwrap_or_default();
             let title: String = page
                 .evaluate("document.title")
@@ -103,17 +111,15 @@ impl Instance {
                 .ok()
                 .and_then(|v| v.into_value().ok())
                 .unwrap_or_default();
-            tab_summaries.push(TabSummary {
-                id: tid.clone(),
-                url,
-                title,
-            });
-        }
+            TabSummary { id: tid, url, title }
+        });
+        let tab_summaries = futures::future::join_all(futs).await;
+
         InstanceInfo {
             id: self.id.clone(),
             profile: self.profile.clone(),
             headless: self.headless,
-            status: "running".to_string(),
+            status: "running",
             port: self.port,
             start_time: self.start_time.clone(),
             tabs: tab_summaries,

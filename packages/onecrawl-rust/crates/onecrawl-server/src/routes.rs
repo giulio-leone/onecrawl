@@ -5,25 +5,31 @@ use axum::routing::{delete, get, post};
 use axum::Router;
 use serde::Serialize;
 use std::sync::Arc;
+use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::action::{parse_ref_id, Action, ActionResult};
 use crate::instance::{CreateInstanceRequest, Instance, InstanceInfo};
 use crate::profile::{CreateProfileRequest, Profile};
 use crate::snapshot::{
-    PageSnapshot, SnapshotQuery, SNAPSHOT_JS, TEXT_EXTRACT_JS,
+    PageSnapshot, SnapshotElement, SnapshotQuery, SNAPSHOT_JS, TEXT_EXTRACT_JS,
     click_by_index_js, fill_by_index_js, focus_by_index_js, hover_by_index_js,
     select_by_index_js, type_by_index_js,
 };
 use crate::state::AppState;
 use crate::tab::{NavigateRequest, OpenTabRequest, TabInfo};
 
-type ApiResult<T> = Result<Json<T>, (StatusCode, Json<serde_json::Value>)>;
+#[derive(Serialize)]
+struct ErrorBody {
+    error: String,
+}
 
-fn api_err(status: StatusCode, msg: &str) -> (StatusCode, Json<serde_json::Value>) {
+type ApiResult<T> = Result<Json<T>, (StatusCode, Json<ErrorBody>)>;
+
+fn api_err(status: StatusCode, msg: &str) -> (StatusCode, Json<ErrorBody>) {
     (
         status,
-        Json(serde_json::json!({ "error": msg })),
+        Json(ErrorBody { error: msg.to_owned() }),
     )
 }
 
@@ -85,6 +91,35 @@ struct PdfResponse {
     data: String,
 }
 
+/// Snapshot response with optional compact mode.
+/// In compact mode, elements are serialized as `[ref_id, role, name]` arrays.
+struct SnapshotResponse {
+    url: String,
+    title: String,
+    elements: Arc<Vec<SnapshotElement>>,
+    compact: bool,
+}
+
+impl Serialize for SnapshotResponse {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(3))?;
+        map.serialize_entry("url", &self.url)?;
+        map.serialize_entry("title", &self.title)?;
+        if self.compact {
+            let compact: Vec<(&str, &str, &str)> = self
+                .elements
+                .iter()
+                .map(|e| (e.ref_id.as_str(), e.role.as_str(), e.name.as_str()))
+                .collect();
+            map.serialize_entry("elements", &compact)?;
+        } else {
+            map.serialize_entry("elements", &*self.elements)?;
+        }
+        map.end()
+    }
+}
+
 pub fn create_router(state: AppState) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -116,6 +151,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/profiles", get(list_profiles))
         .route("/profiles", post(create_profile))
         .layer(cors)
+        .layer(CompressionLayer::new())
         .with_state(state)
 }
 
@@ -178,22 +214,28 @@ async fn get_instance(
     Ok(Json(InstanceResponse { instance: info }))
 }
 
+#[derive(Serialize)]
+struct StoppedResponse {
+    stopped: String,
+}
+
 async fn stop_instance(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> ApiResult<serde_json::Value> {
+) -> ApiResult<StoppedResponse> {
     let mut instances = state.instances.write().await;
     let inst = instances
         .remove(&id)
         .ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance not found"))?;
-    // Unregister all tabs from the index
-    let tabs = inst.tabs.read().await;
-    let tab_ids: Vec<String> = tabs.keys().cloned().collect();
-    drop(tabs);
-    for tid in &tab_ids {
-        state.unregister_tab(tid).await;
+    // Unregister all tabs — iterate directly, no intermediate Vec
+    {
+        let tabs = inst.tabs.read().await;
+        let mut index = state.tab_index.write().await;
+        for tid in tabs.keys() {
+            index.remove(tid);
+        }
     }
-    Ok(Json(serde_json::json!({ "stopped": id })))
+    Ok(Json(StoppedResponse { stopped: id }))
 }
 
 // ── Tab Management ──────────────────────────────────────────
@@ -251,11 +293,15 @@ async fn get_instance_tabs(
         .get(&id)
         .ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance not found"))?;
 
-    // Collect tab IDs first, then drop the lock before async calls
-    let tabs = inst.tabs.read().await;
-    let tab_entries: Vec<(String, String)> = {
-        let mut entries = Vec::with_capacity(tabs.len());
-        for (tid, page) in tabs.iter() {
+    // Clone cheap Page handles, drop lock, then concurrent fetch
+    let pages: Vec<(String, chromiumoxide::Page)> = {
+        let tabs = inst.tabs.read().await;
+        tabs.iter().map(|(tid, p)| (tid.clone(), p.clone())).collect()
+    };
+
+    let futs = pages.into_iter().map(|(tid, page)| {
+        let instance_id = id.clone();
+        async move {
             let url = page.url().await.ok().flatten().unwrap_or_default();
             let title: String = page
                 .evaluate("document.title")
@@ -263,49 +309,40 @@ async fn get_instance_tabs(
                 .ok()
                 .and_then(|v| v.into_value().ok())
                 .unwrap_or_default();
-            entries.push((tid.clone(), format!("{}\t{}", url, title)));
+            TabInfo { id: tid, url, title, instance_id }
         }
-        entries
-    };
-    drop(tabs);
-
-    let infos: Vec<TabInfo> = tab_entries
-        .into_iter()
-        .map(|(tid, combined)| {
-            let (url, title) = combined.split_once('\t').unwrap_or(("", ""));
-            TabInfo {
-                id: tid,
-                url: url.to_owned(),
-                title: title.to_owned(),
-                instance_id: id.clone(),
-            }
-        })
-        .collect();
+    });
+    let infos = futures::future::join_all(futs).await;
 
     Ok(Json(TabsResponse { tabs: infos }))
 }
 
 async fn list_all_tabs(State(state): State<AppState>) -> impl IntoResponse {
-    let instances = state.instances.read().await;
-    let mut all_tabs = Vec::new();
-    for inst in instances.values() {
-        let tabs = inst.tabs.read().await;
-        for (tid, page) in tabs.iter() {
-            let url = page.url().await.ok().flatten().unwrap_or_default();
-            let title: String = page
-                .evaluate("document.title")
-                .await
-                .ok()
-                .and_then(|v| v.into_value().ok())
-                .unwrap_or_default();
-            all_tabs.push(TabInfo {
-                id: tid.clone(),
-                url,
-                title,
-                instance_id: inst.id.clone(),
-            });
+    // Collect cheap Page handles + metadata, drop locks, then concurrent fetch
+    let page_handles: Vec<(String, String, chromiumoxide::Page)> = {
+        let instances = state.instances.read().await;
+        let mut handles = Vec::new();
+        for inst in instances.values() {
+            let tabs = inst.tabs.read().await;
+            for (tid, page) in tabs.iter() {
+                handles.push((tid.clone(), inst.id.clone(), page.clone()));
+            }
         }
-    }
+        handles
+    }; // all locks dropped
+
+    let futs = page_handles.into_iter().map(|(tid, inst_id, page)| async move {
+        let url = page.url().await.ok().flatten().unwrap_or_default();
+        let title: String = page
+            .evaluate("document.title")
+            .await
+            .ok()
+            .and_then(|v| v.into_value().ok())
+            .unwrap_or_default();
+        TabInfo { id: tid, url, title, instance_id: inst_id }
+    });
+    let all_tabs = futures::future::join_all(futs).await;
+
     Json(TabsResponse { tabs: all_tabs })
 }
 
@@ -315,7 +352,7 @@ async fn list_all_tabs(State(state): State<AppState>) -> impl IntoResponse {
 async fn resolve_tab<'a>(
     state: &AppState,
     tab_id: &str,
-) -> Result<String, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<String, (StatusCode, Json<ErrorBody>)> {
     state
         .instance_for_tab(tab_id)
         .await
@@ -350,7 +387,7 @@ async fn get_snapshot(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
     Query(query): Query<SnapshotQuery>,
-) -> ApiResult<serde_json::Value> {
+) -> ApiResult<SnapshotResponse> {
     let inst_id = resolve_tab(&state, &tab_id).await?;
     let instances = state.instances.read().await;
     let inst = instances.get(&inst_id).ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance gone"))?;
@@ -374,30 +411,14 @@ async fn get_snapshot(
 
     // Cache for action lookups using Arc (avoids full clone)
     let elements = Arc::new(snapshot.elements);
-    state
-        .snapshots
-        .write()
-        .await
-        .insert(tab_id, Arc::clone(&elements));
+    state.cache_snapshot(tab_id, Arc::clone(&elements)).await;
 
-    // Format output
-    if query.format.as_deref() == Some("compact") {
-        let compact: Vec<serde_json::Value> = elements
-            .iter()
-            .map(|e| serde_json::json!([e.ref_id, e.role, e.name]))
-            .collect();
-        return Ok(Json(serde_json::json!({
-            "url": snapshot.url,
-            "title": snapshot.title,
-            "elements": compact
-        })));
-    }
-
-    Ok(Json(serde_json::json!({
-        "url": snapshot.url,
-        "title": snapshot.title,
-        "elements": *elements
-    })))
+    Ok(Json(SnapshotResponse {
+        url: snapshot.url,
+        title: snapshot.title,
+        elements,
+        compact: query.format.as_deref() == Some("compact"),
+    }))
 }
 
 async fn get_text(
@@ -632,7 +653,7 @@ async fn evaluate_js(
 async fn take_screenshot(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+) -> ApiResult<ScreenshotResponse> {
     let inst_id = resolve_tab(&state, &tab_id).await?;
     let instances = state.instances.read().await;
     let inst = instances.get(&inst_id).ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance gone"))?;
@@ -658,7 +679,7 @@ async fn take_screenshot(
 async fn export_pdf(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
-) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
+) -> ApiResult<PdfResponse> {
     let inst_id = resolve_tab(&state, &tab_id).await?;
     let instances = state.instances.read().await;
     let inst = instances.get(&inst_id).ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance gone"))?;
@@ -671,28 +692,38 @@ async fn export_pdf(
         .execute(params)
         .await
         .map_err(|e| api_err(StatusCode::INTERNAL_SERVER_ERROR, &format!("pdf: {e}")))?;
-    let data_str = format!("{:?}", response.result.data);
+    let data_str: String = response.result.data.into();
     Ok(Json(PdfResponse { format: "pdf", data: data_str }))
 }
 
 // ── Profiles ────────────────────────────────────────────────
 
+#[derive(Serialize)]
+struct ProfilesResponse {
+    profiles: Vec<Profile>,
+}
+
+#[derive(Serialize)]
+struct ProfileResponse {
+    profile: Profile,
+}
+
 async fn list_profiles(State(state): State<AppState>) -> impl IntoResponse {
     let profiles = state.profiles.read().await;
     let list: Vec<Profile> = profiles.values().cloned().collect();
-    Json(serde_json::json!({ "profiles": list }))
+    Json(ProfilesResponse { profiles: list })
 }
 
 async fn create_profile(
     State(state): State<AppState>,
     Json(req): Json<CreateProfileRequest>,
-) -> ApiResult<serde_json::Value> {
+) -> ApiResult<ProfileResponse> {
     let profile = Profile::new(&req.name);
-    let info = serde_json::json!({ "profile": &profile });
+    let resp = ProfileResponse { profile: profile.clone() };
     state
         .profiles
         .write()
         .await
         .insert(profile.name.clone(), profile);
-    Ok(Json(info))
+    Ok(Json(resp))
 }

@@ -5,14 +5,28 @@
 //! re-connecting to Chrome via CDP WebSocket (~40-80 ms savings per command).
 
 use crate::commands::session::load_session;
+use serde::Serialize;
 use std::time::Duration;
+
+/// Typed request bodies (avoid json!() macro overhead per call).
+#[derive(Serialize)]
+struct NavRequest<'a> {
+    url: &'a str,
+}
+
+#[derive(Serialize)]
+struct EvalRequest<'a> {
+    expression: &'a str,
+}
 
 /// Lightweight client that talks to the co-located HTTP server.
 pub struct ServerProxy {
     client: reqwest::Client,
-    /// Pre-computed base URL for tab operations: `http://127.0.0.1:{port}/tabs/{tab_id}`
-    tab_url: String,
-    pub _tab_id: String,
+    /// Pre-computed URLs to avoid format!() on every call
+    navigate_url: String,
+    text_url: String,
+    evaluate_url: String,
+    screenshot_url: String,
 }
 
 impl ServerProxy {
@@ -27,10 +41,17 @@ impl ServerProxy {
             .connect_timeout(Duration::from_millis(500))
             .timeout(Duration::from_secs(30))
             .pool_max_idle_per_host(1)
+            .gzip(true)
             .build()
             .ok()?;
-        let tab_url = format!("http://127.0.0.1:{port}/tabs/{tab_id}");
-        let proxy = Self { client, tab_url, _tab_id: tab_id };
+        let tab_base = format!("http://127.0.0.1:{port}/tabs/{tab_id}");
+        let proxy = Self {
+            navigate_url: format!("{tab_base}/navigate"),
+            text_url: format!("{tab_base}/text"),
+            evaluate_url: format!("{tab_base}/evaluate"),
+            screenshot_url: format!("{tab_base}/screenshot"),
+            client,
+        };
         // Quick health-check with tight timeout
         proxy.client
             .get(format!("http://127.0.0.1:{port}/health"))
@@ -46,8 +67,8 @@ impl ServerProxy {
     pub async fn navigate(&self, url: &str) -> Result<serde_json::Value, String> {
         let resp = self
             .client
-            .post(format!("{}/navigate", self.tab_url))
-            .json(&serde_json::json!({ "url": url }))
+            .post(&self.navigate_url)
+            .json(&NavRequest { url })
             .send()
             .await
             .map_err(|e| e.to_string())?;
@@ -59,7 +80,7 @@ impl ServerProxy {
     pub async fn get_text(&self) -> Result<String, String> {
         let resp = self
             .client
-            .get(format!("{}/text", self.tab_url))
+            .get(&self.text_url)
             .send()
             .await
             .map_err(|e| e.to_string())?;
@@ -70,8 +91,8 @@ impl ServerProxy {
     pub async fn evaluate(&self, expr: &str) -> Result<serde_json::Value, String> {
         let resp = self
             .client
-            .post(format!("{}/evaluate", self.tab_url))
-            .json(&serde_json::json!({ "expression": expr }))
+            .post(&self.evaluate_url)
+            .json(&EvalRequest { expression: expr })
             .send()
             .await
             .map_err(|e| e.to_string())?;
@@ -83,7 +104,7 @@ impl ServerProxy {
     pub async fn screenshot(&self) -> Result<Vec<u8>, String> {
         let resp = self
             .client
-            .get(format!("{}/screenshot", self.tab_url))
+            .get(&self.screenshot_url)
             .send()
             .await
             .map_err(|e| e.to_string())?;
