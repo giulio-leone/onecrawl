@@ -13,7 +13,9 @@ pub struct ServerState {
     pub port: u16,
     pub next_instance_port: RwLock<u16>,
     /// Last snapshot per tab_id for element-ref lookups during actions.
-    pub snapshots: RwLock<HashMap<String, Vec<SnapshotElement>>>,
+    pub snapshots: RwLock<HashMap<String, Arc<Vec<SnapshotElement>>>>,
+    /// Reverse index: tab_id -> instance_id for O(1) tab lookup.
+    pub tab_index: RwLock<HashMap<String, String>>,
 }
 
 impl ServerState {
@@ -24,7 +26,26 @@ impl ServerState {
             port,
             next_instance_port: RwLock::new(port + 1),
             snapshots: RwLock::new(HashMap::new()),
+            tab_index: RwLock::new(HashMap::new()),
         }
+    }
+
+    /// Register a tab in the reverse index.
+    pub async fn register_tab(&self, tab_id: &str, instance_id: &str) {
+        self.tab_index
+            .write()
+            .await
+            .insert(tab_id.to_owned(), instance_id.to_owned());
+    }
+
+    /// Remove a tab from the reverse index.
+    pub async fn unregister_tab(&self, tab_id: &str) {
+        self.tab_index.write().await.remove(tab_id);
+    }
+
+    /// O(1) lookup: tab_id -> instance_id.
+    pub async fn instance_for_tab(&self, tab_id: &str) -> Option<String> {
+        self.tab_index.read().await.get(tab_id).cloned()
     }
 }
 
