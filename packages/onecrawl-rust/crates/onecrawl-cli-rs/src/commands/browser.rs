@@ -44,6 +44,7 @@ where
 // ---------------------------------------------------------------------------
 
 pub async fn navigate(url: &str, wait: u64) {
+    let t0 = std::time::Instant::now();
     // Try proxy first (avoids CDP reconnect overhead)
     if let Some(proxy) = super::proxy::ServerProxy::from_session().await {
         match proxy.navigate(url).await {
@@ -51,7 +52,8 @@ pub async fn navigate(url: &str, wait: u64) {
                 if wait > 0 {
                     tokio::time::sleep(std::time::Duration::from_millis(wait)).await;
                 }
-                println!("{} Navigated to {} {}", "✓".green(), url.cyan(), "(proxy)".dimmed());
+                let ms = t0.elapsed().as_millis();
+                println!("{} Navigated to {} {} {}", "✓".green(), url.cyan(), format!("{ms}ms").dimmed(), "(proxy)".dimmed());
                 return;
             }
             Err(_) => {} // fall through to CDP
@@ -64,7 +66,8 @@ pub async fn navigate(url: &str, wait: u64) {
         if wait > 0 {
             onecrawl_cdp::navigation::wait_ms(wait).await;
         }
-        println!("{} Navigated to {}", "✓".green(), url.cyan());
+        let ms = t0.elapsed().as_millis();
+        println!("{} Navigated to {} {}", "✓".green(), url.cyan(), format!("{ms}ms").dimmed());
         Ok(())
     })
     .await;
@@ -494,16 +497,19 @@ pub async fn screenshot(
     format: &str,
     quality: Option<u32>,
 ) {
+    let t0 = std::time::Instant::now();
     // Proxy fast-path for simple PNG screenshots (no element selector, no custom format)
     if element.is_none() && format == "png" && quality.is_none() {
         if let Some(proxy) = super::proxy::ServerProxy::from_session().await {
             if let Ok(bytes) = proxy.screenshot().await {
                 if std::fs::write(output, &bytes).is_ok() {
+                    let ms = t0.elapsed().as_millis();
                     println!(
-                        "{} Screenshot saved to {} ({} bytes) {}",
+                        "{} Screenshot saved to {} ({} bytes) {} {}",
                         "✓".green(),
                         output.cyan(),
                         bytes.len(),
+                        format!("{ms}ms").dimmed(),
                         "(proxy)".dimmed()
                     );
                     return;
@@ -543,11 +549,13 @@ pub async fn screenshot(
                 .map_err(|e| e.to_string())?
         };
         std::fs::write(&out, &bytes).map_err(|e| format!("write failed: {e}"))?;
+        let ms = t0.elapsed().as_millis();
         println!(
-            "{} Screenshot saved to {} ({} bytes)",
+            "{} Screenshot saved to {} ({} bytes) {}",
             "✓".green(),
             out.cyan(),
-            bytes.len()
+            bytes.len(),
+            format!("{ms}ms").dimmed()
         );
         Ok(())
     })
