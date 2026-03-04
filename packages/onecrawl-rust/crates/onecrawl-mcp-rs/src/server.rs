@@ -62,6 +62,63 @@ pub struct StoreGetRequest {
     pub key: String,
 }
 
+// ──────────────────────────── Typed MCP responses ────────────────────────────
+
+#[derive(serde::Serialize)]
+struct PkceResponse<'a> {
+    code_verifier: &'a str,
+    code_challenge: &'a str,
+}
+
+#[derive(serde::Serialize)]
+struct LinkInfo {
+    href: String,
+    text: String,
+    is_external: bool,
+}
+
+#[derive(serde::Serialize)]
+struct CrawlResult2 {
+    summary: onecrawl_cdp::spider::CrawlSummary,
+    pages_crawled: usize,
+}
+
+#[derive(serde::Serialize)]
+struct RobotsInfo {
+    sitemaps: Vec<String>,
+    crawl_delay: Option<f64>,
+    path_allowed: Option<bool>,
+}
+
+#[derive(serde::Serialize)]
+struct StealthInjectResult {
+    patches_applied: usize,
+    patches: Vec<String>,
+}
+
+#[derive(serde::Serialize)]
+struct FingerprintResult<'a> {
+    user_agent: &'a str,
+    platform: &'a str,
+}
+
+#[derive(serde::Serialize)]
+struct RateLimitResult {
+    can_proceed: bool,
+    stats: onecrawl_cdp::rate_limiter::RateLimitStats,
+}
+
+#[derive(serde::Serialize)]
+struct RetryResult {
+    id: String,
+    queue_stats: onecrawl_cdp::retry_queue::QueueStats,
+}
+
+#[derive(serde::Serialize)]
+struct RemovedResult {
+    removed: bool,
+}
+
 // ──────────────────────────── Server ────────────────────────────
 
 #[derive(Clone)]
@@ -190,13 +247,10 @@ impl OneCrawlMcp {
     fn generate_pkce(&self) -> Result<CallToolResult, McpError> {
         let challenge =
             onecrawl_crypto::generate_pkce_challenge().map_err(|e| mcp_err(e.to_string()))?;
-        let json = serde_json::json!({
-            "code_verifier": challenge.code_verifier,
-            "code_challenge": challenge.code_challenge,
-        });
-        Ok(CallToolResult::success(vec![Content::text(
-            json.to_string(),
-        )]))
+        json_ok(&PkceResponse {
+            code_verifier: &challenge.code_verifier,
+            code_challenge: &challenge.code_challenge,
+        })
     }
 
     #[tool(description = "Generate a 6-digit TOTP code from a base32 secret.")]
@@ -260,11 +314,11 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let links = onecrawl_parser::extract::extract_links(&req.html)
             .map_err(|e| mcp_err(e.to_string()))?;
-        let result: Vec<serde_json::Value> = links
+        let result: Vec<LinkInfo> = links
             .into_iter()
             .map(|(href, text)| {
                 let is_external = href.starts_with("http://") || href.starts_with("https://");
-                serde_json::json!({ "href": href, "text": text, "is_external": is_external })
+                LinkInfo { href, text, is_external }
             })
             .collect();
         let json = serde_json::to_string(&result).map_err(|e| mcp_err(e.to_string()))?;
@@ -665,10 +719,10 @@ impl OneCrawlMcp {
             .await
             .map_err(|e| mcp_err(e.to_string()))?;
         let summary = onecrawl_cdp::spider::summarize(&results);
-        json_ok(&serde_json::json!({
-            "summary": summary,
-            "pages_crawled": results.len(),
-        }))
+        json_ok(&CrawlResult2 {
+            summary,
+            pages_crawled: results.len(),
+        })
     }
 
     #[tool(name = "crawling.robots", description = "Fetch and parse robots.txt for a domain. Optionally test if a specific path is allowed for a given user-agent.")]
@@ -686,11 +740,11 @@ impl OneCrawlMcp {
         let allowed = p.path.as_ref().map(|path| {
             onecrawl_cdp::robots::is_allowed(&robots, ua, path)
         });
-        json_ok(&serde_json::json!({
-            "sitemaps": sitemaps,
-            "crawl_delay": delay,
-            "path_allowed": allowed,
-        }))
+        json_ok(&RobotsInfo {
+            sitemaps,
+            crawl_delay: delay,
+            path_allowed: allowed,
+        })
     }
 
     #[tool(name = "crawling.sitemap", description = "Generate a standards-compliant XML sitemap from a list of URL entries with priority and changefreq.")]
@@ -758,10 +812,10 @@ impl OneCrawlMcp {
         let patches = onecrawl_cdp::antibot::inject_stealth_full(&page)
             .await
             .map_err(|e| mcp_err(e.to_string()))?;
-        json_ok(&serde_json::json!({
-            "patches_applied": patches.len(),
-            "patches": patches,
-        }))
+        json_ok(&StealthInjectResult {
+            patches_applied: patches.len(),
+            patches,
+        })
     }
 
     #[tool(
@@ -793,10 +847,10 @@ impl OneCrawlMcp {
         onecrawl_cdp::page::evaluate_js(&page, &script)
             .await
             .map_err(|e| mcp_err(e.to_string()))?;
-        json_ok(&serde_json::json!({
-            "user_agent": fp.user_agent,
-            "platform": fp.platform,
-        }))
+        json_ok(&FingerprintResult {
+            user_agent: &fp.user_agent,
+            platform: &fp.platform,
+        })
     }
 
     #[tool(
@@ -943,10 +997,10 @@ impl OneCrawlMcp {
         let limiter = state.rate_limiter.as_ref().unwrap();
         let can = onecrawl_cdp::rate_limiter::can_proceed(limiter);
         let stats = onecrawl_cdp::rate_limiter::get_stats(limiter);
-        json_ok(&serde_json::json!({
-            "can_proceed": can,
-            "stats": stats,
-        }))
+        json_ok(&RateLimitResult {
+            can_proceed: can,
+            stats,
+        })
     }
 
     #[tool(name = "automation.retry", description = "Enqueue a failed URL or operation into the retry queue with exponential backoff and jitter.")]
@@ -972,10 +1026,10 @@ impl OneCrawlMcp {
             p.payload.as_deref(),
         );
         let stats = onecrawl_cdp::retry_queue::get_stats(queue);
-        json_ok(&serde_json::json!({
-            "id": id,
-            "queue_stats": stats,
-        }))
+        json_ok(&RetryResult {
+            id,
+            queue_stats: stats,
+        })
     }
 
     //  Passkey / WebAuthn tools
@@ -1069,7 +1123,7 @@ impl OneCrawlMcp {
         let removed = onecrawl_cdp::webauthn::remove_virtual_credential(&page, &p.credential_id)
             .await
             .map_err(|e| mcp_err(e.to_string()))?;
-        json_ok(&serde_json::json!({ "removed": removed }))
+        json_ok(&RemovedResult { removed })
     }
 }
 

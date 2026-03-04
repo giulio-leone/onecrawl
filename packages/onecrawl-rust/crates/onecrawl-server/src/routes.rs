@@ -74,6 +74,22 @@ struct TextResponse {
 }
 
 #[derive(Serialize)]
+struct UrlResponse {
+    url: String,
+}
+
+#[derive(Serialize)]
+struct TitleResponse {
+    title: String,
+}
+
+#[derive(Serialize)]
+struct HtmlResponse {
+    url: String,
+    html: String,
+}
+
+#[derive(Serialize)]
 struct EvalResponse {
     result: serde_json::Value,
 }
@@ -142,6 +158,9 @@ pub fn create_router(state: AppState) -> Router {
         .route("/tabs/{tab_id}/navigate", post(navigate_tab))
         .route("/tabs/{tab_id}/snapshot", get(get_snapshot))
         .route("/tabs/{tab_id}/text", get(get_text))
+        .route("/tabs/{tab_id}/url", get(get_url))
+        .route("/tabs/{tab_id}/title", get(get_title))
+        .route("/tabs/{tab_id}/html", get(get_html))
         .route("/tabs/{tab_id}/action", post(execute_action))
         .route("/tabs/{tab_id}/actions", post(execute_actions))
         .route("/tabs/{tab_id}/evaluate", post(evaluate_js))
@@ -359,17 +378,31 @@ async fn resolve_tab<'a>(
         .ok_or_else(|| api_err(StatusCode::NOT_FOUND, "tab not found"))
 }
 
+/// Helper: resolve tab, acquire locks, clone Page handle (cheap channel clone).
+/// Returns the Page and drops all locks immediately for maximum concurrency.
+async fn get_tab_page(
+    state: &AppState,
+    tab_id: &str,
+) -> Result<chromiumoxide::Page, (StatusCode, Json<ErrorBody>)> {
+    let inst_id = resolve_tab(state, tab_id).await?;
+    let instances = state.instances.read().await;
+    let inst = instances
+        .get(&inst_id)
+        .ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance gone"))?;
+    let tabs = inst.tabs.read().await;
+    let page = tabs
+        .get(tab_id)
+        .ok_or_else(|| api_err(StatusCode::NOT_FOUND, "tab gone"))?
+        .clone(); // cheap: Page is a channel handle
+    Ok(page)
+}
+
 async fn navigate_tab(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
     Json(req): Json<NavigateRequest>,
 ) -> ApiResult<NavigateResponse> {
-    let inst_id = resolve_tab(&state, &tab_id).await?;
-    let instances = state.instances.read().await;
-    let inst = instances.get(&inst_id).ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance gone"))?;
-    let tabs = inst.tabs.read().await;
-    let page = tabs.get(&tab_id).ok_or_else(|| api_err(StatusCode::NOT_FOUND, "tab gone"))?;
-
+    let page = get_tab_page(&state, &tab_id).await?;
     page.goto(&req.url)
         .await
         .map_err(|e| api_err(StatusCode::INTERNAL_SERVER_ERROR, &format!("navigate: {e}")))?;
@@ -388,11 +421,7 @@ async fn get_snapshot(
     Path(tab_id): Path<String>,
     Query(query): Query<SnapshotQuery>,
 ) -> ApiResult<SnapshotResponse> {
-    let inst_id = resolve_tab(&state, &tab_id).await?;
-    let instances = state.instances.read().await;
-    let inst = instances.get(&inst_id).ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance gone"))?;
-    let tabs = inst.tabs.read().await;
-    let page = tabs.get(&tab_id).ok_or_else(|| api_err(StatusCode::NOT_FOUND, "tab gone"))?;
+    let page = get_tab_page(&state, &tab_id).await?;
 
     let result_str: String = page
         .evaluate(SNAPSHOT_JS)
@@ -404,12 +433,10 @@ async fn get_snapshot(
     let mut snapshot: PageSnapshot = serde_json::from_str(&result_str)
         .map_err(|e| api_err(StatusCode::INTERNAL_SERVER_ERROR, &format!("snapshot json: {e}")))?;
 
-    // Apply filter
     if query.filter.as_deref() == Some("interactive") {
         snapshot.elements.retain(|e| e.interactive);
     }
 
-    // Cache for action lookups using Arc (avoids full clone)
     let elements = Arc::new(snapshot.elements);
     state.cache_snapshot(tab_id, Arc::clone(&elements)).await;
 
@@ -425,12 +452,7 @@ async fn get_text(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
 ) -> ApiResult<TextResponse> {
-    let inst_id = resolve_tab(&state, &tab_id).await?;
-    let instances = state.instances.read().await;
-    let inst = instances.get(&inst_id).ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance gone"))?;
-    let tabs = inst.tabs.read().await;
-    let page = tabs.get(&tab_id).ok_or_else(|| api_err(StatusCode::NOT_FOUND, "tab gone"))?;
-
+    let page = get_tab_page(&state, &tab_id).await?;
     let text: String = page
         .evaluate(TEXT_EXTRACT_JS)
         .await
@@ -439,6 +461,44 @@ async fn get_text(
         .map_err(|e| api_err(StatusCode::INTERNAL_SERVER_ERROR, &format!("text parse: {e}")))?;
     let url = page.url().await.ok().flatten().unwrap_or_default();
     Ok(Json(TextResponse { url, text }))
+}
+
+async fn get_url(
+    State(state): State<AppState>,
+    Path(tab_id): Path<String>,
+) -> ApiResult<UrlResponse> {
+    let page = get_tab_page(&state, &tab_id).await?;
+    let url = page.url().await.ok().flatten().unwrap_or_default();
+    Ok(Json(UrlResponse { url }))
+}
+
+async fn get_title(
+    State(state): State<AppState>,
+    Path(tab_id): Path<String>,
+) -> ApiResult<TitleResponse> {
+    let page = get_tab_page(&state, &tab_id).await?;
+    let title: String = page
+        .evaluate("document.title")
+        .await
+        .ok()
+        .and_then(|v| v.into_value().ok())
+        .unwrap_or_default();
+    Ok(Json(TitleResponse { title }))
+}
+
+async fn get_html(
+    State(state): State<AppState>,
+    Path(tab_id): Path<String>,
+) -> ApiResult<HtmlResponse> {
+    let page = get_tab_page(&state, &tab_id).await?;
+    let html: String = page
+        .evaluate("document.documentElement.outerHTML")
+        .await
+        .ok()
+        .and_then(|v| v.into_value().ok())
+        .unwrap_or_default();
+    let url = page.url().await.ok().flatten().unwrap_or_default();
+    Ok(Json(HtmlResponse { url, html }))
 }
 
 /// Execute a single action.
@@ -470,24 +530,12 @@ async fn execute_actions(
 }
 
 async fn run_action(state: &AppState, tab_id: &str, action: &Action) -> ActionResult {
-    let inst_id = match state.instance_for_tab(tab_id).await {
-        Some(id) => id,
-        None => return ActionResult::err("tab not found"),
+    let page = match get_tab_page(state, tab_id).await {
+        Ok(p) => p,
+        Err(_) => return ActionResult::err("tab not found"),
     };
 
-    let instances = state.instances.read().await;
-    let inst = match instances.get(&inst_id) {
-        Some(i) => i,
-        None => return ActionResult::err("instance not found"),
-    };
-
-    let tabs = inst.tabs.read().await;
-    let page = match tabs.get(tab_id) {
-        Some(p) => p,
-        None => return ActionResult::err("tab not found"),
-    };
-
-    execute_single_action(page, action, state, tab_id).await
+    execute_single_action(&page, action, state, tab_id).await
 }
 
 fn execute_single_action<'a>(
@@ -632,12 +680,7 @@ async fn evaluate_js(
     Path(tab_id): Path<String>,
     Json(req): Json<EvalRequest>,
 ) -> ApiResult<EvalResponse> {
-    let inst_id = resolve_tab(&state, &tab_id).await?;
-    let instances = state.instances.read().await;
-    let inst = instances.get(&inst_id).ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance gone"))?;
-    let tabs = inst.tabs.read().await;
-    let page = tabs.get(&tab_id).ok_or_else(|| api_err(StatusCode::NOT_FOUND, "tab gone"))?;
-
+    let page = get_tab_page(&state, &tab_id).await?;
     let val = page
         .evaluate(req.expression.as_str())
         .await
@@ -654,12 +697,7 @@ async fn take_screenshot(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
 ) -> ApiResult<ScreenshotResponse> {
-    let inst_id = resolve_tab(&state, &tab_id).await?;
-    let instances = state.instances.read().await;
-    let inst = instances.get(&inst_id).ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance gone"))?;
-    let tabs = inst.tabs.read().await;
-    let page = tabs.get(&tab_id).ok_or_else(|| api_err(StatusCode::NOT_FOUND, "tab gone"))?;
-
+    let page = get_tab_page(&state, &tab_id).await?;
     let bytes = page
         .screenshot(
             chromiumoxide::page::ScreenshotParams::builder()
@@ -680,12 +718,7 @@ async fn export_pdf(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
 ) -> ApiResult<PdfResponse> {
-    let inst_id = resolve_tab(&state, &tab_id).await?;
-    let instances = state.instances.read().await;
-    let inst = instances.get(&inst_id).ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance gone"))?;
-    let tabs = inst.tabs.read().await;
-    let page = tabs.get(&tab_id).ok_or_else(|| api_err(StatusCode::NOT_FOUND, "tab gone"))?;
-
+    let page = get_tab_page(&state, &tab_id).await?;
     let params = chromiumoxide::cdp::browser_protocol::page::PrintToPdfParams::builder()
         .build();
     let response = page

@@ -125,10 +125,12 @@ pub const TEXT_EXTRACT_JS: &str = r#"(() => {
     return deduped.join('\n\n');
 })()"#;
 
-/// JS to click an element by its document-order index (backendNodeId from our snapshot).
-pub fn click_by_index_js(index: i64) -> String {
-    format!(
-        r#"(() => {{
+/// Shared JS template: find element by document-order index, then execute action.
+/// The `action_js` string should reference `node` (the found element).
+fn element_action_js(index: i64, action_js: &str) -> String {
+    use std::fmt::Write;
+    let mut js = String::with_capacity(256 + action_js.len());
+    let _ = write!(js, r#"(() => {{
     const walker = document.createTreeWalker(
         document.body || document.documentElement,
         NodeFilter.SHOW_ELEMENT, null
@@ -138,59 +140,31 @@ pub fn click_by_index_js(index: i64) -> String {
     while (node) {{
         if (i === {index}) {{
             node.scrollIntoView({{ block: 'center' }});
-            node.focus();
-            node.click();
-            return 'clicked';
+            {action_js}
         }}
         i++;
         node = walker.nextNode();
     }}
     throw new Error('element index {index} not found');
-}})()"#,
-        index = index
-    )
+}})()"#);
+    js
+}
+
+/// JS to click an element by its document-order index.
+pub fn click_by_index_js(index: i64) -> String {
+    element_action_js(index, "node.focus(); node.click(); return 'clicked';")
 }
 
 /// JS to focus an element by index.
 pub fn focus_by_index_js(index: i64) -> String {
-    format!(
-        r#"(() => {{
-    const walker = document.createTreeWalker(
-        document.body || document.documentElement,
-        NodeFilter.SHOW_ELEMENT, null
-    );
-    let node = walker.currentNode;
-    let i = 0;
-    while (node) {{
-        if (i === {index}) {{
-            node.scrollIntoView({{ block: 'center' }});
-            node.focus();
-            return 'focused';
-        }}
-        i++;
-        node = walker.nextNode();
-    }}
-    throw new Error('element index {index} not found');
-}})()"#,
-        index = index
-    )
+    element_action_js(index, "node.focus(); return 'focused';")
 }
 
 /// JS to fill (clear + set value) an element by index.
 pub fn fill_by_index_js(index: i64, text: &str) -> String {
     let escaped = text.replace('\\', "\\\\").replace('\'', "\\'").replace('\n', "\\n");
-    format!(
-        r#"(() => {{
-    const walker = document.createTreeWalker(
-        document.body || document.documentElement,
-        NodeFilter.SHOW_ELEMENT, null
-    );
-    let node = walker.currentNode;
-    let i = 0;
-    while (node) {{
-        if (i === {index}) {{
-            node.scrollIntoView({{ block: 'center' }});
-            node.focus();
+    let action = format!(
+        r#"node.focus();
             node.value = '';
             const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
                 window.HTMLInputElement.prototype, 'value'
@@ -198,40 +172,23 @@ pub fn fill_by_index_js(index: i64, text: &str) -> String {
                 window.HTMLTextAreaElement.prototype, 'value'
             )?.set;
             if (nativeInputValueSetter) {{
-                nativeInputValueSetter.call(node, '{text}');
+                nativeInputValueSetter.call(node, '{escaped}');
             }} else {{
-                node.value = '{text}';
+                node.value = '{escaped}';
             }}
             node.dispatchEvent(new Event('input', {{ bubbles: true }}));
             node.dispatchEvent(new Event('change', {{ bubbles: true }}));
-            return 'filled';
-        }}
-        i++;
-        node = walker.nextNode();
-    }}
-    throw new Error('element index {index} not found');
-}})()"#,
-        index = index,
-        text = escaped
-    )
+            return 'filled';"#
+    );
+    element_action_js(index, &action)
 }
 
 /// JS to type text character-by-character into an element by index.
 pub fn type_by_index_js(index: i64, text: &str) -> String {
     let escaped = text.replace('\\', "\\\\").replace('\'', "\\'").replace('\n', "\\n");
-    format!(
-        r#"(() => {{
-    const walker = document.createTreeWalker(
-        document.body || document.documentElement,
-        NodeFilter.SHOW_ELEMENT, null
-    );
-    let node = walker.currentNode;
-    let i = 0;
-    while (node) {{
-        if (i === {index}) {{
-            node.scrollIntoView({{ block: 'center' }});
-            node.focus();
-            const text = '{text}';
+    let action = format!(
+        r#"node.focus();
+            const text = '{escaped}';
             for (const ch of text) {{
                 node.dispatchEvent(new KeyboardEvent('keydown', {{ key: ch, bubbles: true }}));
                 node.dispatchEvent(new KeyboardEvent('keypress', {{ key: ch, bubbles: true }}));
@@ -240,73 +197,31 @@ pub fn type_by_index_js(index: i64, text: &str) -> String {
                 node.dispatchEvent(new KeyboardEvent('keyup', {{ key: ch, bubbles: true }}));
             }}
             node.dispatchEvent(new Event('change', {{ bubbles: true }}));
-            return 'typed';
-        }}
-        i++;
-        node = walker.nextNode();
-    }}
-    throw new Error('element index {index} not found');
-}})()"#,
-        index = index,
-        text = escaped
-    )
+            return 'typed';"#
+    );
+    element_action_js(index, &action)
 }
 
 /// JS to hover an element by index.
 pub fn hover_by_index_js(index: i64) -> String {
-    format!(
-        r#"(() => {{
-    const walker = document.createTreeWalker(
-        document.body || document.documentElement,
-        NodeFilter.SHOW_ELEMENT, null
-    );
-    let node = walker.currentNode;
-    let i = 0;
-    while (node) {{
-        if (i === {index}) {{
-            node.scrollIntoView({{ block: 'center' }});
-            const rect = node.getBoundingClientRect();
-            node.dispatchEvent(new MouseEvent('mouseover', {{
+    element_action_js(index, r#"const rect = node.getBoundingClientRect();
+            node.dispatchEvent(new MouseEvent('mouseover', {
                 bubbles: true, clientX: rect.x + rect.width/2, clientY: rect.y + rect.height/2
-            }}));
-            node.dispatchEvent(new MouseEvent('mouseenter', {{
+            }));
+            node.dispatchEvent(new MouseEvent('mouseenter', {
                 bubbles: false, clientX: rect.x + rect.width/2, clientY: rect.y + rect.height/2
-            }}));
-            return 'hovered';
-        }}
-        i++;
-        node = walker.nextNode();
-    }}
-    throw new Error('element index {index} not found');
-}})()"#,
-        index = index
-    )
+            }));
+            return 'hovered';"#)
 }
 
 /// JS to select an option value on a `<select>` element by index.
 pub fn select_by_index_js(index: i64, value: &str) -> String {
     let escaped = value.replace('\\', "\\\\").replace('\'', "\\'");
-    format!(
-        r#"(() => {{
-    const walker = document.createTreeWalker(
-        document.body || document.documentElement,
-        NodeFilter.SHOW_ELEMENT, null
-    );
-    let node = walker.currentNode;
-    let i = 0;
-    while (node) {{
-        if (i === {index}) {{
-            node.value = '{value}';
+    let action = format!(
+        r#"node.value = '{escaped}';
             node.dispatchEvent(new Event('input', {{ bubbles: true }}));
             node.dispatchEvent(new Event('change', {{ bubbles: true }}));
-            return 'selected';
-        }}
-        i++;
-        node = walker.nextNode();
-    }}
-    throw new Error('element index {index} not found');
-}})()"#,
-        index = index,
-        value = escaped
-    )
+            return 'selected';"#
+    );
+    element_action_js(index, &action)
 }
