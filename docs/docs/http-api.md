@@ -534,6 +534,57 @@ curl -X POST http://localhost:9867/profiles \
 
 ---
 
+### 19. `GET /tabs/:tab_id/url` — Get Current URL
+
+Returns the current page URL.
+
+### 20. `GET /tabs/:tab_id/title` — Get Page Title
+
+Returns the current page title.
+
+### 21. `GET /tabs/:tab_id/html` — Get Page HTML
+
+Returns the full HTML content of the page.
+
+### 22. `POST /tabs/:tab_id/lock` — Acquire Tab Lock
+
+Lock a tab for exclusive access (multi-agent safety).
+
+```bash
+curl -X POST http://localhost:9867/tabs/t1/lock \
+  -H "Content-Type: application/json" \
+  -d '{"owner": "agent-a", "ttl_secs": 60}'
+```
+
+**Response (200):** `{"locked": true, "owner": "agent-a", "ttl_secs": 60}`
+**Response (409 Conflict):** `{"error": "tab already locked", "current_owner": "agent-b"}`
+
+### 23. `DELETE /tabs/:tab_id/lock` — Release Tab Lock
+
+Release a previously acquired lock. Only the owner can release.
+
+```bash
+curl -X DELETE http://localhost:9867/tabs/t1/lock \
+  -H "Content-Type: application/json" \
+  -d '{"owner": "agent-a"}'
+```
+
+**Response (200):** `{"unlocked": true}`
+**Response (403):** `{"error": "not the lock owner"}`
+
+### 24. `GET /tabs/:tab_id/lock` — Check Tab Lock Status
+
+Check if a tab is currently locked.
+
+```bash
+curl http://localhost:9867/tabs/t1/lock
+```
+
+**Response (unlocked):** `{"locked": false}`
+**Response (locked):** `{"locked": true, "owner": "agent-a", "ttl_secs": 60}`
+
+---
+
 ## Error Handling
 
 All error responses follow a consistent format:

@@ -5,7 +5,7 @@ title: MCP Tools Reference
 
 # MCP Tools Reference
 
-OneCrawl exposes **51 MCP tools** across **9 namespaces** for seamless integration with AI agents, coding assistants, and agentic workflows.
+OneCrawl exposes **43 MCP tools** across **10 namespaces** for seamless integration with AI agents, coding assistants, and agentic workflows.
 
 Start the MCP server:
 
