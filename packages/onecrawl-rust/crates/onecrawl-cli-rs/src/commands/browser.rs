@@ -44,6 +44,19 @@ where
 // ---------------------------------------------------------------------------
 
 pub async fn navigate(url: &str, wait: u64) {
+    // Try proxy first (avoids CDP reconnect overhead)
+    if let Some(proxy) = super::proxy::ServerProxy::from_session().await {
+        match proxy.navigate(url).await {
+            Ok(_) => {
+                if wait > 0 {
+                    tokio::time::sleep(std::time::Duration::from_millis(wait)).await;
+                }
+                println!("{} Navigated to {} {}", "✓".green(), url.cyan(), "(proxy)".dimmed());
+                return;
+            }
+            Err(_) => {} // fall through to CDP
+        }
+    }
     with_page(|page| async move {
         onecrawl_cdp::navigation::goto(&page, url)
             .await
@@ -95,6 +108,41 @@ pub async fn reload() {
 // ---------------------------------------------------------------------------
 
 pub async fn get(what: &str, selector: Option<&str>) {
+    // Proxy fast-path for simple content retrieval (no selector)
+    if selector.is_none() {
+        if let Some(proxy) = super::proxy::ServerProxy::from_session().await {
+            match what {
+                "text" => {
+                    if let Ok(text) = proxy.get_text().await {
+                        println!("{text}");
+                        return;
+                    }
+                }
+                "url" => {
+                    if let Ok(val) = proxy.evaluate("window.location.href").await {
+                        let url = val["result"].as_str().unwrap_or("");
+                        println!("{url}");
+                        return;
+                    }
+                }
+                "title" => {
+                    if let Ok(val) = proxy.evaluate("document.title").await {
+                        let title = val["result"].as_str().unwrap_or("");
+                        println!("{title}");
+                        return;
+                    }
+                }
+                "html" => {
+                    if let Ok(val) = proxy.evaluate("document.documentElement.outerHTML").await {
+                        let html = val["result"].as_str().unwrap_or("");
+                        println!("{html}");
+                        return;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
     with_page(|page| async move {
         match what {
             "url" => {
@@ -154,6 +202,21 @@ pub async fn get(what: &str, selector: Option<&str>) {
 }
 
 pub async fn eval(expression: &str) {
+    // Try proxy first
+    if let Some(proxy) = super::proxy::ServerProxy::from_session().await {
+        if let Ok(val) = proxy.evaluate(expression).await {
+            let result = &val["result"];
+            match result {
+                serde_json::Value::String(s) => println!("{s}"),
+                serde_json::Value::Null => println!("undefined"),
+                other => println!(
+                    "{}",
+                    serde_json::to_string_pretty(other).unwrap_or_default()
+                ),
+            }
+            return;
+        }
+    }
     with_page(|page| async move {
         let val = onecrawl_cdp::page::evaluate_js(&page, expression)
             .await
@@ -431,6 +494,23 @@ pub async fn screenshot(
     format: &str,
     quality: Option<u32>,
 ) {
+    // Proxy fast-path for simple PNG screenshots (no element selector, no custom format)
+    if element.is_none() && format == "png" && quality.is_none() {
+        if let Some(proxy) = super::proxy::ServerProxy::from_session().await {
+            if let Ok(bytes) = proxy.screenshot().await {
+                if std::fs::write(output, &bytes).is_ok() {
+                    println!(
+                        "{} Screenshot saved to {} ({} bytes) {}",
+                        "✓".green(),
+                        output.cyan(),
+                        bytes.len(),
+                        "(proxy)".dimmed()
+                    );
+                    return;
+                }
+            }
+        }
+    }
     let out = output.to_string();
     let elem = element.map(String::from);
     let fmt = format.to_string();

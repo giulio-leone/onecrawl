@@ -1920,9 +1920,11 @@ dependencies = [
 name = "onecrawl-cli-rs"
 version = "1.0.0"
 dependencies = [
+ "base64",
  "clap",
  "colored",
  "hex",
+ "libc",
  "onecrawl-cdp",
  "onecrawl-core",
  "onecrawl-crypto",
@@ -1930,6 +1932,7 @@ dependencies = [
  "onecrawl-server",
  "onecrawl-storage",
  "pretty_assertions",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "tokio",
