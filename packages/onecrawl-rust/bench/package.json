@@ -1,0 +1,16 @@
+{
+  "name": "onecrawl-benchmarks",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bench:puppeteer": "node puppeteer-bench.mjs",
+    "bench:playwright": "node playwright-bench.mjs",
+    "bench:onecrawl": "node onecrawl-bench.mjs",
+    "bench:all": "node compare.mjs"
+  },
+  "dependencies": {
+    "puppeteer": "^24.0.0",
+    "playwright": "^1.50.0"
+  }
+}
