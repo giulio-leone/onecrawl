@@ -32,10 +32,11 @@ impl Default for RateLimitConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RateLimitState {
     pub config: RateLimitConfig,
+    /// Timestamps kept sorted for O(log n) window queries via binary search.
     pub timestamps: Vec<f64>,
     pub total_requests: usize,
     pub total_throttled: usize,
-    pub status: String,
+    pub status: &'static str,
 }
 
 /// Statistics snapshot of the rate limiter.
@@ -48,7 +49,7 @@ pub struct RateLimitStats {
     pub remaining_this_second: f64,
     pub remaining_this_minute: f64,
     pub remaining_this_hour: f64,
-    pub status: String,
+    pub status: &'static str,
     pub next_allowed_ms: f64,
 }
 
@@ -62,12 +63,25 @@ fn now_ms() -> f64 {
 
 fn prune(timestamps: &mut Vec<f64>, now: f64) {
     let cutoff = now - 3_600_000.0; // keep last hour
-    timestamps.retain(|&t| t > cutoff);
+    // Binary search for the partition point — O(log n) instead of O(n) retain
+    let pos = timestamps.partition_point(|&t| t <= cutoff);
+    if pos > 0 {
+        timestamps.drain(..pos);
+    }
 }
 
+/// O(log n) count of timestamps within a time window using binary search.
 fn count_in_window(timestamps: &[f64], now: f64, window_ms: f64) -> usize {
     let cutoff = now - window_ms;
-    timestamps.iter().filter(|&&t| t > cutoff).count()
+    let start = timestamps.partition_point(|&t| t <= cutoff);
+    timestamps.len() - start
+}
+
+/// O(log n) find oldest timestamp within a time window.
+fn oldest_in_window(timestamps: &[f64], now: f64, window_ms: f64) -> Option<f64> {
+    let cutoff = now - window_ms;
+    let start = timestamps.partition_point(|&t| t <= cutoff);
+    timestamps.get(start).copied()
 }
 
 impl RateLimitState {
@@ -78,7 +92,7 @@ impl RateLimitState {
             timestamps: Vec::new(),
             total_requests: 0,
             total_throttled: 0,
-            status: "active".to_string(),
+            status: "active",
         }
     }
 }
@@ -103,11 +117,11 @@ pub fn record_request(state: &mut RateLimitState) -> bool {
     if can_proceed(state) {
         state.timestamps.push(now);
         state.total_requests += 1;
-        state.status = "active".to_string();
+        state.status = "active";
         true
     } else {
         state.total_throttled += 1;
-        state.status = "throttled".to_string();
+        state.status = "throttled";
         false
     }
 }
@@ -123,46 +137,34 @@ pub fn wait_duration(state: &RateLimitState) -> u64 {
 
     // Check per-second window
     let in_second = count_in_window(&state.timestamps, now, 1000.0) as f64;
-    if in_second >= state.config.max_requests_per_second
-        && let Some(&oldest_in_window) = state
-            .timestamps
-            .iter()
-            .filter(|&&t| t > now - 1000.0)
-            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-    {
-        let needed = oldest_in_window + 1000.0 - now;
-        if needed > wait {
-            wait = needed;
+    if in_second >= state.config.max_requests_per_second {
+        if let Some(oldest) = oldest_in_window(&state.timestamps, now, 1000.0) {
+            let needed = oldest + 1000.0 - now;
+            if needed > wait {
+                wait = needed;
+            }
         }
     }
 
     // Check per-minute window
     let in_minute = count_in_window(&state.timestamps, now, 60_000.0) as f64;
-    if in_minute >= state.config.max_requests_per_minute
-        && let Some(&oldest_in_window) = state
-            .timestamps
-            .iter()
-            .filter(|&&t| t > now - 60_000.0)
-            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-    {
-        let needed = oldest_in_window + 60_000.0 - now;
-        if needed > wait {
-            wait = needed;
+    if in_minute >= state.config.max_requests_per_minute {
+        if let Some(oldest) = oldest_in_window(&state.timestamps, now, 60_000.0) {
+            let needed = oldest + 60_000.0 - now;
+            if needed > wait {
+                wait = needed;
+            }
         }
     }
 
     // Check per-hour window
     let in_hour = count_in_window(&state.timestamps, now, 3_600_000.0) as f64;
-    if in_hour >= state.config.max_requests_per_hour
-        && let Some(&oldest_in_window) = state
-            .timestamps
-            .iter()
-            .filter(|&&t| t > now - 3_600_000.0)
-            .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-    {
-        let needed = oldest_in_window + 3_600_000.0 - now;
-        if needed > wait {
-            wait = needed;
+    if in_hour >= state.config.max_requests_per_hour {
+        if let Some(oldest) = oldest_in_window(&state.timestamps, now, 3_600_000.0) {
+            let needed = oldest + 3_600_000.0 - now;
+            if needed > wait {
+                wait = needed;
+            }
         }
     }
 
@@ -190,7 +192,7 @@ pub fn get_stats(state: &RateLimitState) -> RateLimitStats {
         remaining_this_second: (state.config.max_requests_per_second - in_second).max(0.0),
         remaining_this_minute: (state.config.max_requests_per_minute - in_minute).max(0.0),
         remaining_this_hour: (state.config.max_requests_per_hour - in_hour).max(0.0),
-        status: state.status.clone(),
+        status: state.status,
         next_allowed_ms: wait_duration(state) as f64,
     }
 }
@@ -200,14 +202,14 @@ pub fn reset(state: &mut RateLimitState) {
     state.timestamps.clear();
     state.total_requests = 0;
     state.total_throttled = 0;
-    state.status = "active".to_string();
+    state.status = "active";
 }
 
 /// Return a map of preset rate limit configurations.
-pub fn presets() -> HashMap<String, RateLimitConfig> {
-    let mut map = HashMap::new();
+pub fn presets() -> HashMap<&'static str, RateLimitConfig> {
+    let mut map = HashMap::with_capacity(4);
     map.insert(
-        "conservative".to_string(),
+        "conservative",
         RateLimitConfig {
             max_requests_per_second: 0.5,
             max_requests_per_minute: 20.0,
@@ -217,7 +219,7 @@ pub fn presets() -> HashMap<String, RateLimitConfig> {
         },
     );
     map.insert(
-        "moderate".to_string(),
+        "moderate",
         RateLimitConfig {
             max_requests_per_second: 2.0,
             max_requests_per_minute: 60.0,
@@ -227,7 +229,7 @@ pub fn presets() -> HashMap<String, RateLimitConfig> {
         },
     );
     map.insert(
-        "aggressive".to_string(),
+        "aggressive",
         RateLimitConfig {
             max_requests_per_second: 5.0,
             max_requests_per_minute: 200.0,
@@ -237,7 +239,7 @@ pub fn presets() -> HashMap<String, RateLimitConfig> {
         },
     );
     map.insert(
-        "unlimited".to_string(),
+        "unlimited",
         RateLimitConfig {
             max_requests_per_second: 1000.0,
             max_requests_per_minute: 60000.0,

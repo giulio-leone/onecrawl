@@ -90,7 +90,7 @@ pub struct CrawlState {
 
 // ── helpers ────────────────────────────────────────────────────
 
-fn extract_domain(url_str: &str) -> String {
+fn extract_domain(url_str: &str) -> &str {
     url_str
         .split("://")
         .nth(1)
@@ -101,7 +101,6 @@ fn extract_domain(url_str: &str) -> String {
         .split(':')
         .next()
         .unwrap_or("")
-        .to_string()
 }
 
 fn now_epoch_ms() -> f64 {
@@ -128,38 +127,44 @@ fn is_non_page_url(url: &str) -> bool {
     asset_exts.iter().any(|ext| path.ends_with(ext))
 }
 
-/// Check whether `url` matches any exclude substring pattern.
-fn matches_exclude(url: &str, patterns: &[String]) -> bool {
-    let lower = url.to_ascii_lowercase();
-    patterns
-        .iter()
-        .any(|p| lower.contains(&p.to_ascii_lowercase()))
+/// Check whether `url` matches any exclude substring pattern (pre-lowercased).
+fn matches_exclude(url_lower: &str, patterns_lower: &[String]) -> bool {
+    patterns_lower.iter().any(|p| url_lower.contains(p.as_str()))
 }
 
-/// Check whether `url` matches at least one include pattern (empty = allow all).
-fn matches_include(url: &str, patterns: &[String]) -> bool {
-    if patterns.is_empty() {
+/// Check whether `url` matches at least one include pattern (pre-lowercased, empty = allow all).
+fn matches_include(url_lower: &str, patterns_lower: &[String]) -> bool {
+    if patterns_lower.is_empty() {
         return true;
     }
-    let lower = url.to_ascii_lowercase();
-    patterns
-        .iter()
-        .any(|p| lower.contains(&p.to_ascii_lowercase()))
+    patterns_lower.iter().any(|p| url_lower.contains(p.as_str()))
 }
 
 // ── public API ─────────────────────────────────────────────────
 
 /// Run a sequential crawl using the provided browser `page`.
 pub async fn crawl(page: &Page, config: SpiderConfig) -> Result<Vec<CrawlResult>> {
-    let mut visited: HashSet<String> = HashSet::new();
+    let mut visited: HashSet<String> = HashSet::with_capacity(config.max_pages);
     let mut queue: Vec<(String, usize)> =
         config.start_urls.iter().map(|u| (u.clone(), 0)).collect();
-    let mut results: Vec<CrawlResult> = Vec::new();
+    let mut results: Vec<CrawlResult> = Vec::with_capacity(config.max_pages);
+
+    // Pre-lowercase patterns once instead of per-URL
+    let exclude_lower: Vec<String> = config
+        .exclude_patterns
+        .iter()
+        .map(|p| p.to_ascii_lowercase())
+        .collect();
+    let include_lower: Vec<String> = config
+        .url_patterns
+        .iter()
+        .map(|p| p.to_ascii_lowercase())
+        .collect();
 
     let start_domain = config
         .start_urls
         .first()
-        .map(|u| extract_domain(u))
+        .map(|u| extract_domain(u).to_string())
         .unwrap_or_default();
 
     while let Some((url, depth)) = queue.pop() {
@@ -175,10 +180,11 @@ pub async fn crawl(page: &Page, config: SpiderConfig) -> Result<Vec<CrawlResult>
         if is_non_page_url(&url) {
             continue;
         }
-        if matches_exclude(&url, &config.exclude_patterns) {
+        let url_lower = url.to_ascii_lowercase();
+        if matches_exclude(&url_lower, &exclude_lower) {
             continue;
         }
-        if !matches_include(&url, &config.url_patterns) {
+        if !matches_include(&url_lower, &include_lower) {
             continue;
         }
         if config.same_domain_only && extract_domain(&url) != start_domain {
@@ -312,7 +318,7 @@ pub fn summarize(results: &[CrawlResult]) -> CrawlSummary {
         total_links += r.links_found;
         total_duration += r.duration_ms;
 
-        let domain = extract_domain(&r.url);
+        let domain = extract_domain(&r.url).to_string();
         *domain_stats.entry(domain).or_insert(0) += 1;
     }
 

@@ -63,12 +63,18 @@ pub struct StructuredDataResult {
 
 // ─────────────────────────── Extraction ──────────────────────
 
-/// Extract all structured data types at once.
+/// Extract all structured data types concurrently via tokio::join!.
 pub async fn extract_all(page: &Page) -> Result<StructuredDataResult> {
-    let json_ld = extract_json_ld(page).await?;
-    let open_graph = extract_open_graph(page).await?;
-    let twitter_card = extract_twitter_card(page).await?;
-    let metadata = extract_metadata(page).await?;
+    let (json_ld, open_graph, twitter_card, metadata) = tokio::join!(
+        extract_json_ld(page),
+        extract_open_graph(page),
+        extract_twitter_card(page),
+        extract_metadata(page),
+    );
+    let json_ld = json_ld?;
+    let open_graph = open_graph?;
+    let twitter_card = twitter_card?;
+    let metadata = metadata?;
 
     let mut schema_types: Vec<String> = json_ld.iter().map(|j| j.data_type.clone()).collect();
     schema_types.dedup();

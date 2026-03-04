@@ -5,7 +5,9 @@
 use chromiumoxide::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt::Write;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtractionRule {
@@ -49,145 +51,106 @@ pub struct ExtractionResult {
     pub errors: Vec<String>,
 }
 
+/// Build JS expression for a single field extraction. Shared between multi-item and single-item.
+fn write_field_extractor(
+    buf: &mut String,
+    f: &ExtractionRule,
+    root: &str, // "el" for multi-item, "document" for single
+    target: &str, // "fields" or "result"
+    include_required_check: bool,
+) {
+    let escaped_selector = f.selector.replace('\'', "\\'");
+    let escaped_name = f.name.replace('\'', "\\'");
+
+    let property = if f.extract == "text" {
+        "textContent"
+    } else if f.extract == "html" {
+        "innerHTML"
+    } else if f.extract == "href" {
+        "href"
+    } else if f.extract == "src" {
+        "src"
+    } else {
+        "textContent"
+    };
+
+    if let Some(attr_name) = f.extract.strip_prefix("attr:") {
+        let escaped_attr = attr_name.replace('\'', "\\'");
+        let _ = write!(
+            buf,
+            "{target}['{escaped_name}'] = ({root}.querySelector('{escaped_selector}')?.getAttribute('{escaped_attr}') || '')"
+        );
+    } else {
+        let _ = write!(
+            buf,
+            "{target}['{escaped_name}'] = ({root}.querySelector('{escaped_selector}')?.{property} || '')"
+        );
+    }
+
+    match f.transform.as_deref() {
+        Some("trim") => buf.push_str(".trim()"),
+        Some("lowercase") => buf.push_str(".trim().toLowerCase()"),
+        Some("uppercase") => buf.push_str(".trim().toUpperCase()"),
+        Some("strip_tags") => buf.push_str(".replace(/<[^>]*>/g, '').trim()"),
+        _ => {}
+    }
+    buf.push_str(";\n                ");
+
+    if include_required_check && f.required {
+        let _ = write!(
+            buf,
+            "if (!{target}['{escaped_name}']) {{ errors.push('missing required field: {escaped_name}'); }}\n                "
+        );
+    }
+}
+
 fn build_extract_js(fields: &[ExtractionRule], item_selector: &str, page_num: usize) -> String {
-    let field_extractors: Vec<String> = fields
-        .iter()
-        .map(|f| {
-            let extract_expr = if f.extract == "text" {
-                format!(
-                    "el.querySelector('{}')?.textContent || ''",
-                    f.selector.replace('\'', "\\'")
-                )
-            } else if f.extract == "html" {
-                format!(
-                    "el.querySelector('{}')?.innerHTML || ''",
-                    f.selector.replace('\'', "\\'")
-                )
-            } else if f.extract == "href" {
-                format!(
-                    "el.querySelector('{}')?.href || ''",
-                    f.selector.replace('\'', "\\'")
-                )
-            } else if f.extract == "src" {
-                format!(
-                    "el.querySelector('{}')?.src || ''",
-                    f.selector.replace('\'', "\\'")
-                )
-            } else if let Some(attr_name) = f.extract.strip_prefix("attr:") {
-                format!(
-                    "el.querySelector('{}')?.getAttribute('{}') || ''",
-                    f.selector.replace('\'', "\\'"),
-                    attr_name.replace('\'', "\\'")
-                )
-            } else {
-                format!(
-                    "el.querySelector('{}')?.textContent || ''",
-                    f.selector.replace('\'', "\\'")
-                )
-            };
-
-            let transform_expr = match f.transform.as_deref() {
-                Some("trim") => ".trim()",
-                Some("lowercase") => ".trim().toLowerCase()",
-                Some("uppercase") => ".trim().toUpperCase()",
-                Some("strip_tags") => ".replace(/<[^>]*>/g, '').trim()",
-                _ => "",
-            };
-
-            format!(
-                "fields['{}'] = ({}){}; if ({} && !fields['{}']) {{ errors.push('missing required field: {}'); }}",
-                f.name.replace('\'', "\\'"),
-                extract_expr,
-                transform_expr,
-                if f.required { "true" } else { "false" },
-                f.name.replace('\'', "\\'"),
-                f.name.replace('\'', "\\'"),
-            )
-        })
-        .collect();
-
-    format!(
+    let escaped_item = item_selector.replace('\'', "\\'");
+    let mut js = String::with_capacity(256 + fields.len() * 128);
+    let _ = write!(
+        js,
         r#"(() => {{
             const items = [];
             const errors = [];
-            const containers = document.querySelectorAll('{}');
+            const containers = document.querySelectorAll('{escaped_item}');
             let idx = 0;
             for (const el of containers) {{
                 const fields = {{}};
-                {}
-                items.push({{ index: idx, page: {}, fields }});
+                "#
+    );
+
+    for f in fields {
+        write_field_extractor(&mut js, f, "el", "fields", true);
+    }
+
+    let _ = write!(
+        js,
+        r#"items.push({{ index: idx, page: {page_num}, fields }});
                 idx++;
             }}
             return {{ items, errors }};
-        }})()"#,
-        item_selector.replace('\'', "\\'"),
-        field_extractors.join("\n                "),
-        page_num,
-    )
+        }})()"#
+    );
+    js
 }
 
 fn build_single_extract_js(rules: &[ExtractionRule]) -> String {
-    let field_extractors: Vec<String> = rules
-        .iter()
-        .map(|f| {
-            let extract_expr = if f.extract == "text" {
-                format!(
-                    "document.querySelector('{}')?.textContent || ''",
-                    f.selector.replace('\'', "\\'")
-                )
-            } else if f.extract == "html" {
-                format!(
-                    "document.querySelector('{}')?.innerHTML || ''",
-                    f.selector.replace('\'', "\\'")
-                )
-            } else if f.extract == "href" {
-                format!(
-                    "document.querySelector('{}')?.href || ''",
-                    f.selector.replace('\'', "\\'")
-                )
-            } else if f.extract == "src" {
-                format!(
-                    "document.querySelector('{}')?.src || ''",
-                    f.selector.replace('\'', "\\'")
-                )
-            } else if let Some(attr_name) = f.extract.strip_prefix("attr:") {
-                format!(
-                    "document.querySelector('{}')?.getAttribute('{}') || ''",
-                    f.selector.replace('\'', "\\'"),
-                    attr_name.replace('\'', "\\'")
-                )
-            } else {
-                format!(
-                    "document.querySelector('{}')?.textContent || ''",
-                    f.selector.replace('\'', "\\'")
-                )
-            };
+    let mut js = String::with_capacity(128 + rules.len() * 128);
+    js.push_str(
+        r#"(() => {
+            const result = {};
+            "#,
+    );
 
-            let transform_expr = match f.transform.as_deref() {
-                Some("trim") => ".trim()",
-                Some("lowercase") => ".trim().toLowerCase()",
-                Some("uppercase") => ".trim().toUpperCase()",
-                Some("strip_tags") => ".replace(/<[^>]*>/g, '').trim()",
-                _ => "",
-            };
+    for f in rules {
+        write_field_extractor(&mut js, f, "document", "result", false);
+    }
 
-            format!(
-                "result['{}'] = ({}){};",
-                f.name.replace('\'', "\\'"),
-                extract_expr,
-                transform_expr,
-            )
-        })
-        .collect();
-
-    format!(
-        r#"(() => {{
-            const result = {{}};
-            {}
-            return result;
-        }})()"#,
-        field_extractors.join("\n            "),
-    )
+    js.push_str(
+        r#"return result;
+        })()"#,
+    );
+    js
 }
 
 /// Extract all items from the current page using a schema.
@@ -301,11 +264,21 @@ pub async fn extract_single(
     Ok(map)
 }
 
-fn escape_csv_field(s: &str) -> String {
+fn escape_csv_field<'a>(s: &'a str) -> Cow<'a, str> {
     if s.contains(',') || s.contains('"') || s.contains('\n') || s.contains('\r') {
-        format!("\"{}\"", s.replace('"', "\"\""))
+        let mut buf = String::with_capacity(s.len() + 4);
+        buf.push('"');
+        for ch in s.chars() {
+            if ch == '"' {
+                buf.push_str("\"\"");
+            } else {
+                buf.push(ch);
+            }
+        }
+        buf.push('"');
+        Cow::Owned(buf)
     } else {
-        s.to_string()
+        Cow::Borrowed(s)
     }
 }
 
@@ -316,35 +289,37 @@ pub fn export_csv(items: &[ExtractedItem], path: &std::path::Path) -> Result<usi
         return Ok(0);
     }
 
-    // Collect all field names from all items for consistent columns
+    // Collect all field names using a set for O(1) lookup
+    let mut col_set = std::collections::HashSet::with_capacity(16);
     let mut columns: Vec<String> = Vec::new();
     for item in items {
         for key in item.fields.keys() {
-            if !columns.contains(key) {
+            if col_set.insert(key.clone()) {
                 columns.push(key.clone());
             }
         }
     }
     columns.sort();
 
-    let mut csv = String::new();
+    let mut csv = String::with_capacity(items.len() * columns.len() * 16);
     // Header
-    csv.push_str(
-        &columns
-            .iter()
-            .map(|c| escape_csv_field(c))
-            .collect::<Vec<_>>()
-            .join(","),
-    );
+    for (i, c) in columns.iter().enumerate() {
+        if i > 0 {
+            csv.push(',');
+        }
+        csv.push_str(&escape_csv_field(c));
+    }
     csv.push('\n');
 
     // Rows
     for item in items {
-        let row: Vec<String> = columns
-            .iter()
-            .map(|col| escape_csv_field(item.fields.get(col).map(|s| s.as_str()).unwrap_or("")))
-            .collect();
-        csv.push_str(&row.join(","));
+        for (i, col) in columns.iter().enumerate() {
+            if i > 0 {
+                csv.push(',');
+            }
+            let val = item.fields.get(col).map(|s| s.as_str()).unwrap_or("");
+            csv.push_str(&escape_csv_field(val));
+        }
         csv.push('\n');
     }
 

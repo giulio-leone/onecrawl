@@ -89,11 +89,13 @@ return JSON.stringify({
 
 /// Compute Jaccard word similarity between two text strings.
 fn jaccard_similarity(a: &str, b: &str) -> f64 {
-    let set_a: HashSet<&str> = a.split_whitespace().collect();
-    let set_b: HashSet<&str> = b.split_whitespace().collect();
-    if set_a.is_empty() && set_b.is_empty() {
+    let words_a: Vec<&str> = a.split_whitespace().collect();
+    let words_b: Vec<&str> = b.split_whitespace().collect();
+    if words_a.is_empty() && words_b.is_empty() {
         return 1.0;
     }
+    let set_a: HashSet<&str> = HashSet::from_iter(words_a);
+    let set_b: HashSet<&str> = HashSet::from_iter(words_b);
     let intersection = set_a.intersection(&set_b).count();
     let union = set_a.union(&set_b).count();
     if union == 0 {
@@ -105,8 +107,10 @@ fn jaccard_similarity(a: &str, b: &str) -> f64 {
 
 /// Compare two snapshots and return the diff.
 pub fn compare_snapshots(before: &DomSnapshot, after: &DomSnapshot) -> SnapshotDiff {
-    let before_links: HashSet<&str> = before.links.iter().map(|s| s.as_str()).collect();
-    let after_links: HashSet<&str> = after.links.iter().map(|s| s.as_str()).collect();
+    let before_links: HashSet<&str> =
+        HashSet::from_iter(before.links.iter().map(String::as_str));
+    let after_links: HashSet<&str> =
+        HashSet::from_iter(after.links.iter().map(String::as_str));
     let links_added: Vec<String> = after_links
         .difference(&before_links)
         .map(|s| (*s).to_string())
@@ -116,8 +120,10 @@ pub fn compare_snapshots(before: &DomSnapshot, after: &DomSnapshot) -> SnapshotD
         .map(|s| (*s).to_string())
         .collect();
 
-    let before_imgs: HashSet<&str> = before.images.iter().map(|s| s.as_str()).collect();
-    let after_imgs: HashSet<&str> = after.images.iter().map(|s| s.as_str()).collect();
+    let before_imgs: HashSet<&str> =
+        HashSet::from_iter(before.images.iter().map(String::as_str));
+    let after_imgs: HashSet<&str> =
+        HashSet::from_iter(after.images.iter().map(String::as_str));
     let images_added: Vec<String> = after_imgs
         .difference(&before_imgs)
         .map(|s| (*s).to_string())
@@ -127,19 +133,18 @@ pub fn compare_snapshots(before: &DomSnapshot, after: &DomSnapshot) -> SnapshotD
         .map(|s| (*s).to_string())
         .collect();
 
+    // Meta diff: iterate the smaller map, check against the larger
     let mut meta_changes = Vec::new();
-    let mut all_keys: HashSet<&str> = HashSet::new();
-    for k in before.meta.keys() {
-        all_keys.insert(k.as_str());
+    for (key, new_val) in &after.meta {
+        let old_val = before.meta.get(key).map(String::as_str).unwrap_or("");
+        if old_val != new_val {
+            meta_changes.push((key.clone(), old_val.to_string(), new_val.clone()));
+        }
     }
-    for k in after.meta.keys() {
-        all_keys.insert(k.as_str());
-    }
-    for key in &all_keys {
-        let old = before.meta.get(*key).map(|s| s.as_str()).unwrap_or("");
-        let new = after.meta.get(*key).map(|s| s.as_str()).unwrap_or("");
-        if old != new {
-            meta_changes.push(((*key).to_string(), old.to_string(), new.to_string()));
+    // Keys removed in after
+    for (key, old_val) in &before.meta {
+        if !after.meta.contains_key(key) {
+            meta_changes.push((key.clone(), old_val.clone(), String::new()));
         }
     }
 

@@ -190,7 +190,7 @@ pub fn apply_step(
 
         PipelineStep::Deduplicate { field } => {
             let before = items.len();
-            let mut seen = HashSet::new();
+            let mut seen = HashSet::with_capacity(before);
             let deduped: Vec<_> = items
                 .into_iter()
                 .filter(|item| {
@@ -205,14 +205,12 @@ pub fn apply_step(
         PipelineStep::Sort { field, descending } => {
             let mut sorted = items;
             let desc = *descending;
-            let f = field.clone();
             sorted.sort_by(|a, b| {
-                let va = a.get(&f).cloned().unwrap_or_default();
-                let vb = b.get(&f).cloned().unwrap_or_default();
-                // Try numeric comparison first
+                let va = a.get(field).map(String::as_str).unwrap_or("");
+                let vb = b.get(field).map(String::as_str).unwrap_or("");
                 let cmp = match (va.parse::<f64>(), vb.parse::<f64>()) {
                     (Ok(na), Ok(nb)) => na.partial_cmp(&nb).unwrap_or(std::cmp::Ordering::Equal),
-                    _ => va.cmp(&vb),
+                    _ => va.cmp(vb),
                 };
                 if desc { cmp.reverse() } else { cmp }
             });

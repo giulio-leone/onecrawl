@@ -48,7 +48,7 @@ pub struct LinkStats {
 
 // ── helpers ──────────────────────────────────────────────────────
 
-fn extract_domain(url: &str) -> String {
+fn extract_domain(url: &str) -> &str {
     url.split("://")
         .nth(1)
         .unwrap_or(url)
@@ -58,7 +58,6 @@ fn extract_domain(url: &str) -> String {
         .split(':')
         .next()
         .unwrap_or("")
-        .to_string()
 }
 
 // ── public API ──────────────────────────────────────────────────
@@ -89,12 +88,12 @@ pub async fn extract_links(page: &Page, base_url: &str) -> Result<Vec<LinkEdge>>
     Ok(raw
         .into_iter()
         .map(|l| {
-            let target_domain = extract_domain(&l.href);
+            let is_internal = extract_domain(&l.href) == base_domain;
             LinkEdge {
                 source: source.clone(),
                 target: l.href,
                 anchor_text: l.text,
-                is_internal: target_domain == base_domain,
+                is_internal,
             }
         })
         .collect())
@@ -102,15 +101,15 @@ pub async fn extract_links(page: &Page, base_url: &str) -> Result<Vec<LinkEdge>>
 
 /// Build a link graph from a collection of edges.
 pub fn build_graph(edges: &[LinkEdge]) -> LinkGraph {
-    let mut inbound: HashMap<String, usize> = HashMap::new();
-    let mut outbound: HashMap<String, usize> = HashMap::new();
+    let cap = edges.len();
+    let mut inbound: HashMap<String, usize> = HashMap::with_capacity(cap);
+    let mut outbound: HashMap<String, usize> = HashMap::with_capacity(cap);
     let mut total_internal: usize = 0;
     let mut total_external: usize = 0;
 
     for e in edges {
         *outbound.entry(e.source.clone()).or_default() += 1;
         *inbound.entry(e.target.clone()).or_default() += 1;
-        // Ensure both ends appear in both maps
         inbound.entry(e.source.clone()).or_default();
         outbound.entry(e.target.clone()).or_default();
         if e.is_internal {
@@ -120,27 +119,26 @@ pub fn build_graph(edges: &[LinkEdge]) -> LinkGraph {
         }
     }
 
-    let all_urls: Vec<String> = {
-        let mut set: Vec<String> = inbound.keys().chain(outbound.keys()).cloned().collect();
-        set.sort();
-        set.dedup();
-        set
-    };
-
-    let nodes: Vec<LinkNode> = all_urls
-        .into_iter()
-        .map(|url| {
-            let ib = inbound.get(&url).copied().unwrap_or(0);
-            let ob = outbound.get(&url).copied().unwrap_or(0);
-            LinkNode {
-                url,
-                title: String::new(),
-                inbound: ib,
-                outbound: ob,
-                depth: 0,
-            }
-        })
+    // Use a HashSet for O(1) dedup instead of sort+dedup on Vec
+    let all_urls: std::collections::HashSet<&str> = inbound
+        .keys()
+        .chain(outbound.keys())
+        .map(String::as_str)
         .collect();
+
+    let mut nodes: Vec<LinkNode> = Vec::with_capacity(all_urls.len());
+    for url in all_urls {
+        let ib = inbound.get(url).copied().unwrap_or(0);
+        let ob = outbound.get(url).copied().unwrap_or(0);
+        nodes.push(LinkNode {
+            url: url.to_string(),
+            title: String::new(),
+            inbound: ib,
+            outbound: ob,
+            depth: 0,
+        });
+    }
+    nodes.sort_by(|a, b| a.url.cmp(&b.url));
 
     LinkGraph {
         nodes,
