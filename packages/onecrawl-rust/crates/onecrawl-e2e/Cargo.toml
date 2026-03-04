@@ -22,3 +22,4 @@ assert_cmd = { workspace = true }
 predicates = { workspace = true }
 reqwest = { workspace = true }
 port_check = { workspace = true }
+serial_test = { workspace = true }
