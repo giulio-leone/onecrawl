@@ -1,6 +1,3 @@
-mod cdp_tools;
-mod server;
-
 use clap::Parser;
 
 #[derive(Parser)]
@@ -30,20 +27,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let cli = Cli::parse();
-    let mcp = server::OneCrawlMcp::new(cli.store_path, cli.store_password);
 
     match cli.transport.as_str() {
         "stdio" => {
-            tracing::info!("starting OneCrawl MCP server (stdio transport)");
-            let service = rmcp::ServiceExt::serve(mcp, rmcp::transport::stdio()).await?;
-            tokio::select! {
-                result = service.waiting() => {
-                    result?;
-                }
-                _ = tokio::signal::ctrl_c() => {
-                    tracing::info!("Received shutdown signal, stopping...");
-                }
-            }
+            onecrawl_mcp_rs::start_stdio(cli.store_path, cli.store_password).await?;
         }
         "sse" => {
             eprintln!("SSE transport on port {} (not yet implemented)", cli.port);

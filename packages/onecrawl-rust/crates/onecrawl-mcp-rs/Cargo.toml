@@ -6,6 +6,10 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[lib]
+name = "onecrawl_mcp_rs"
+path = "src/lib.rs"
+
 [[bin]]
 name = "onecrawl-mcp"
 path = "src/main.rs"

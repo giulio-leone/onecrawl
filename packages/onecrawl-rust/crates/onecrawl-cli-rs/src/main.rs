@@ -2684,14 +2684,21 @@ async fn main() {
 
         // ── MCP ─────────────────────────────────────────────────────
         Commands::Mcp { transport } => {
-            println!("OneCrawl MCP Server");
-            println!("  Transport: {transport}");
-            println!();
-            println!("To start the MCP server, run:");
-            println!("  onecrawl-mcp --transport {transport}");
-            println!();
-            println!("Available transports: stdio, sse");
-            println!("43 tools across 7 namespaces: navigation, scraping, crawling, stealth, data, automation, auth");
+            match transport.as_str() {
+                "stdio" => {
+                    onecrawl_mcp_rs::start_stdio(
+                        "/tmp/onecrawl-mcp-store".into(),
+                        "onecrawl-default-key".into(),
+                    )
+                    .await
+                    .unwrap();
+                }
+                other => {
+                    eprintln!("unsupported transport: {other}");
+                    eprintln!("available: stdio");
+                    std::process::exit(1);
+                }
+            }
         }
 
         // ── Version ─────────────────────────────────────────────────
@@ -2704,8 +2711,8 @@ async fn main() {
             println!("  parser    onecrawl-parser (lol_html, scraper)");
             println!("  storage   onecrawl-storage (sled, encrypted KV)");
             println!("  cdp       onecrawl-cdp (63 modules)");
-            println!("  server    onecrawl-server (axum, 18 endpoints)");
-            println!("  mcp       onecrawl-mcp (43 tools, 7 namespaces)");
+            println!("  server    onecrawl-server (axum, 21 endpoints)");
+            println!("  mcp       onecrawl-mcp (43 tools, 10 namespaces)");
             println!();
             println!("Profile: {}", if cfg!(debug_assertions) { "debug" } else { "release" });
         }

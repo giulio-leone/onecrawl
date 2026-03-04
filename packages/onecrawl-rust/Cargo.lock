@@ -1958,6 +1958,7 @@ dependencies = [
  "onecrawl-cdp",
  "onecrawl-core",
  "onecrawl-crypto",
+ "onecrawl-mcp-rs",
  "onecrawl-parser",
  "onecrawl-server",
  "onecrawl-storage",

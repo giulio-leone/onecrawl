@@ -18,6 +18,7 @@ onecrawl-parser = { path = "../onecrawl-parser" }
 onecrawl-storage = { path = "../onecrawl-storage" }
 onecrawl-cdp = { path = "../onecrawl-cdp" }
 onecrawl-server = { path = "../onecrawl-server" }
+onecrawl-mcp-rs = { path = "../onecrawl-mcp-rs" }
 clap = { workspace = true }
 colored = { workspace = true }
 tokio = { workspace = true }
