@@ -185,6 +185,7 @@ impl OneCrawlMcp {
     // ── Crypto tools ──
 
     #[tool(
+        name = "crypto.encrypt",
         description = "Encrypt text with AES-256-GCM. Returns base64-encoded ciphertext (salt+nonce+ct)."
     )]
     fn encrypt(
@@ -214,7 +215,7 @@ impl OneCrawlMcp {
         )]))
     }
 
-    #[tool(description = "Decrypt base64-encoded AES-256-GCM ciphertext (salt+nonce+ct).")]
+    #[tool(name = "crypto.decrypt", description = "Decrypt base64-encoded AES-256-GCM ciphertext (salt+nonce+ct).")]
     fn decrypt(
         &self,
         Parameters(req): Parameters<DecryptRequest>,
@@ -243,7 +244,7 @@ impl OneCrawlMcp {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(description = "Generate a PKCE S256 challenge pair (code_verifier + code_challenge).")]
+    #[tool(name = "crypto.generate_pkce", description = "Generate a PKCE S256 challenge pair (code_verifier + code_challenge).")]
     fn generate_pkce(&self) -> Result<CallToolResult, McpError> {
         let challenge =
             onecrawl_crypto::generate_pkce_challenge().map_err(|e| mcp_err(e.to_string()))?;
@@ -253,7 +254,7 @@ impl OneCrawlMcp {
         })
     }
 
-    #[tool(description = "Generate a 6-digit TOTP code from a base32 secret.")]
+    #[tool(name = "crypto.generate_totp", description = "Generate a 6-digit TOTP code from a base32 secret.")]
     fn generate_totp(
         &self,
         Parameters(req): Parameters<TotpRequest>,
@@ -269,7 +270,7 @@ impl OneCrawlMcp {
 
     // ── Parser tools ──
 
-    #[tool(description = "Parse HTML into an accessibility tree (text representation).")]
+    #[tool(name = "parser.parse_a11y_tree", description = "Parse HTML into an accessibility tree (text representation).")]
     fn parse_accessibility_tree(
         &self,
         Parameters(req): Parameters<HtmlRequest>,
@@ -281,6 +282,7 @@ impl OneCrawlMcp {
     }
 
     #[tool(
+        name = "parser.query_selector",
         description = "Query HTML with a CSS selector. Returns JSON array of matching elements."
     )]
     fn query_selector(
@@ -293,7 +295,7 @@ impl OneCrawlMcp {
         Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 
-    #[tool(description = "Extract visible text from HTML.")]
+    #[tool(name = "parser.extract_text", description = "Extract visible text from HTML.")]
     fn html_extract_text(
         &self,
         Parameters(req): Parameters<HtmlRequest>,
@@ -306,6 +308,7 @@ impl OneCrawlMcp {
     }
 
     #[tool(
+        name = "parser.extract_links",
         description = "Extract all links from HTML. Returns JSON array with href, text, is_external."
     )]
     fn html_extract_links(
@@ -327,7 +330,7 @@ impl OneCrawlMcp {
 
     // ── Storage tools ──
 
-    #[tool(description = "Store a key-value pair in encrypted storage.")]
+    #[tool(name = "storage.set", description = "Store a key-value pair in encrypted storage.")]
     fn store_set(
         &self,
         Parameters(req): Parameters<StoreSetRequest>,
@@ -342,7 +345,7 @@ impl OneCrawlMcp {
         ))]))
     }
 
-    #[tool(description = "Retrieve a value from encrypted storage by key.")]
+    #[tool(name = "storage.get", description = "Retrieve a value from encrypted storage by key.")]
     fn store_get(
         &self,
         Parameters(req): Parameters<StoreGetRequest>,
@@ -361,7 +364,7 @@ impl OneCrawlMcp {
         }
     }
 
-    #[tool(description = "List all keys in encrypted storage.")]
+    #[tool(name = "storage.list_keys", description = "List all keys in encrypted storage.")]
     fn store_list(&self) -> Result<CallToolResult, McpError> {
         let store = self.open_store()?;
         let keys = store.list("").map_err(|e| mcp_err(e.to_string()))?;
@@ -1034,7 +1037,7 @@ impl OneCrawlMcp {
 
     //  Passkey / WebAuthn tools
 
-    #[tool(description = "Enable a virtual WebAuthn authenticator for passkey simulation.")]
+    #[tool(name = "auth.passkey_enable", description = "Enable a virtual WebAuthn authenticator for passkey simulation.")]
     async fn auth_passkey_enable(
         &self,
         Parameters(p): Parameters<PasskeyEnableParams>,
@@ -1060,7 +1063,7 @@ impl OneCrawlMcp {
         text_ok("Virtual authenticator enabled")
     }
 
-    #[tool(description = "Add a passkey credential to the virtual authenticator.")]
+    #[tool(name = "auth.passkey_add", description = "Add a passkey credential to the virtual authenticator.")]
     async fn auth_passkey_add(
         &self,
         Parameters(p): Parameters<PasskeyAddParams>,
@@ -1078,7 +1081,7 @@ impl OneCrawlMcp {
         text_ok("Credential added")
     }
 
-    #[tool(description = "List all stored passkey credentials.")]
+    #[tool(name = "auth.passkey_list", description = "List all stored passkey credentials.")]
     async fn auth_passkey_list(
         &self,
         Parameters(_p): Parameters<PasskeyListParams>,
@@ -1090,7 +1093,7 @@ impl OneCrawlMcp {
         json_ok(&creds)
     }
 
-    #[tool(description = "Get the WebAuthn operation log.")]
+    #[tool(name = "auth.passkey_log", description = "Get the WebAuthn operation log.")]
     async fn auth_passkey_log(
         &self,
         Parameters(_p): Parameters<PasskeyLogParams>,
@@ -1102,7 +1105,7 @@ impl OneCrawlMcp {
         json_ok(&log)
     }
 
-    #[tool(description = "Disable the virtual WebAuthn authenticator.")]
+    #[tool(name = "auth.passkey_disable", description = "Disable the virtual WebAuthn authenticator.")]
     async fn auth_passkey_disable(
         &self,
         Parameters(_p): Parameters<PasskeyDisableParams>,
@@ -1114,7 +1117,7 @@ impl OneCrawlMcp {
         text_ok("Virtual authenticator disabled")
     }
 
-    #[tool(description = "Remove a passkey credential by ID.")]
+    #[tool(name = "auth.passkey_remove", description = "Remove a passkey credential by ID.")]
     async fn auth_passkey_remove(
         &self,
         Parameters(p): Parameters<PasskeyRemoveParams>,
