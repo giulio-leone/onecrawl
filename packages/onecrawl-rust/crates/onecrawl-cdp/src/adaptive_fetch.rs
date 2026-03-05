@@ -109,7 +109,7 @@ fn chrome_headers(url: &str, ua: Option<&str>) -> Vec<(String, String)> {
         ("Sec-Fetch-Dest".into(), "document".into()),
         (
             "Accept-Encoding".into(),
-            "gzip, deflate, br, zstd".into(),
+            "gzip, deflate, br".into(),
         ),
         ("Accept-Language".into(), "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7".into()),
         ("Connection".into(), "keep-alive".into()),
