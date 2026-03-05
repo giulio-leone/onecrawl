@@ -705,6 +705,23 @@ enum SnapshotAction {
         #[arg(short, long, default_value = "3")]
         count: usize,
     },
+    /// Agent-mode snapshot: tag elements with @refs for AI-driven automation.
+    ///
+    /// Tags all visible interactive elements with data-onecrawl-ref attributes.
+    /// After running, use @e1, @e2, ... in click/fill/get/hover commands.
+    ///
+    /// Example:
+    ///   onecrawl snapshot agent --json
+    ///   onecrawl click @e3
+    ///   onecrawl fill @e5 "hello"
+    Agent {
+        /// Output machine-readable JSON: {"success":true,"data":{"snapshot":"...","refs":{...}}}
+        #[arg(long)]
+        json: bool,
+        /// Only tag interactive elements (buttons, links, inputs). Default: false (includes headings/text).
+        #[arg(long)]
+        interactive_only: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1981,33 +1998,34 @@ async fn main() {
 
         // ── Content ─────────────────────────────────────────────────
         Commands::Get { what, selector } => {
-            commands::browser::get(&what, selector.as_deref()).await
+            let resolved_sel = selector.as_deref().map(|s| onecrawl_cdp::accessibility::resolve_ref(s));
+            commands::browser::get(&what, resolved_sel.as_deref()).await
         }
         Commands::Eval { expression } => commands::browser::eval(&expression).await,
         Commands::SetContent { html } => commands::browser::set_content(&html).await,
 
         // ── Element Interaction ─────────────────────────────────────
-        Commands::Click { selector } => commands::browser::click(&selector).await,
-        Commands::Dblclick { selector } => commands::browser::dblclick(&selector).await,
-        Commands::Type { selector, text } => commands::browser::type_text(&selector, &text).await,
-        Commands::Fill { selector, text } => commands::browser::fill(&selector, &text).await,
-        Commands::Focus { selector } => commands::browser::focus(&selector).await,
-        Commands::Hover { selector } => commands::browser::hover(&selector).await,
+        Commands::Click { selector } => commands::browser::click(&onecrawl_cdp::accessibility::resolve_ref(&selector)).await,
+        Commands::Dblclick { selector } => commands::browser::dblclick(&onecrawl_cdp::accessibility::resolve_ref(&selector)).await,
+        Commands::Type { selector, text } => commands::browser::type_text(&onecrawl_cdp::accessibility::resolve_ref(&selector), &text).await,
+        Commands::Fill { selector, text } => commands::browser::fill(&onecrawl_cdp::accessibility::resolve_ref(&selector), &text).await,
+        Commands::Focus { selector } => commands::browser::focus(&onecrawl_cdp::accessibility::resolve_ref(&selector)).await,
+        Commands::Hover { selector } => commands::browser::hover(&onecrawl_cdp::accessibility::resolve_ref(&selector)).await,
         Commands::ScrollIntoView { selector } => {
-            commands::browser::scroll_into_view(&selector).await
+            commands::browser::scroll_into_view(&onecrawl_cdp::accessibility::resolve_ref(&selector)).await
         }
-        Commands::Check { selector } => commands::browser::check(&selector).await,
-        Commands::Uncheck { selector } => commands::browser::uncheck(&selector).await,
+        Commands::Check { selector } => commands::browser::check(&onecrawl_cdp::accessibility::resolve_ref(&selector)).await,
+        Commands::Uncheck { selector } => commands::browser::uncheck(&onecrawl_cdp::accessibility::resolve_ref(&selector)).await,
         Commands::SelectOption { selector, value } => {
-            commands::browser::select_option(&selector, &value).await
+            commands::browser::select_option(&onecrawl_cdp::accessibility::resolve_ref(&selector), &value).await
         }
-        Commands::Tap { selector } => commands::browser::tap(&selector).await,
-        Commands::Drag { from, to } => commands::browser::drag(&from, &to).await,
+        Commands::Tap { selector } => commands::browser::tap(&onecrawl_cdp::accessibility::resolve_ref(&selector)).await,
+        Commands::Drag { from, to } => commands::browser::drag(&onecrawl_cdp::accessibility::resolve_ref(&from), &onecrawl_cdp::accessibility::resolve_ref(&to)).await,
         Commands::Upload {
             selector,
             file_path,
-        } => commands::browser::upload(&selector, &file_path).await,
-        Commands::BoundingBox { selector } => commands::browser::bounding_box(&selector).await,
+        } => commands::browser::upload(&onecrawl_cdp::accessibility::resolve_ref(&selector), &file_path).await,
+        Commands::BoundingBox { selector } => commands::browser::bounding_box(&onecrawl_cdp::accessibility::resolve_ref(&selector)).await,
 
         // ── Keyboard ────────────────────────────────────────────────
         Commands::PressKey { key } => commands::browser::press_key(&key).await,
@@ -2645,6 +2663,12 @@ async fn main() {
                 count,
             } => {
                 commands::browser::snapshot_watch(interval, selector.as_deref(), count).await;
+            }
+            SnapshotAction::Agent {
+                json,
+                interactive_only,
+            } => {
+                commands::browser::snapshot_agent(json, interactive_only).await;
             }
         },
 

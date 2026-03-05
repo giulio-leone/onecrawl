@@ -3678,6 +3678,30 @@ pub async fn snapshot_watch(interval_ms: u64, selector: Option<&str>, count: usi
     .await;
 }
 
+pub async fn snapshot_agent(json_output: bool, interactive_only: bool) {
+    with_page(|page| async move {
+        let snap = onecrawl_cdp::accessibility::agent_snapshot(&page, interactive_only)
+            .await
+            .map_err(|e| e.to_string())?;
+        if json_output {
+            let out = serde_json::json!({
+                "success": true,
+                "data": {
+                    "snapshot": snap.snapshot,
+                    "refs": snap.refs,
+                    "total": snap.total
+                }
+            });
+            println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
+        } else {
+            println!("{}", snap.snapshot);
+            println!("\n{} {} elements tagged with @refs", "✓".green(), snap.total);
+        }
+        Ok(())
+    })
+    .await;
+}
+
 // ---------------------------------------------------------------------------
 // Rate Limiter (standalone — no Page required)
 // ---------------------------------------------------------------------------

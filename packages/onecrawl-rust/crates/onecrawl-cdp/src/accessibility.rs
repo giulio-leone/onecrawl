@@ -302,3 +302,161 @@ pub async fn audit_accessibility(page: &Page) -> Result<AccessibilityAudit> {
         }),
     }
 }
+
+/// Agent-mode snapshot: tags interactive elements with `data-onecrawl-ref` attributes,
+/// returns a compact text snapshot + refs map for AI-driven automation.
+///
+/// After calling this, `@e1` resolves to `[data-onecrawl-ref="e1"]` in any selector.
+pub async fn agent_snapshot(page: &Page, interactive_only: bool) -> Result<AgentSnapshot> {
+    let interactive_only_js = if interactive_only { "true" } else { "false" };
+    let js = format!(
+        r#"
+        (() => {{
+            const INTERACTIVE_TAGS = new Set(['a','button','input','textarea','select','label','details','summary']);
+            const INTERACTIVE_ROLES = new Set(['button','link','checkbox','radio','textbox','combobox',
+                'listbox','option','menuitem','menuitemcheckbox','menuitemradio','tab','treeitem',
+                'slider','spinbutton','switch','searchbox','gridcell']);
+            const CONTENT_TAGS = new Set(['h1','h2','h3','h4','h5','h6','p','li','td','th','span','div','section','article','main','nav','header','footer']);
+
+            function isVisible(el) {{
+                const r = el.getBoundingClientRect();
+                if (r.width === 0 || r.height === 0) return false;
+                const s = window.getComputedStyle(el);
+                return s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0';
+            }}
+
+            function isInteractive(el) {{
+                const tag = el.tagName.toLowerCase();
+                const role = el.getAttribute('role') || '';
+                return INTERACTIVE_TAGS.has(tag) || INTERACTIVE_ROLES.has(role)
+                    || el.hasAttribute('onclick') || el.hasAttribute('tabindex')
+                    || (el.getAttribute('tabindex') !== null && parseInt(el.getAttribute('tabindex')) >= 0);
+            }}
+
+            function getName(el) {{
+                return (el.getAttribute('aria-label')
+                    || el.getAttribute('placeholder')
+                    || el.getAttribute('alt')
+                    || el.getAttribute('title')
+                    || el.textContent?.replace(/\s+/g, ' ').trim().substring(0, 60)
+                    || el.getAttribute('name')
+                    || el.tagName.toLowerCase()).trim();
+            }}
+
+            function getRole(el) {{
+                if (el.getAttribute('role')) return el.getAttribute('role');
+                const tag = el.tagName.toLowerCase();
+                const type = el.getAttribute('type') || '';
+                if (tag === 'a') return 'link';
+                if (tag === 'button') return 'button';
+                if (tag === 'input') {{
+                    if (type === 'checkbox') return 'checkbox';
+                    if (type === 'radio') return 'radio';
+                    if (type === 'submit' || type === 'button') return 'button';
+                    return 'textbox';
+                }}
+                if (tag === 'textarea') return 'textbox';
+                if (tag === 'select') return 'combobox';
+                if (tag.match(/^h[1-6]$/)) return 'heading';
+                if (tag === 'img') return 'img';
+                if (tag === 'nav') return 'navigation';
+                if (tag === 'main') return 'main';
+                return tag;
+            }}
+
+            function getExtra(el) {{
+                const tag = el.tagName.toLowerCase();
+                if (tag === 'input') {{
+                    const t = el.getAttribute('type') || 'text';
+                    const v = el.value || '';
+                    return v ? ` value="${{v.substring(0,30)}}"` : ` type="${{t}}"`;
+                }}
+                if (tag === 'select') {{
+                    const sel = el.options[el.selectedIndex];
+                    return sel ? ` selected="${{sel.text.substring(0,30)}}"` : '';
+                }}
+                if (tag === 'a') {{
+                    const h = el.getAttribute('href') || '';
+                    return h ? ` href="${{h.substring(0,50)}}"` : '';
+                }}
+                return '';
+            }}
+
+            // Clear previous refs
+            document.querySelectorAll('[data-onecrawl-ref]').forEach(el => {{
+                el.removeAttribute('data-onecrawl-ref');
+            }});
+
+            const interactiveOnly = {interactive_only_js};
+            const allEls = Array.from(document.querySelectorAll('*'));
+            const refs = {{}};
+            let counter = 0;
+            const lines = [];
+
+            allEls.forEach(el => {{
+                if (!isVisible(el)) return;
+                const isInt = isInteractive(el);
+                const tag = el.tagName.toLowerCase();
+                const isContent = CONTENT_TAGS.has(tag) && el.textContent?.trim().length > 2;
+                if (interactiveOnly && !isInt) return;
+                if (!isInt && !isContent) return;
+                // Skip if children already cover this (avoid redundant wrappers)
+                if (!isInt && el.querySelector('button,a,input,textarea,select')) return;
+
+                counter++;
+                const refId = 'e' + counter;
+                el.setAttribute('data-onecrawl-ref', refId);
+                const role = getRole(el);
+                const name = getName(el);
+                const extra = getExtra(el);
+                refs[refId] = {{ role, name, tag }};
+                lines.push(`[${{refId}}] ${{role}} "${{name}}"${{extra}}`);
+            }});
+
+            return {{ snapshot: lines.join('\n'), refs, total: counter }};
+        }})()
+        "#,
+        interactive_only_js = interactive_only_js
+    );
+
+    let result = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Cdp(format!("agent_snapshot failed: {e}")))?;
+
+    match result.into_value::<AgentSnapshot>() {
+        Ok(v) => Ok(v),
+        Err(e) => Err(Error::Cdp(format!("agent_snapshot parse error: {e}"))),
+    }
+}
+
+/// Result of an agent-mode snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSnapshot {
+    /// Compact text representation: `[e1] button "Submit"\n[e2] link "Home"...`
+    pub snapshot: String,
+    /// Map of ref_id → node info. `@e1` resolves to `[data-onecrawl-ref="e1"]`.
+    pub refs: std::collections::HashMap<String, AgentRef>,
+    /// Total number of elements tagged.
+    pub total: usize,
+}
+
+/// Metadata for a single agent ref.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentRef {
+    pub role: String,
+    pub name: String,
+    pub tag: String,
+}
+
+/// Resolve an agent ref selector (`@e1`) to a CSS selector.
+///
+/// - `@e1` → `[data-onecrawl-ref="e1"]`
+/// - anything else → pass-through unchanged
+pub fn resolve_ref(selector: &str) -> String {
+    if let Some(ref_id) = selector.strip_prefix('@') {
+        format!(r#"[data-onecrawl-ref="{}"]"#, ref_id)
+    } else {
+        selector.to_string()
+    }
+}
