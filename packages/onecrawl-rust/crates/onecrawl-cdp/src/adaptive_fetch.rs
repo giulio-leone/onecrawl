@@ -33,6 +33,9 @@ pub struct AdaptiveFetchConfig {
     pub user_agent: Option<String>,
     /// Custom headers to merge with Chrome defaults.
     pub extra_headers: HashMap<String, String>,
+    /// Optional proxy pool for IP rotation on retries.
+    #[serde(skip)]
+    pub proxy_pool: Option<crate::proxy::ProxyPool>,
 }
 
 impl Default for AdaptiveFetchConfig {
@@ -44,6 +47,7 @@ impl Default for AdaptiveFetchConfig {
             timeout_ms: 30000,
             user_agent: None,
             extra_headers: HashMap::new(),
+            proxy_pool: None,
         }
     }
 }
@@ -188,18 +192,29 @@ async fn http_get(
     url: &str,
     config: &AdaptiveFetchConfig,
     attempt: u32,
+    proxy: Option<&crate::proxy::ProxyConfig>,
 ) -> std::result::Result<(u16, HashMap<String, String>, String, String), String> {
     let ua = config
         .user_agent
         .as_deref()
         .unwrap_or_else(|| rotate_user_agent(attempt));
 
-    let client = reqwest::Client::builder()
+    let mut builder = reqwest::Client::builder()
         .timeout(Duration::from_millis(config.timeout_ms))
         .redirect(reqwest::redirect::Policy::limited(10))
-        .gzip(true)
-        .build()
-        .map_err(|e| format!("client build: {e}"))?;
+        .gzip(true);
+
+    // Apply proxy if provided
+    if let Some(px) = proxy {
+        let rp = reqwest::Proxy::all(&px.server).map_err(|e| format!("proxy: {e}"))?;
+        let rp = match (&px.username, &px.password) {
+            (Some(u), Some(p)) => rp.basic_auth(u, p),
+            _ => rp,
+        };
+        builder = builder.proxy(rp);
+    }
+
+    let client = builder.build().map_err(|e| format!("client build: {e}"))?;
 
     let mut req = client.get(url);
 
@@ -251,13 +266,14 @@ pub async fn adaptive_get(
     url: &str,
     config: Option<AdaptiveFetchConfig>,
 ) -> Result<AdaptiveFetchResult> {
-    let cfg = config.unwrap_or_default();
+    let mut cfg = config.unwrap_or_default();
     let start = std::time::Instant::now();
     let mut last_error = String::new();
 
     // Phase 1: Try standalone HTTP with Chrome-like headers
     for attempt in 0..=cfg.max_retries {
-        match http_get(url, &cfg, attempt).await {
+        let proxy = cfg.proxy_pool.as_mut().and_then(|p| p.next_proxy().cloned());
+        match http_get(url, &cfg, attempt, proxy.as_ref()).await {
             Ok((status, headers, body, final_url)) => {
                 if is_antibot_response(status, &body) {
                     tracing::info!(
@@ -356,11 +372,12 @@ pub async fn standalone_get(
     url: &str,
     config: Option<AdaptiveFetchConfig>,
 ) -> std::result::Result<AdaptiveFetchResult, String> {
-    let cfg = config.unwrap_or_default();
+    let mut cfg = config.unwrap_or_default();
     let start = std::time::Instant::now();
 
     for attempt in 0..=cfg.max_retries {
-        match http_get(url, &cfg, attempt).await {
+        let proxy = cfg.proxy_pool.as_mut().and_then(|p| p.next_proxy().cloned());
+        match http_get(url, &cfg, attempt, proxy.as_ref()).await {
             Ok((status, headers, body, final_url)) => {
                 if status == 429 && attempt < cfg.max_retries {
                     let delay = cfg.base_delay_ms * 2u64.pow(attempt);
@@ -496,6 +513,7 @@ mod tests {
             timeout_ms: 10000,
             user_agent: Some("Test/1.0".into()),
             extra_headers: HashMap::from([("X-Custom".into(), "value".into())]),
+            proxy_pool: None,
         };
         let json = serde_json::to_string(&cfg).unwrap();
         let parsed: AdaptiveFetchConfig = serde_json::from_str(&json).unwrap();
