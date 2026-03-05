@@ -1,3 +1,4 @@
+use chromiumoxide::cdp::browser_protocol::page::HandleJavaScriptDialogParams;
 use chromiumoxide::Page;
 use onecrawl_core::{Error, Result};
 
@@ -7,17 +8,38 @@ use onecrawl_core::{Error, Result};
 /// navigation watcher, which can timeout on SPAs (like x.com) that keep background
 /// connections open and never truly fire the "load" event.
 ///
-/// After triggering JS navigation, polls until the URL changes to the target domain
-/// or 60 seconds elapse.
+/// Dismisses any `beforeunload` dialog that may block navigation, then polls until
+/// the URL changes to the target domain or 60 seconds elapse.
 pub async fn goto(page: &Page, url: &str) -> Result<()> {
-    // Escape single quotes in URL to avoid JS injection issues
     let safe_url = url.replace('\'', "\\'");
 
-    // Trigger navigation via JS — chromiumoxide does NOT intercept JS navigations
-    // as CDP Page.navigate, so there is no 30s CDP-level timeout.
-    page.evaluate(format!("window.location.href = '{safe_url}'"))
+    // Dismiss any beforeunload dialog that could block navigation.
+    // We clear onbeforeunload first, then trigger navigation.
+    page.evaluate("window.onbeforeunload = null")
         .await
-        .map_err(|e| Error::Cdp(format!("goto failed: {e}")))?;
+        .ok();
+
+    // Trigger navigation via JS with a timeout — if a dialog blocks evaluate(),
+    // the timeout prevents an indefinite hang.
+    let nav_js = format!("window.location.href = '{safe_url}'");
+    let nav_result = tokio::time::timeout(
+        tokio::time::Duration::from_secs(5),
+        page.evaluate(nav_js),
+    )
+    .await;
+
+    // If evaluate timed out, a dialog is likely blocking — dismiss it and retry.
+    if nav_result.is_err() {
+        let _ = page
+            .execute(HandleJavaScriptDialogParams::new(true))
+            .await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+        page.evaluate(format!("window.location.href = '{safe_url}'"))
+            .await
+            .map_err(|e| Error::Cdp(format!("goto failed after dialog dismiss: {e}")))?;
+    } else if let Ok(Err(e)) = nav_result {
+        return Err(Error::Cdp(format!("goto failed: {e}")));
+    }
 
     // Poll until URL changes to the target domain (or 60s elapsed)
     let target_domain = url
