@@ -255,6 +255,41 @@ pub async fn connect_to_session() -> Result<(BrowserSession, onecrawl_cdp::Page)
     }
 }
 
+
+#[allow(clippy::too_many_arguments)]
+fn make_session_info(
+    ws_url: String,
+    pid: Option<u32>,
+    server_port: Option<u16>,
+    server_pid: Option<u32>,
+    default_tab_id: Option<String>,
+    instance_id: Option<String>,
+    headless: bool,
+    passkey_file: Option<String>,
+    passkey_rp_id: Option<String>,
+) -> SessionInfo {
+    SessionInfo {
+        ws_url,
+        pid,
+        server_port,
+        server_pid,
+        default_tab_id,
+        instance_id,
+        active_tab_id: None,
+        headless,
+        passkey_file,
+        passkey_rp_id,
+        fingerprint_ua: None,
+    }
+}
+
+fn save_or_exit(info: &SessionInfo) {
+    if let Err(e) = save_session(info) {
+        eprintln!("{} Failed to save session: {e}", "✗".red());
+        std::process::exit(1);
+    }
+}
+
 pub async fn handle(action: SessionAction) {
     match action {
         SessionAction::Start {
@@ -290,23 +325,8 @@ pub async fn handle(action: SessionAction) {
                 // Chrome lives independently as a detached process.
                 match launch_normal_chrome(chrome_profile.as_deref()).await {
                     Ok((ws_url, maybe_pid)) => {
-                        let info = SessionInfo {
-                            ws_url: ws_url.clone(),
-                            pid: maybe_pid,
-                            server_port: None,
-                            server_pid: None,
-                            default_tab_id: None,
-                            instance_id: None,
-                            active_tab_id: None,
-                            headless: false,
-                            passkey_file: import_passkey.clone(),
-                            passkey_rp_id: passkey_rp_id.clone(),
-                            fingerprint_ua: None,
-                        };
-                        if let Err(e) = save_session(&info) {
-                            eprintln!("{} Failed to save session: {e}", "✗".red());
-                            std::process::exit(1);
-                        }
+                        let info = make_session_info(ws_url.clone(), maybe_pid, None, None, None, None, false, import_passkey.clone(), passkey_rp_id.clone());
+                        save_or_exit(&info);
                         match maybe_pid {
                             Some(pid) => println!(
                                 "{} Session started (normal Chrome, PID {})",
@@ -341,23 +361,8 @@ pub async fn handle(action: SessionAction) {
                 // Stealth patches (UA spoof, webdriver=false) are applied on the first page.
                 match launch_stealth_headless(chrome_profile.as_deref()).await {
                     Ok((ws_url, maybe_pid)) => {
-                        let info = SessionInfo {
-                            ws_url: ws_url.clone(),
-                            pid: maybe_pid,
-                            server_port: None,
-                            server_pid: None,
-                            default_tab_id: None,
-                            instance_id: None,
-                            active_tab_id: None,
-                            headless: true,
-                            passkey_file: import_passkey.clone(),
-                            passkey_rp_id: passkey_rp_id.clone(),
-                            fingerprint_ua: None,
-                        };
-                        if let Err(e) = save_session(&info) {
-                            eprintln!("{} Failed to save session: {e}", "✗".red());
-                            std::process::exit(1);
-                        }
+                        let info = make_session_info(ws_url.clone(), maybe_pid, None, None, None, None, true, import_passkey.clone(), passkey_rp_id.clone());
+                        save_or_exit(&info);
                         println!("{} Stealth headless session started (--headless=new)", "✓".green());
                         println!("  WS: {}", ws_url.cyan());
                         println!("  File: {}", SESSION_FILE.dimmed());
@@ -388,23 +393,8 @@ pub async fn handle(action: SessionAction) {
                 match result {
                     Ok(session) => {
                         let ws_url = session.ws_url().to_string();
-                        let info = SessionInfo {
-                            ws_url: ws_url.clone(),
-                            pid: None,
-                            server_port: None,
-                            server_pid: None,
-                            default_tab_id: None,
-                            instance_id: None,
-                            active_tab_id: None,
-                            headless: false,
-                            passkey_file: import_passkey.clone(),
-                            passkey_rp_id: passkey_rp_id.clone(),
-                            fingerprint_ua: None,
-                        };
-                        if let Err(e) = save_session(&info) {
-                            eprintln!("{} Failed to save session: {e}", "✗".red());
-                            std::process::exit(1);
-                        }
+                        let info = make_session_info(ws_url.clone(), None, None, None, None, None, false, import_passkey.clone(), passkey_rp_id.clone());
+                        save_or_exit(&info);
                         // Apply cookie import if requested
                         if let Some(ref cookie_file) = import_cookies
                             && let Err(e) = apply_cookie_import(&ws_url, cookie_file).await {
@@ -430,23 +420,8 @@ pub async fn handle(action: SessionAction) {
                 println!("{} Launching headless browser via proxy server...", "→".blue());
                 match start_proxy_server(headless).await {
                     Ok((port, server_pid, instance_id, tab_id, ws_url)) => {
-                        let info = SessionInfo {
-                            ws_url: ws_url.clone(),
-                            pid: None,
-                            server_port: Some(port),
-                            server_pid: Some(server_pid),
-                            default_tab_id: Some(tab_id),
-                            instance_id: Some(instance_id),
-                            active_tab_id: None,
-                            headless: false,
-                            passkey_file: import_passkey.clone(),
-                            passkey_rp_id: passkey_rp_id.clone(),
-                            fingerprint_ua: None,
-                        };
-                        if let Err(e) = save_session(&info) {
-                            eprintln!("{} Failed to save session: {e}", "✗".red());
-                            std::process::exit(1);
-                        }
+                        let info = make_session_info(ws_url.clone(), None, Some(port), Some(server_pid), Some(tab_id), Some(instance_id), false, import_passkey.clone(), passkey_rp_id.clone());
+                        save_or_exit(&info);
                         println!("{} Session started (proxy mode)", "✓".green());
                         println!(
                             "  Proxy: {}",
@@ -469,23 +444,8 @@ pub async fn handle(action: SessionAction) {
                         match BrowserSession::launch_headless().await {
                             Ok(session) => {
                                 let ws_url = session.ws_url().to_string();
-                                let info = SessionInfo {
-                                    ws_url: ws_url.clone(),
-                                    pid: None,
-                                    server_port: None,
-                                    server_pid: None,
-                                    default_tab_id: None,
-                                    instance_id: None,
-                                    active_tab_id: None,
-                                    headless: false,
-                                    passkey_file: import_passkey.clone(),
-                            passkey_rp_id: passkey_rp_id.clone(),
-                            fingerprint_ua: None,
-                                };
-                                if let Err(e) = save_session(&info) {
-                                    eprintln!("{} Failed to save session: {e}", "✗".red());
-                                    std::process::exit(1);
-                                }
+                                let info = make_session_info(ws_url.clone(), None, None, None, None, None, false, import_passkey.clone(), passkey_rp_id.clone());
+                                save_or_exit(&info);
                                 println!("{} Session started (direct CDP fallback)", "✓".green());
                                 println!("  WS: {}", ws_url.cyan());
                                 println!("  File: {}", SESSION_FILE.dimmed());
