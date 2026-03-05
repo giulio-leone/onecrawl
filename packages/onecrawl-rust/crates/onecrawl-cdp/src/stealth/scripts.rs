@@ -31,19 +31,18 @@ pub fn get_stealth_init_script(fp: &Fingerprint) -> String {
     }});
   }} catch(e) {{}}
 
-  // === 2. Chrome runtime mock ===
+  // === 2. Chrome runtime mock (always override to pass hasBadChromeRuntime check) ===
   try {{
     if (!window.chrome) window.chrome = {{}};
-    if (!window.chrome.runtime) {{
-      Object.defineProperty(window.chrome, 'runtime', {{
-        value: {{
-          connect: () => ({{ onMessage: {{ addListener: () => {{}}, removeListener: () => {{}} }}, postMessage: () => {{}}, disconnect: () => {{}} }}),
-          sendMessage: (_msg, cb) => {{ if (cb) cb(); }},
-        }},
-        writable: true,
-        configurable: true,
-      }});
-    }}
+    Object.defineProperty(window.chrome, 'runtime', {{
+      value: {{
+        connect: () => ({{ onMessage: {{ addListener: () => {{}}, removeListener: () => {{}} }}, postMessage: () => {{}}, disconnect: () => {{}} }}),
+        sendMessage: (_msg, cb) => {{ if (cb) cb(); }},
+        id: undefined,
+      }},
+      writable: true,
+      configurable: true,
+    }});
   }} catch(e) {{}}
 
   // === 3. Plugins mock ===
@@ -102,23 +101,9 @@ pub fn get_stealth_init_script(fp: &Fingerprint) -> String {
     }});
   }} catch(e) {{}}
 
-  // === 8. WebGL fingerprint ===
-  try {{
-    const origGetParameter = WebGLRenderingContext.prototype.getParameter;
-    WebGLRenderingContext.prototype.getParameter = function(param) {{
-      if (param === 0x9245) return '{webgl_vendor}';
-      if (param === 0x9246) return '{webgl_renderer}';
-      return origGetParameter.call(this, param);
-    }};
-    if (typeof WebGL2RenderingContext !== 'undefined') {{
-      const origGetParameter2 = WebGL2RenderingContext.prototype.getParameter;
-      WebGL2RenderingContext.prototype.getParameter = function(param) {{
-        if (param === 0x9245) return '{webgl_vendor}';
-        if (param === 0x9246) return '{webgl_renderer}';
-        return origGetParameter2.call(this, param);
-      }};
-    }}
-  }} catch(e) {{}}
+  // === 8. WebGL fingerprint (no vendor/renderer override — would mismatch worker scope) ===
+  // WebGL params 0x9245/0x9246 are intentionally NOT overridden to keep
+  // main-thread and OffscreenCanvas-in-worker consistent (prevents hasBadWebGL detection).
 
   // === 9. Canvas fingerprint noise ===
   try {{
@@ -188,14 +173,68 @@ pub fn get_stealth_init_script(fp: &Fingerprint) -> String {
       return origDebug.apply(console, arguments);
     }};
   }} catch(e) {{}}
+
+  // === 14. navigator.userAgentData patch (fix uaDataIsBlank) ===
+  try {{
+    const _ua = navigator.userAgent;
+    const _platform = _ua.includes('Macintosh') || _ua.includes('Mac OS X') ? 'macOS' :
+                      _ua.includes('Windows') ? 'Windows' : 'Linux';
+    const _chromeVer = (_ua.match(/Chrome\/(\d+)/) || [])[1] || '134';
+    const _brands = [
+      {{ brand: 'Not)A;Brand', version: '99' }},
+      {{ brand: 'Google Chrome', version: _chromeVer }},
+      {{ brand: 'Chromium', version: _chromeVer }},
+    ];
+    const _uaData = {{
+      brands: _brands,
+      mobile: false,
+      platform: _platform,
+      getHighEntropyValues: async function(hints) {{
+        const r = {{}};
+        if (hints.includes('platform')) r.platform = _platform;
+        if (hints.includes('brands')) r.brands = _brands;
+        if (hints.includes('mobile')) r.mobile = false;
+        if (hints.includes('uaFullVersion')) r.uaFullVersion = _chromeVer + '.0.0.0';
+        if (hints.includes('fullVersionList')) r.fullVersionList = _brands.map(b => ({{ brand: b.brand, version: b.version + '.0.0.0' }}));
+        return r;
+      }},
+      toJSON: function() {{ return {{ brands: _brands, mobile: false, platform: _platform }}; }},
+    }};
+    Object.defineProperty(navigator, 'userAgentData', {{
+      get: () => _uaData,
+      configurable: true,
+    }});
+  }} catch(e) {{}}
+
+  // === 15. Fix hasKnownBgColor (ActiveText system color) ===
+  try {{
+    const _origGetComputedStyle = window.getComputedStyle.bind(window);
+    Object.defineProperty(window, 'getComputedStyle', {{
+      value: function(el, pseudo) {{
+        const style = _origGetComputedStyle(el, pseudo);
+        try {{
+          if (el && el.style && el.style.backgroundColor.toLowerCase() === 'activetext') {{
+            return new Proxy(style, {{
+              get(t, p, r) {{
+                if (p === 'backgroundColor') return 'rgb(0, 102, 204)';
+                const v = Reflect.get(t, p, r);
+                return typeof v === 'function' ? v.bind(t) : v;
+              }}
+            }});
+          }}
+        }} catch(e) {{}}
+        return style;
+      }},
+      configurable: true,
+      writable: true,
+    }});
+  }} catch(e) {{}}
 }})();"#,
         languages_json = languages_json,
         language = fp.language,
         platform = fp.platform,
         hw_concurrency = fp.hardware_concurrency,
         device_memory = fp.device_memory,
-        webgl_vendor = fp.webgl_vendor,
-        webgl_renderer = fp.webgl_renderer,
         viewport_width = fp.viewport_width,
         viewport_height = fp.viewport_height,
     )
@@ -244,13 +283,14 @@ mod tests {
         let script = get_stealth_init_script(&fp);
 
         assert!(script.contains("navigator.webdriver"));
-        assert!(script.contains("chrome.runtime"));
+        assert!(script.contains("window.chrome"));
         assert!(script.contains("'plugins'"));
         assert!(script.contains("'languages'"));
         assert!(script.contains("'platform'"));
         assert!(script.contains("hardwareConcurrency"));
         assert!(script.contains("deviceMemory"));
-        assert!(script.contains("WebGLRenderingContext"));
+        assert!(script.contains("userAgentData"));
+        assert!(script.contains("getComputedStyle"));
         assert!(script.contains("HTMLCanvasElement"));
         assert!(script.contains("AudioContext"));
         assert!(script.contains("permissions.query"));
@@ -265,8 +305,6 @@ mod tests {
 
         assert!(script.contains(&fp.language));
         assert!(script.contains(&fp.platform));
-        assert!(script.contains(&fp.webgl_vendor));
-        assert!(script.contains(&fp.webgl_renderer));
         assert!(script.contains(&fp.hardware_concurrency.to_string()));
     }
 
