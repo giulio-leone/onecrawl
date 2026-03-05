@@ -35,7 +35,9 @@ pub use auth::{
     captcha_wait,
     captcha_screenshot,
     captcha_inject,
+    captcha_solve,
     captcha_types,
+    stealth_check,
     passkey_vault_list,
     passkey_vault_save,
     passkey_vault_remove,
@@ -270,6 +272,7 @@ pub use network::{
     http_post,
     http_head,
     http_fetch,
+    http_adaptive,
 };
 pub use shell::{shell_repl};
 pub use tabs::{

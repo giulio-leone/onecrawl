@@ -4,6 +4,7 @@
 
 pub mod accessibility;
 pub mod adaptive;
+pub mod adaptive_fetch;
 pub mod advanced_emulation;
 pub mod antibot;
 pub mod benchmark;

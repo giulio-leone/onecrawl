@@ -439,3 +439,39 @@ pub async fn http_fetch(json: &str) {
     })
     .await;
 }
+
+pub async fn http_adaptive(url: &str, retries: u32, no_escalate: bool, user_agent: Option<&str>) {
+    let url = url.to_string();
+    let ua = user_agent.map(|s| s.to_string());
+    with_page(|page| async move {
+        let config = onecrawl_cdp::adaptive_fetch::AdaptiveFetchConfig {
+            max_retries: retries,
+            escalate_to_cdp: !no_escalate,
+            user_agent: ua,
+            ..Default::default()
+        };
+        let result = onecrawl_cdp::adaptive_fetch::adaptive_get(&page, &url, Some(config))
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let method_label = if result.was_escalated {
+            "CDP (escalated)".yellow().to_string()
+        } else {
+            "HTTP (direct)".green().to_string()
+        };
+        eprintln!(
+            "{} {} — {} {} in {}ms ({} attempt{})",
+            "✓".green(),
+            method_label,
+            result.status,
+            result.url,
+            result.duration_ms as u64,
+            result.attempts,
+            if result.attempts > 1 { "s" } else { "" }
+        );
+
+        println!("{}", result.body);
+        Ok(())
+    })
+    .await;
+}

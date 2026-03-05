@@ -673,6 +673,15 @@ pub(crate) async fn dispatch(command: Commands) {
             } => commands::browser::http_post(&url, &body, &content_type).await,
             HttpAction::Head { url } => commands::browser::http_head(&url).await,
             HttpAction::Fetch { json } => commands::browser::http_fetch(&json).await,
+            HttpAction::Adaptive {
+                url,
+                retries,
+                no_escalate,
+                user_agent,
+            } => {
+                commands::browser::http_adaptive(&url, retries, no_escalate, user_agent.as_deref())
+                    .await
+            }
         },
 
         // ── TLS Fingerprint ──────────────────────────────────────────
@@ -816,6 +825,12 @@ pub(crate) async fn dispatch(command: Commands) {
             }
             CaptchaAction::Inject { solution } => {
                 commands::browser::captcha_inject(&solution).await;
+            }
+            CaptchaAction::Solve { timeout } => {
+                commands::browser::captcha_solve(timeout).await;
+            }
+            CaptchaAction::Check => {
+                commands::browser::stealth_check().await;
             }
             CaptchaAction::Types => {
                 commands::browser::captcha_types();

@@ -753,6 +753,23 @@ pub(crate) enum HttpAction {
         /// JSON HttpRequest object
         json: String,
     },
+    /// Adaptive GET — tries HTTP first, escalates to CDP on anti-bot
+    ///
+    /// Uses Chrome-like TLS/headers, exponential backoff on 429,
+    /// and automatic CDP escalation for Cloudflare challenges.
+    Adaptive {
+        /// URL to fetch
+        url: String,
+        /// Max retries before giving up (default: 3)
+        #[arg(long, default_value = "3")]
+        retries: u32,
+        /// Disable CDP escalation (HTTP-only mode)
+        #[arg(long)]
+        no_escalate: bool,
+        /// Custom User-Agent
+        #[arg(long)]
+        user_agent: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -884,6 +901,20 @@ pub(crate) enum CaptchaAction {
         /// Solution token
         solution: String,
     },
+    /// Solve a CAPTCHA using browser-native methods (free, no API key)
+    ///
+    /// Turnstile: clicks checkbox + waits for auto-clear.
+    /// reCAPTCHA v2: switches to audio challenge + local Whisper transcription.
+    Solve {
+        /// Timeout in ms for solving
+        #[arg(short, long, default_value = "30000")]
+        timeout: u64,
+    },
+    /// Run comprehensive stealth fingerprint check
+    ///
+    /// Tests 15 browser properties: webdriver, plugins, WebGL, UA, toString, etc.
+    /// Returns a score (0-100%) and detailed findings.
+    Check,
     /// List all detectable CAPTCHA types
     Types,
 }

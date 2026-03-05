@@ -20,6 +20,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 rand = { workspace = true }
+reqwest = { workspace = true }
 playwright = { workspace = true, optional = true }
 
 [dev-dependencies]

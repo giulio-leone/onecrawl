@@ -396,6 +396,125 @@ pub fn captcha_types() {
     }
 }
 
+pub async fn captcha_solve(timeout: u64) {
+    with_page(|page| async move {
+        // First detect what captcha is present
+        let det = onecrawl_cdp::captcha::detect_captcha(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !det.detected {
+            println!("{} No CAPTCHA detected on this page", "⚠".yellow());
+            return Ok(());
+        }
+
+        println!(
+            "{} Detected: {} ({}) — attempting browser-native solve...",
+            "🔍".to_string(),
+            det.captcha_type.cyan(),
+            det.provider.dimmed()
+        );
+
+        match det.captcha_type.as_str() {
+            "cloudflare_turnstile" => {
+                let solved = onecrawl_cdp::captcha::solve_turnstile_native(&page, timeout)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                if solved {
+                    println!("{} Turnstile solved (browser-native, free)", "✓".green());
+                } else {
+                    eprintln!("{} Turnstile did not clear within {}ms", "✗".red(), timeout);
+                }
+            }
+            "recaptcha_v2" => {
+                match onecrawl_cdp::captcha::solve_recaptcha_audio(&page).await {
+                    Ok(text) => {
+                        println!(
+                            "{} reCAPTCHA solved via audio+Whisper: \"{}\"",
+                            "✓".green(),
+                            text.dimmed()
+                        );
+                    }
+                    Err(e) => {
+                        eprintln!("{} reCAPTCHA audio solve failed: {}", "✗".red(), e);
+                        eprintln!("  Ensure `whisper` CLI is installed: pip install openai-whisper");
+                    }
+                }
+            }
+            "recaptcha_v3" => {
+                println!(
+                    "{} reCAPTCHA v3 is score-based — stealth mode should provide high score",
+                    "ℹ".cyan()
+                );
+                println!("  No explicit solving needed. If blocked, check stealth with: onecrawl captcha check");
+            }
+            other => {
+                println!(
+                    "{} No free solver available for {} — use 'captcha inject <token>' with manual/API token",
+                    "⚠".yellow(),
+                    other
+                );
+            }
+        }
+        Ok(())
+    })
+    .await;
+}
+
+pub async fn stealth_check() {
+    with_page(|page| async move {
+        let result = onecrawl_cdp::captcha::stealth_check(&page)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        let score = result["score"].as_u64().unwrap_or(0);
+        let passed = result["passed"].as_u64().unwrap_or(0);
+        let failed = result["failed"].as_u64().unwrap_or(0);
+        let total = result["total"].as_u64().unwrap_or(0);
+
+        // Header
+        let score_color = if score >= 90 {
+            "✓".green()
+        } else if score >= 70 {
+            "⚠".yellow()
+        } else {
+            "✗".red()
+        };
+        println!(
+            "\n{} Stealth Score: {}% ({}/{} checks passed)\n",
+            score_color, score, passed, total
+        );
+
+        // Detail each check
+        if let Some(checks) = result["checks"].as_array() {
+            for check in checks {
+                let name = check["name"].as_str().unwrap_or("?");
+                let pass = check["pass"].as_bool().unwrap_or(false);
+                let detail = check["detail"].as_str().unwrap_or("");
+                let icon = if pass { "✓".green() } else { "✗".red() };
+                if detail.is_empty() {
+                    println!("  {} {}", icon, name);
+                } else {
+                    println!("  {} {} — {}", icon, name, detail.dimmed());
+                }
+            }
+        }
+
+        if failed > 0 {
+            println!(
+                "\n{} {} check(s) failed — stealth may be detectable",
+                "⚠".yellow(),
+                failed
+            );
+        } else {
+            println!("\n{} All checks passed — stealth is solid", "✓".green());
+        }
+
+        Ok(())
+    })
+    .await;
+}
+
 pub fn passkey_vault_list() {
     match onecrawl_cdp::load_vault() {
         Ok(vault) => {
