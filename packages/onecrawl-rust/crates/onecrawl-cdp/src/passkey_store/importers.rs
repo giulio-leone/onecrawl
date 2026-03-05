@@ -2,7 +2,7 @@ use serde::Deserialize;
 use std::path::Path;
 use onecrawl_core::Result;
 use crate::webauthn::PasskeyCredential;
-use super::vault::*;
+
 
 
 // ─── Bitwarden import ─────────────────────────────────────────────────────────

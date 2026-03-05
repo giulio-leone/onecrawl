@@ -11,7 +11,7 @@
 
 use std::{
     collections::HashMap,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use serde::{Deserialize, Serialize};

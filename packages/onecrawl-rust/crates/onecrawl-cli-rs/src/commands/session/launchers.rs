@@ -441,7 +441,7 @@ pub(crate) async fn launch_normal_chrome(
     }
 
     // scan_ports: re-scan for poll loop (Step 3); only non-headless processes.
-    let scan_ports = move || -> Vec<u16> {
+    let _scan_ports = move || -> Vec<u16> {
         let stdout_bytes = std::process::Command::new("sh")
             .args([
                 "-c",
