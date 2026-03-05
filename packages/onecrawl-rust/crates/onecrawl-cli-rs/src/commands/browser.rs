@@ -4314,3 +4314,167 @@ pub fn pool_load(path: &str) {
         Err(e) => eprintln!("{} Load failed: {e}", "✗".red()),
     }
 }
+
+// ---------------------------------------------------------------------------
+// Passkey Vault (multi-site persistent store)
+// ---------------------------------------------------------------------------
+
+/// List all sites and credential counts in the passkey vault.
+pub fn passkey_vault_list() {
+    match onecrawl_cdp::load_vault() {
+        Ok(vault) => {
+            let list = onecrawl_cdp::vault_list(&vault);
+            let total = onecrawl_cdp::vault_total(&vault);
+            if list.is_empty() {
+                println!("{} Passkey vault is empty", "⚠".yellow());
+                println!("  Register with: onecrawl auth passkey-register");
+                println!("  Import from  : onecrawl passkey import --from bitwarden|1password|cxf --input FILE");
+                return;
+            }
+            println!("{} Passkey vault — {} credential(s) across {} site(s)", "✓".green(), total, list.len());
+            println!("{:<35} {}", "rp_id", "credentials");
+            println!("{}", "─".repeat(45));
+            for (rp_id, count) in &list {
+                println!("  {:<33} {}", rp_id, count);
+            }
+            println!("{}", "─".repeat(45));
+            println!("  Vault path: {}", onecrawl_cdp::vault_path().display());
+        }
+        Err(e) => eprintln!("{} Vault error: {e}", "✗".red()),
+    }
+}
+
+/// Add credentials from a native passkey JSON file to the vault.
+pub fn passkey_vault_save(input: &str) {
+    let path = std::path::Path::new(input);
+    let creds = match onecrawl_cdp::load_passkeys(path) {
+        Ok(c) => c,
+        Err(e) => { eprintln!("{} Cannot read passkey file: {e}", "✗".red()); return; }
+    };
+    let mut vault = match onecrawl_cdp::load_vault() {
+        Ok(v) => v,
+        Err(e) => { eprintln!("{} Cannot load vault: {e}", "✗".red()); return; }
+    };
+    let count = creds.len();
+    onecrawl_cdp::vault_add(&mut vault, creds);
+    match onecrawl_cdp::save_vault(&vault) {
+        Ok(()) => println!("{} Added {count} credential(s) to vault ({})", "✓".green(), onecrawl_cdp::vault_path().display()),
+        Err(e) => eprintln!("{} Vault save failed: {e}", "✗".red()),
+    }
+}
+
+/// Remove a specific credential from the vault by its credential_id.
+pub fn passkey_vault_remove(credential_id: &str) {
+    let mut vault = match onecrawl_cdp::load_vault() {
+        Ok(v) => v,
+        Err(e) => { eprintln!("{} Cannot load vault: {e}", "✗".red()); return; }
+    };
+    if onecrawl_cdp::vault_remove(&mut vault, credential_id) {
+        match onecrawl_cdp::save_vault(&vault) {
+            Ok(()) => println!("{} Removed credential {}", "✓".green(), credential_id),
+            Err(e) => eprintln!("{} Vault save failed: {e}", "✗".red()),
+        }
+    } else {
+        eprintln!("{} Credential not found: {}", "✗".red(), credential_id);
+    }
+}
+
+/// Remove all credentials for a specific rp_id from the vault.
+pub fn passkey_vault_clear_site(rp_id: &str) {
+    let mut vault = match onecrawl_cdp::load_vault() {
+        Ok(v) => v,
+        Err(e) => { eprintln!("{} Cannot load vault: {e}", "✗".red()); return; }
+    };
+    let removed = onecrawl_cdp::vault_clear_site(&mut vault, rp_id);
+    match onecrawl_cdp::save_vault(&vault) {
+        Ok(()) => println!("{} Removed {removed} credential(s) for '{rp_id}'", "✓".green()),
+        Err(e) => eprintln!("{} Vault save failed: {e}", "✗".red()),
+    }
+}
+
+/// Export vault credentials for a site to a passkey JSON file.
+pub fn passkey_vault_export(rp_id: &str, output: &str) {
+    let vault = match onecrawl_cdp::load_vault() {
+        Ok(v) => v,
+        Err(e) => { eprintln!("{} Cannot load vault: {e}", "✗".red()); return; }
+    };
+    let creds = onecrawl_cdp::vault_get(&vault, rp_id);
+    if creds.is_empty() {
+        eprintln!("{} No credentials found for '{rp_id}'", "✗".red());
+        return;
+    }
+    match onecrawl_cdp::save_passkeys(std::path::Path::new(output), &creds) {
+        Ok(()) => println!("{} Exported {} credential(s) for '{}' → {}", "✓".green(), creds.len(), rp_id, output),
+        Err(e) => eprintln!("{} Export failed: {e}", "✗".red()),
+    }
+}
+
+/// Import passkeys from a Bitwarden unencrypted JSON export.
+pub fn passkey_import_bitwarden(input: &str, save_to_vault: bool) {
+    let creds = match onecrawl_cdp::import_bitwarden(std::path::Path::new(input)) {
+        Ok(c) => c,
+        Err(e) => { eprintln!("{} Bitwarden import failed: {e}", "✗".red()); return; }
+    };
+    if creds.is_empty() {
+        println!("{} No importable passkeys found (hardware-bound credentials are skipped)", "⚠".yellow());
+        return;
+    }
+    println!("{} Found {} passkey(s):", "✓".green(), creds.len());
+    for c in &creds {
+        println!("  • {} @ {}", c.credential_id, c.rp_id);
+    }
+    if save_to_vault {
+        _vault_add_and_save(creds);
+    }
+}
+
+/// Import passkeys from a 1Password export.data JSON file (extracted from .1pux).
+pub fn passkey_import_1password(input: &str, save_to_vault: bool) {
+    let creds = match onecrawl_cdp::import_1password_json(std::path::Path::new(input)) {
+        Ok(c) => c,
+        Err(e) => { eprintln!("{} 1Password import failed: {e}", "✗".red()); return; }
+    };
+    if creds.is_empty() {
+        println!("{} No importable passkeys found", "⚠".yellow());
+        return;
+    }
+    println!("{} Found {} passkey(s):", "✓".green(), creds.len());
+    for c in &creds {
+        println!("  • {} @ {}", c.credential_id, c.rp_id);
+    }
+    if save_to_vault {
+        _vault_add_and_save(creds);
+    }
+}
+
+/// Import passkeys from a FIDO Alliance CXF JSON file.
+pub fn passkey_import_cxf(input: &str, save_to_vault: bool) {
+    let creds = match onecrawl_cdp::import_cxf(std::path::Path::new(input)) {
+        Ok(c) => c,
+        Err(e) => { eprintln!("{} FIDO CXF import failed: {e}", "✗".red()); return; }
+    };
+    if creds.is_empty() {
+        println!("{} No importable passkeys found (hardware-bound or unsupported type)", "⚠".yellow());
+        return;
+    }
+    println!("{} Found {} passkey(s):", "✓".green(), creds.len());
+    for c in &creds {
+        println!("  • {} @ {}", c.credential_id, c.rp_id);
+    }
+    if save_to_vault {
+        _vault_add_and_save(creds);
+    }
+}
+
+fn _vault_add_and_save(creds: Vec<onecrawl_cdp::PasskeyCredential>) {
+    let mut vault = match onecrawl_cdp::load_vault() {
+        Ok(v) => v,
+        Err(e) => { eprintln!("{} Cannot load vault: {e}", "✗".red()); return; }
+    };
+    let count = creds.len();
+    onecrawl_cdp::vault_add(&mut vault, creds);
+    match onecrawl_cdp::save_vault(&vault) {
+        Ok(()) => println!("{} Saved {count} credential(s) to vault", "✓".green()),
+        Err(e) => eprintln!("{} Vault save failed: {e}", "✗".red()),
+    }
+}

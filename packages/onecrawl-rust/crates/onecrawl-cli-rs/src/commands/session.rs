@@ -33,6 +33,11 @@ pub struct SessionInfo {
     /// every `connect_to_session()` call — same lifecycle as stealth scripts.
     #[serde(default)]
     pub passkey_file: Option<String>,
+    /// Relying-party ID to auto-load from the vault on every connection.
+    /// When set and `passkey_file` is absent, credentials for this `rp_id`
+    /// are loaded from `~/.onecrawl/passkeys/vault.json`.
+    #[serde(default)]
+    pub passkey_rp_id: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -65,6 +70,11 @@ pub enum SessionAction {
         /// The CDP virtual authenticator is re-enabled on every connect.
         #[arg(long, value_name = "FILE")]
         import_passkey: Option<String>,
+        /// Auto-load passkey credentials for this rp_id from the vault
+        /// (~/.onecrawl/passkeys/vault.json) on every connect.
+        /// Use this instead of --import-passkey when credentials are in the vault.
+        #[arg(long, value_name = "RP_ID")]
+        passkey_rp_id: Option<String>,
     },
     /// Show session info
     Info,
@@ -93,6 +103,21 @@ fn remove_session() {
 ///
 /// If `active_tab_id` is set in the session file (written by `tab switch`),
 /// the page with that TargetId is returned. Otherwise falls back to the first
+/// Resolve passkey credentials from session info.
+/// Priority: explicit file → vault rp_id → empty.
+fn resolve_passkey_creds(info: &SessionInfo) -> Vec<onecrawl_cdp::PasskeyCredential> {
+    if let Some(ref pfile) = info.passkey_file {
+        return onecrawl_cdp::load_passkeys(std::path::Path::new(pfile))
+            .unwrap_or_default();
+    }
+    if let Some(ref rp_id) = info.passkey_rp_id {
+        return onecrawl_cdp::load_vault()
+            .map(|v| onecrawl_cdp::vault_get(&v, rp_id))
+            .unwrap_or_default();
+    }
+    Vec::new()
+}
+
 /// available page, creating a blank one if the browser has none.
 ///
 /// Retries target discovery up to 5×50ms because the chromiumoxide handler
@@ -165,13 +190,12 @@ pub async fn connect_to_session() -> Result<(BrowserSession, onecrawl_cdp::Page)
         // Re-enable CDP WebAuthn virtual authenticator for passkey sessions.
         // Virtual authenticators are also per-DevTools-session and must be
         // re-created on every connect_to_session() call.
-        if let Some(ref pfile) = info.passkey_file {
-            if let Ok(creds) = onecrawl_cdp::load_passkeys(std::path::Path::new(pfile)) {
-                if let Ok(()) = onecrawl_cdp::cdp_enable(&page).await {
-                    if let Ok(auth_id) = onecrawl_cdp::cdp_create_authenticator(&page).await {
-                        for cred in &creds {
-                            let _ = onecrawl_cdp::cdp_add_credential(&page, &auth_id, cred).await;
-                        }
+        let passkey_creds = resolve_passkey_creds(&info);
+        if !passkey_creds.is_empty() {
+            if let Ok(()) = onecrawl_cdp::cdp_enable(&page).await {
+                if let Ok(auth_id) = onecrawl_cdp::cdp_create_authenticator(&page).await {
+                    for cred in &passkey_creds {
+                        let _ = onecrawl_cdp::cdp_add_credential(&page, &auth_id, cred).await;
                     }
                 }
             }
@@ -205,13 +229,12 @@ pub async fn connect_to_session() -> Result<(BrowserSession, onecrawl_cdp::Page)
                 let _ = onecrawl_cdp::inject_persistent_stealth(&p).await;
             }
             // Re-inject passkeys for the fallback page if configured.
-            if let Some(ref pfile) = stale_info.passkey_file {
-                if let Ok(creds) = onecrawl_cdp::load_passkeys(std::path::Path::new(pfile)) {
-                    if let Ok(()) = onecrawl_cdp::cdp_enable(&p).await {
-                        if let Ok(auth_id) = onecrawl_cdp::cdp_create_authenticator(&p).await {
-                            for cred in &creds {
-                                let _ = onecrawl_cdp::cdp_add_credential(&p, &auth_id, cred).await;
-                            }
+            let passkey_creds = resolve_passkey_creds(&stale_info);
+            if !passkey_creds.is_empty() {
+                if let Ok(()) = onecrawl_cdp::cdp_enable(&p).await {
+                    if let Ok(auth_id) = onecrawl_cdp::cdp_create_authenticator(&p).await {
+                        for cred in &passkey_creds {
+                            let _ = onecrawl_cdp::cdp_add_credential(&p, &auth_id, cred).await;
                         }
                     }
                 }
@@ -243,6 +266,7 @@ pub async fn handle(action: SessionAction) {
             chrome_profile,
             import_cookies,
             import_passkey,
+            passkey_rp_id,
         } => {
             if Path::new(SESSION_FILE).exists()
                 && let Some(info) = load_session()
@@ -277,6 +301,7 @@ pub async fn handle(action: SessionAction) {
                             active_tab_id: None,
                             headless: false,
                             passkey_file: import_passkey.clone(),
+                            passkey_rp_id: passkey_rp_id.clone(),
                         };
                         if let Err(e) = save_session(&info) {
                             eprintln!("{} Failed to save session: {e}", "✗".red());
@@ -322,6 +347,7 @@ pub async fn handle(action: SessionAction) {
                             active_tab_id: None,
                             headless: true,
                             passkey_file: import_passkey.clone(),
+                            passkey_rp_id: passkey_rp_id.clone(),
                         };
                         if let Err(e) = save_session(&info) {
                             eprintln!("{} Failed to save session: {e}", "✗".red());
@@ -368,6 +394,7 @@ pub async fn handle(action: SessionAction) {
                             active_tab_id: None,
                             headless: false,
                             passkey_file: import_passkey.clone(),
+                            passkey_rp_id: passkey_rp_id.clone(),
                         };
                         if let Err(e) = save_session(&info) {
                             eprintln!("{} Failed to save session: {e}", "✗".red());
@@ -409,6 +436,7 @@ pub async fn handle(action: SessionAction) {
                             active_tab_id: None,
                             headless: false,
                             passkey_file: import_passkey.clone(),
+                            passkey_rp_id: passkey_rp_id.clone(),
                         };
                         if let Err(e) = save_session(&info) {
                             eprintln!("{} Failed to save session: {e}", "✗".red());
@@ -446,6 +474,7 @@ pub async fn handle(action: SessionAction) {
                                     active_tab_id: None,
                                     headless: false,
                                     passkey_file: import_passkey.clone(),
+                            passkey_rp_id: passkey_rp_id.clone(),
                                 };
                                 if let Err(e) = save_session(&info) {
                                     eprintln!("{} Failed to save session: {e}", "✗".red());

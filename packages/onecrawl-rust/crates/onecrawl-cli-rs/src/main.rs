@@ -1279,6 +1279,81 @@ enum AuthAction {
         #[arg(long)]
         file: String,
     },
+
+    // ── Vault commands ───────────────────────────────────────────────
+
+    /// List all sites and credentials stored in the passkey vault (~/.onecrawl/passkeys/vault.json).
+    VaultList,
+
+    /// Save credentials from a native passkey JSON file into the vault.
+    VaultSave {
+        /// Path to passkey JSON file (produced by `auth passkey-register`)
+        #[arg(long)]
+        input: String,
+    },
+
+    /// Remove a credential from the vault by its credential_id.
+    VaultRemove {
+        /// Base64-encoded credential ID to remove
+        #[arg(long)]
+        credential_id: String,
+    },
+
+    /// Remove all credentials for a specific rp_id (site) from the vault.
+    VaultClearSite {
+        /// Relying party ID, e.g. `x.com`
+        #[arg(long)]
+        rp_id: String,
+    },
+
+    /// Export vault credentials for a site to a passkey JSON file.
+    VaultExport {
+        /// Relying party ID, e.g. `x.com`
+        #[arg(long)]
+        rp_id: String,
+        /// Output file path
+        #[arg(long, default_value = "/tmp/onecrawl-passkeys.json")]
+        output: String,
+    },
+
+    /// Import passkeys from a Bitwarden unencrypted JSON export.
+    ///
+    /// Generate with: `bw export --format json --output export.json`
+    /// Note: Only Bitwarden-native passkeys are importable. Apple/Windows
+    /// hardware-bound passkeys cannot be exported by design.
+    ImportBitwarden {
+        /// Path to Bitwarden JSON export file
+        #[arg(long)]
+        input: String,
+        /// Also save imported credentials to the vault
+        #[arg(long, default_value_t = true)]
+        vault: bool,
+    },
+
+    /// Import passkeys from a 1Password export (export.data JSON from a .1pux archive).
+    ///
+    /// Extract the .1pux ZIP first: `unzip export.1pux export.data`
+    ImportOnePassword {
+        /// Path to `export.data` JSON file (extracted from .1pux)
+        #[arg(long)]
+        input: String,
+        /// Also save imported credentials to the vault
+        #[arg(long, default_value_t = true)]
+        vault: bool,
+    },
+
+    /// Import passkeys from a FIDO Alliance CXF (Credential Exchange Format) JSON file.
+    ///
+    /// CXF v1.0 (FIDO Alliance draft, Oct 2024). For encrypted CXF files,
+    /// decrypt first — HPKE-encrypted CXF is not yet supported.
+    ImportCxf {
+        /// Path to CXF JSON file (`cxf.json`)
+        #[arg(long)]
+        input: String,
+        /// Also save imported credentials to the vault
+        #[arg(long, default_value_t = true)]
+        vault: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2193,6 +2268,30 @@ async fn main() {
             }
             AuthAction::PasskeySetFile { file } => {
                 commands::browser::passkey_set_file(&file).await
+            }
+            AuthAction::VaultList => {
+                commands::browser::passkey_vault_list();
+            }
+            AuthAction::VaultSave { input } => {
+                commands::browser::passkey_vault_save(&input);
+            }
+            AuthAction::VaultRemove { credential_id } => {
+                commands::browser::passkey_vault_remove(&credential_id);
+            }
+            AuthAction::VaultClearSite { rp_id } => {
+                commands::browser::passkey_vault_clear_site(&rp_id);
+            }
+            AuthAction::VaultExport { rp_id, output } => {
+                commands::browser::passkey_vault_export(&rp_id, &output);
+            }
+            AuthAction::ImportBitwarden { input, vault } => {
+                commands::browser::passkey_import_bitwarden(&input, vault);
+            }
+            AuthAction::ImportOnePassword { input, vault } => {
+                commands::browser::passkey_import_1password(&input, vault);
+            }
+            AuthAction::ImportCxf { input, vault } => {
+                commands::browser::passkey_import_cxf(&input, vault);
             }
         },
 

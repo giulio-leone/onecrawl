@@ -65,6 +65,7 @@ pub mod throttle;
 pub mod tls_fingerprint;
 pub mod tracing_cdp;
 pub mod web_storage;
+pub mod passkey_store;
 pub mod webauthn;
 pub mod websocket;
 pub mod workers;
@@ -97,6 +98,12 @@ pub use webauthn::{
     VirtualAuthenticator, VirtualCredential,
     PasskeyCredential, cdp_enable, cdp_create_authenticator,
     cdp_get_credentials, cdp_add_credential, save_passkeys, load_passkeys,
+};
+pub use passkey_store::{
+    PasskeyVault,
+    load_vault, save_vault, vault_add, vault_get, vault_remove,
+    vault_clear_site, vault_list, vault_total, vault_path,
+    import_bitwarden, import_cxf, import_1password_json,
 };
 pub use websocket::WsRecorder;
 pub use workers::ServiceWorkerInfo;
