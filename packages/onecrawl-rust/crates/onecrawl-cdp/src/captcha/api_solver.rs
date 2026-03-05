@@ -53,21 +53,18 @@ pub fn load_solver_config() -> Option<SolverConfig> {
     let content = std::fs::read_to_string(&path).ok()?;
     let json: serde_json::Value = serde_json::from_str(&content).ok()?;
 
-    if let Some(key) = json.get("capsolver_key").and_then(|v| v.as_str()) {
-        if !key.is_empty() {
+    if let Some(key) = json.get("capsolver_key").and_then(|v| v.as_str())
+        && !key.is_empty() {
             return Some(SolverConfig { service: SolverService::CapSolver, api_key: key.to_string() });
         }
-    }
-    if let Some(key) = json.get("twocaptcha_key").and_then(|v| v.as_str()) {
-        if !key.is_empty() {
+    if let Some(key) = json.get("twocaptcha_key").and_then(|v| v.as_str())
+        && !key.is_empty() {
             return Some(SolverConfig { service: SolverService::TwoCaptcha, api_key: key.to_string() });
         }
-    }
-    if let Some(key) = json.get("anticaptcha_key").and_then(|v| v.as_str()) {
-        if !key.is_empty() {
+    if let Some(key) = json.get("anticaptcha_key").and_then(|v| v.as_str())
+        && !key.is_empty() {
             return Some(SolverConfig { service: SolverService::AntiCaptcha, api_key: key.to_string() });
         }
-    }
     None
 }
 

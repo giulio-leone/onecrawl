@@ -9,16 +9,12 @@ use super::super::helpers::{with_page};
 // Print (Enhanced)
 // ---------------------------------------------------------------------------
 
-#[allow(clippy::too_many_arguments)]
-
 // ---------------------------------------------------------------------------
 // Screenshot Diff
 // ---------------------------------------------------------------------------
-
 // ---------------------------------------------------------------------------
 // Page Snapshot
 // ---------------------------------------------------------------------------
-
 fn auth_state_dir() -> std::path::PathBuf {
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
     let dir = std::path::PathBuf::from(home).join(".onecrawl").join("auth-states");
@@ -95,7 +91,7 @@ pub async fn auth_state_list() {
         .into_iter()
         .flat_map(|rd| rd.into_iter())
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "json"))
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
         .map(|e| {
             let name = e.path().file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
             let meta = e.metadata().ok();
@@ -145,7 +141,7 @@ pub async fn auth_state_clean() {
     let mut count = 0;
     if let Ok(rd) = std::fs::read_dir(&dir) {
         for entry in rd.flatten() {
-            if entry.path().extension().map_or(false, |ext| ext == "json") {
+            if entry.path().extension().is_some_and(|ext| ext == "json") {
                 let _ = std::fs::remove_file(entry.path());
                 count += 1;
             }

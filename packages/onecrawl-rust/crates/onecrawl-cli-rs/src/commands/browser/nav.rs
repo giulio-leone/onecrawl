@@ -12,18 +12,15 @@ use super::helpers::{with_page};
 pub async fn navigate(url: &str, wait: u64, wait_cf: bool) {
     let t0 = std::time::Instant::now();
     // Try proxy first (avoids CDP reconnect overhead)
-    if let Some(proxy) = super::super::proxy::ServerProxy::from_session().await {
-        match proxy.navigate(url).await {
-            Ok(_) => {
-                if wait > 0 {
-                    tokio::time::sleep(std::time::Duration::from_millis(wait)).await;
-                }
-                let ms = t0.elapsed().as_millis();
-                println!("{} Navigated to {} {} {}", "✓".green(), url.cyan(), format!("{ms}ms").dimmed(), "(proxy)".dimmed());
-                return;
-            }
-            Err(_) => {} // fall through to CDP
+    if let Some(proxy) = super::super::proxy::ServerProxy::from_session().await
+        && proxy.navigate(url).await.is_ok()
+    {
+        if wait > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(wait)).await;
         }
+        let ms = t0.elapsed().as_millis();
+        println!("{} Navigated to {} {} {}", "✓".green(), url.cyan(), format!("{ms}ms").dimmed(), "(proxy)".dimmed());
+        return;
     }
     with_page(|page| async move {
         onecrawl_cdp::navigation::goto(&page, url)

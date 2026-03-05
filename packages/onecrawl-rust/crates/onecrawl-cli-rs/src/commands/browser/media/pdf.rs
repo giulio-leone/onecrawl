@@ -9,16 +9,12 @@ use super::super::helpers::{with_page};
 // Print (Enhanced)
 // ---------------------------------------------------------------------------
 
-#[allow(clippy::too_many_arguments)]
-
 // ---------------------------------------------------------------------------
 // Screenshot Diff
 // ---------------------------------------------------------------------------
-
 // ---------------------------------------------------------------------------
 // Page Snapshot
 // ---------------------------------------------------------------------------
-
 pub async fn pdf(output: &str, landscape: bool, scale: f64) {
     let out = output.to_string();
     with_page(|page| async move {
@@ -48,6 +44,7 @@ pub async fn pdf(output: &str, landscape: bool, scale: f64) {
     .await;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn print_pdf(
     output: &str,
     landscape: bool,

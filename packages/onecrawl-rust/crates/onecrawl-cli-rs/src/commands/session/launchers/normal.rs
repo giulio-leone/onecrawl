@@ -6,12 +6,9 @@ use std::process::Stdio;
 use super::super::core::{find_free_port};
 
 /// Probe a CDP debugging port. Returns `(ws_url, user_agent_string)` if reachable.
-
 /// Kill a process by PID.
-
 /// Start the proxy server as a child process and create an instance + default tab.
 /// Returns (port, server_pid, instance_id, tab_id, ws_url).
-
 /// Copy only the session-critical files from a real Chrome profile to a
 /// non-default destination directory.  Cache, GPU cache, and code cache are
 /// intentionally skipped to keep the copy fast (< 1 s for typical profiles).
@@ -19,7 +16,6 @@ use super::super::core::{find_free_port};
 /// Cookies are encrypted with the macOS Keychain "Chrome Safe Storage" key.
 /// Since we copy to a path on the same machine under the same OS user, Chrome
 /// decrypts them identically — login sessions survive the copy.
-
 /// Launch the system Chrome browser with the user's real profile and no automation flags.
 ///
 /// Strategy (in order):
@@ -31,12 +27,10 @@ use super::super::core::{find_free_port};
 ///
 /// Default profile: `~/.onecrawl/chrome-profile/` (persists between sessions; avoids
 /// macOS Chrome singleton conflicts with the user's own Chrome instance).
-
 /// Launch Chrome in `--headless=new` mode with the dedicated onecrawl profile.
 ///
 /// Chrome runs as a detached process so it survives after `session start` exits.
 /// A stealth init script (webdriver=undefined, UA spoof) is injected on every page.
-
 pub(crate) async fn launch_normal_chrome(
     chrome_profile: Option<&str>,
 ) -> Result<(String, Option<u32>), String> {
@@ -153,9 +147,9 @@ pub(crate) async fn launch_normal_chrome(
     if let Ok(content) = std::fs::read_to_string(&active_port_file) {
         // Only trust the file if it looks like a valid 2-line Chrome file (has ws-path).
         let mut lines = content.lines();
-        if let (Some(port_str), Some(_ws_path)) = (lines.next(), lines.next()) {
-            if let Ok(port) = port_str.trim().parse::<u16>() {
-                if let Some((ws_url, _)) = probe(port).await {
+        if let (Some(port_str), Some(_ws_path)) = (lines.next(), lines.next())
+            && let Ok(port) = port_str.trim().parse::<u16>()
+                && let Some((ws_url, _)) = probe(port).await {
                     println!(
                         "{} Attached to Chrome on port {} (DevToolsActivePort)",
                         "✓".green(), port
@@ -163,8 +157,6 @@ pub(crate) async fn launch_normal_chrome(
                     return Ok((ws_url, None));
                 }
                 // Port in file is stale / not reachable — fall through to process scan.
-            }
-        }
     }
 
     // --- Step 2: Scan process args for --remote-debugging-port=N ---
@@ -229,8 +221,8 @@ pub(crate) async fn launch_normal_chrome(
         }
     }
 
-    if let Some(ws_url) = best_ws {
-        if best_tier >= 2 {
+    if let Some(ws_url) = best_ws
+        && best_tier >= 2 {
             // Headed (or real-profile headed) Chrome found — use it.
             let mode = if best_tier == 3 { "real profile" } else { "headed" };
             println!(
@@ -241,7 +233,6 @@ pub(crate) async fn launch_normal_chrome(
         }
         // All found instances are headless automation browsers — skip them.
         // Fall through to Step 3/4 to find or launch a real Chrome.
-    }
 
     // scan_ports: re-scan for poll loop (Step 3); only non-headless processes.
     let _scan_ports = move || -> Vec<u16> {
@@ -386,7 +377,7 @@ pub(crate) async fn launch_normal_chrome(
             format!("Chrome did not expose CDP on port {port} within 60s")
         })?;
         println!("{} Chrome ready on port {}", "✓".green(), port);
-        return Ok((ws_url, Some(chrome_pid))); // track PID so 'session close' can kill it
+        Ok((ws_url, Some(chrome_pid)))// track PID so 'session close' can kill it
     }
 
     #[cfg(target_os = "linux")]

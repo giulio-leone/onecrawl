@@ -5,12 +5,9 @@ use std::process::Stdio;
 use super::super::core::{find_free_port};
 
 /// Probe a CDP debugging port. Returns `(ws_url, user_agent_string)` if reachable.
-
 /// Kill a process by PID.
-
 /// Start the proxy server as a child process and create an instance + default tab.
 /// Returns (port, server_pid, instance_id, tab_id, ws_url).
-
 /// Copy only the session-critical files from a real Chrome profile to a
 /// non-default destination directory.  Cache, GPU cache, and code cache are
 /// intentionally skipped to keep the copy fast (< 1 s for typical profiles).
@@ -18,7 +15,6 @@ use super::super::core::{find_free_port};
 /// Cookies are encrypted with the macOS Keychain "Chrome Safe Storage" key.
 /// Since we copy to a path on the same machine under the same OS user, Chrome
 /// decrypts them identically — login sessions survive the copy.
-
 /// Launch the system Chrome browser with the user's real profile and no automation flags.
 ///
 /// Strategy (in order):
@@ -30,12 +26,10 @@ use super::super::core::{find_free_port};
 ///
 /// Default profile: `~/.onecrawl/chrome-profile/` (persists between sessions; avoids
 /// macOS Chrome singleton conflicts with the user's own Chrome instance).
-
 /// Launch Chrome in `--headless=new` mode with the dedicated onecrawl profile.
 ///
 /// Chrome runs as a detached process so it survives after `session start` exits.
 /// A stealth init script (webdriver=undefined, UA spoof) is injected on every page.
-
 pub(crate) async fn launch_stealth_headless(
     chrome_profile: Option<&str>,
 ) -> Result<(String, Option<u32>), String> {
@@ -54,14 +48,12 @@ pub(crate) async fn launch_stealth_headless(
     let port_file = format!("{user_data_dir}/DevToolsActivePort");
     if let Ok(contents) = std::fs::read_to_string(&port_file) {
         let port_str = contents.lines().next().unwrap_or("").trim();
-        if let Ok(port) = port_str.parse::<u16>() {
-            if let Some((ws, ua)) = cdp_probe(port).await {
-                if ua.contains("HeadlessChrome") {
+        if let Ok(port) = port_str.parse::<u16>()
+            && let Some((ws, ua)) = cdp_probe(port).await
+                && ua.contains("HeadlessChrome") {
                     println!("{} Reusing running headless Chrome on port {}", "✓".green(), port);
                     return Ok((ws, None));
                 }
-            }
-        }
     }
 
     let port = find_free_port().map_err(|e| format!("find port: {e}"))?;
@@ -123,7 +115,7 @@ pub(crate) async fn launch_stealth_headless(
             format!("Headless Chrome did not expose CDP on port {port} within 30s")
         })?;
         println!("{} Headless Chrome ready on port {} (PID {})", "✓".green(), port, chrome_pid);
-        return Ok((ws_url, Some(chrome_pid)));
+        Ok((ws_url, Some(chrome_pid)))
     }
 
     #[cfg(target_os = "linux")]

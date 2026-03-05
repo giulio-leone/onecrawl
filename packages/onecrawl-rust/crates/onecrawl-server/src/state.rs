@@ -95,11 +95,10 @@ impl ServerState {
         ttl_secs: Option<u64>,
     ) -> Result<(), String> {
         let mut locks = self.tab_locks.write().await;
-        if let Some(existing) = locks.get(tab_id) {
-            if !existing.is_expired() && existing.owner != owner {
+        if let Some(existing) = locks.get(tab_id)
+            && !existing.is_expired() && existing.owner != owner {
                 return Err(existing.owner.clone());
             }
-        }
         locks.insert(
             tab_id.to_owned(),
             TabLock {

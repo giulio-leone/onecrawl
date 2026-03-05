@@ -33,7 +33,7 @@ pub(crate) async fn dispatch(command: Commands) {
 
         // ── Content ─────────────────────────────────────────────────
         Commands::Get { what, selector, arg } => {
-            let resolved_sel = selector.as_deref().map(|s| onecrawl_cdp::accessibility::resolve_ref(s));
+            let resolved_sel = selector.as_deref().map(onecrawl_cdp::accessibility::resolve_ref);
             commands::browser::get(&what, resolved_sel.as_deref(), arg.as_deref()).await
         }
         Commands::Eval { expression } => commands::browser::eval(&expression).await,
@@ -406,7 +406,7 @@ pub(crate) async fn dispatch(command: Commands) {
 
         // ── Scroll ─────────────────────────────────────────────────
         Commands::Scroll { direction, pixels, selector } => {
-            let resolved_sel = selector.as_deref().map(|s| onecrawl_cdp::accessibility::resolve_ref(s));
+            let resolved_sel = selector.as_deref().map(onecrawl_cdp::accessibility::resolve_ref);
             commands::browser::scroll(&direction, pixels, resolved_sel.as_deref()).await
         }
 

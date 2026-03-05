@@ -9,16 +9,12 @@ use super::super::helpers::{with_page};
 // Print (Enhanced)
 // ---------------------------------------------------------------------------
 
-#[allow(clippy::too_many_arguments)]
-
 // ---------------------------------------------------------------------------
 // Screenshot Diff
 // ---------------------------------------------------------------------------
-
 // ---------------------------------------------------------------------------
 // Page Snapshot
 // ---------------------------------------------------------------------------
-
 pub async fn diff_snapshot(name: Option<&str>) {
     let baseline_name = name.unwrap_or("default").to_string();
     let path = format!("/tmp/onecrawl-diff-snap-{baseline_name}.json");

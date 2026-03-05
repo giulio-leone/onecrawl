@@ -9,16 +9,12 @@ use super::super::helpers::{with_page};
 // Print (Enhanced)
 // ---------------------------------------------------------------------------
 
-#[allow(clippy::too_many_arguments)]
-
 // ---------------------------------------------------------------------------
 // Screenshot Diff
 // ---------------------------------------------------------------------------
-
 // ---------------------------------------------------------------------------
 // Page Snapshot
 // ---------------------------------------------------------------------------
-
 pub async fn screenshot(
     output: &str,
     full: bool,
@@ -29,10 +25,10 @@ pub async fn screenshot(
 ) {
     let t0 = std::time::Instant::now();
     // Proxy fast-path for simple PNG screenshots (no element selector, no custom format, no annotate)
-    if element.is_none() && format == "png" && quality.is_none() && !annotate {
-        if let Some(proxy) = super::super::super::proxy::ServerProxy::from_session().await {
-            if let Ok(bytes) = proxy.screenshot().await {
-                if std::fs::write(output, &bytes).is_ok() {
+    if element.is_none() && format == "png" && quality.is_none() && !annotate
+        && let Some(proxy) = super::super::super::proxy::ServerProxy::from_session().await
+            && let Ok(bytes) = proxy.screenshot().await
+                && std::fs::write(output, &bytes).is_ok() {
                     let ms = t0.elapsed().as_millis();
                     println!(
                         "{} Screenshot saved to {} ({} bytes) {} {}",
@@ -44,9 +40,6 @@ pub async fn screenshot(
                     );
                     return;
                 }
-            }
-        }
-    }
     let out = output.to_string();
     let elem = element.map(String::from);
     let fmt = format.to_string();

@@ -16,11 +16,11 @@ use super::super::helpers::{with_page};
 // ──────────────── Structured Data ────────────────
 
 pub async fn get(what: &str, selector: Option<&str>, arg: Option<&str>) {
-    let selector = selector.map(|s| onecrawl_cdp::accessibility::resolve_ref(s));
+    let selector = selector.map(onecrawl_cdp::accessibility::resolve_ref);
     let selector = selector.as_deref();
     // Proxy fast-path for simple content retrieval (no selector)
-    if selector.is_none() {
-        if let Some(proxy) = super::super::super::proxy::ServerProxy::from_session().await {
+    if selector.is_none()
+        && let Some(proxy) = super::super::super::proxy::ServerProxy::from_session().await {
             match what {
                 "text" => {
                     if let Ok(text) = proxy.get_text().await {
@@ -52,7 +52,6 @@ pub async fn get(what: &str, selector: Option<&str>, arg: Option<&str>) {
                 _ => {}
             }
         }
-    }
     with_page(|page| async move {
         match what {
             "url" => {

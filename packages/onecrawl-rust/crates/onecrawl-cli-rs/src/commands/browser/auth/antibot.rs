@@ -5,17 +5,15 @@ use super::super::helpers::{with_page};
 // Passkey / WebAuthn
 // ---------------------------------------------------------------------------
 
-/// Enable a CDP real virtual authenticator, wait for a passkey to be registered
-/// on the current page (e.g. x.com Settings → Security → Passkey), then export
-/// the credential (including private key) to a JSON file.
-///
-/// The credential exported here can later be injected via
-/// `session start --import-passkey FILE` for fully automated headless passkey auth.
-
-/// Store the passkey file path in the active session so that CDP WebAuthn is
-/// automatically re-enabled and credentials are injected on every
-/// `connect_to_session()` call (same lifecycle as stealth scripts).
-
+// Enable a CDP real virtual authenticator, wait for a passkey to be registered
+// on the current page (e.g. x.com Settings → Security → Passkey), then export
+// the credential (including private key) to a JSON file.
+//
+// The credential exported here can later be injected via
+// `session start --import-passkey FILE` for fully automated headless passkey auth.
+// Store the passkey file path in the active session so that CDP WebAuthn is
+// automatically re-enabled and credentials are injected on every
+// `connect_to_session()` call (same lifecycle as stealth scripts).
 // ---------------------------------------------------------------------------
 // Stealth
 // ---------------------------------------------------------------------------
@@ -32,22 +30,14 @@ use super::super::helpers::{with_page};
 // Passkey Vault (multi-site persistent store)
 // ---------------------------------------------------------------------------
 
-/// List all sites and credential counts in the passkey vault.
-
-/// Add credentials from a native passkey JSON file to the vault.
-
-/// Remove a specific credential from the vault by its credential_id.
-
-/// Remove all credentials for a specific rp_id from the vault.
-
-/// Export vault credentials for a site to a passkey JSON file.
-
-/// Import passkeys from a Bitwarden unencrypted JSON export.
-
-/// Import passkeys from a 1Password export.data JSON file (extracted from .1pux).
-
-/// Import passkeys from a FIDO Alliance CXF JSON file.
-
+// List all sites and credential counts in the passkey vault.
+// Add credentials from a native passkey JSON file to the vault.
+// Remove a specific credential from the vault by its credential_id.
+// Remove all credentials for a specific rp_id from the vault.
+// Export vault credentials for a site to a passkey JSON file.
+// Import passkeys from a Bitwarden unencrypted JSON export.
+// Import passkeys from a 1Password export.data JSON file (extracted from .1pux).
+// Import passkeys from a FIDO Alliance CXF JSON file.
 pub async fn antibot_inject(level: &str) {
     let lvl = level.to_string();
     with_page(|page| async move {

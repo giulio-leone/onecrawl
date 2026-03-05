@@ -130,7 +130,7 @@ pub async fn adaptive_load(path: &str) {
 }
 
 pub async fn dom_observe(selector: Option<&str>) {
-    let sel = selector.map(|s| onecrawl_cdp::accessibility::resolve_ref(s));
+    let sel = selector.map(onecrawl_cdp::accessibility::resolve_ref);
     with_page(|page| async move {
         onecrawl_cdp::dom_observer::start_dom_observer(&page, sel.as_deref())
             .await
@@ -167,7 +167,7 @@ pub async fn dom_stop() {
 }
 
 pub async fn dom_snapshot(selector: Option<&str>) {
-    let sel = selector.map(|s| onecrawl_cdp::accessibility::resolve_ref(s));
+    let sel = selector.map(onecrawl_cdp::accessibility::resolve_ref);
     with_page(|page| async move {
         let html = onecrawl_cdp::dom_observer::get_dom_snapshot(&page, sel.as_deref())
             .await

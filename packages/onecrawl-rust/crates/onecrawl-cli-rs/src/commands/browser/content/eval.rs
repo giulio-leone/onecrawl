@@ -16,8 +16,8 @@ use super::super::helpers::{with_page};
 
 pub async fn eval(expression: &str) {
     // Try proxy first
-    if let Some(proxy) = super::super::super::proxy::ServerProxy::from_session().await {
-        if let Ok(val) = proxy.evaluate(expression).await {
+    if let Some(proxy) = super::super::super::proxy::ServerProxy::from_session().await
+        && let Ok(val) = proxy.evaluate(expression).await {
             let result = &val["result"];
             match result {
                 serde_json::Value::String(s) => println!("{s}"),
@@ -29,7 +29,6 @@ pub async fn eval(expression: &str) {
             }
             return;
         }
-    }
     with_page(|page| async move {
         let val = onecrawl_cdp::page::evaluate_js(&page, expression)
             .await

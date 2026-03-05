@@ -5,7 +5,6 @@ use super::core::{load_session, save_session};
 
 /// Connect to a running browser session and import cookies from a JSON file.
 /// The file must be in the CookieJar format produced by `cookie export`.
-
 /// Inject the stealth init script persistently via `Page.addScriptToEvaluateOnNewDocument`.
 /// This runs before any page's own scripts on every navigation, ensuring:
 ///   - navigator.webdriver = undefined
@@ -13,7 +12,6 @@ use super::core::{load_session, save_session};
 ///   - User-Agent, languages, platform match the fingerprint
 ///   - WebGL vendor/renderer spoofed
 ///   - chrome.runtime present (so x.com sees a "normal" Chrome extension API)
-
 pub(crate) async fn apply_cookie_import(ws_url: &str, cookie_file: &str) -> Result<(), String> {
     println!("{} Importing cookies from {}...", "→".blue(), cookie_file);
     let session = BrowserSession::connect(ws_url)

@@ -17,7 +17,7 @@ use super::super::helpers::{with_page};
 
 pub async fn extract_content(format: &str, selector: Option<&str>, output: Option<&str>) {
     let format = format.to_string();
-    let selector = selector.map(|s| onecrawl_cdp::accessibility::resolve_ref(s));
+    let selector = selector.map(onecrawl_cdp::accessibility::resolve_ref);
     let output = output.map(String::from);
     with_page(|page| async move {
         let fmt =

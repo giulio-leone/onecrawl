@@ -137,36 +137,33 @@ pub fn wait_duration(state: &RateLimitState) -> u64 {
 
     // Check per-second window
     let in_second = count_in_window(&state.timestamps, now, 1000.0) as f64;
-    if in_second >= state.config.max_requests_per_second {
-        if let Some(oldest) = oldest_in_window(&state.timestamps, now, 1000.0) {
+    if in_second >= state.config.max_requests_per_second
+        && let Some(oldest) = oldest_in_window(&state.timestamps, now, 1000.0) {
             let needed = oldest + 1000.0 - now;
             if needed > wait {
                 wait = needed;
             }
         }
-    }
 
     // Check per-minute window
     let in_minute = count_in_window(&state.timestamps, now, 60_000.0) as f64;
-    if in_minute >= state.config.max_requests_per_minute {
-        if let Some(oldest) = oldest_in_window(&state.timestamps, now, 60_000.0) {
+    if in_minute >= state.config.max_requests_per_minute
+        && let Some(oldest) = oldest_in_window(&state.timestamps, now, 60_000.0) {
             let needed = oldest + 60_000.0 - now;
             if needed > wait {
                 wait = needed;
             }
         }
-    }
 
     // Check per-hour window
     let in_hour = count_in_window(&state.timestamps, now, 3_600_000.0) as f64;
-    if in_hour >= state.config.max_requests_per_hour {
-        if let Some(oldest) = oldest_in_window(&state.timestamps, now, 3_600_000.0) {
+    if in_hour >= state.config.max_requests_per_hour
+        && let Some(oldest) = oldest_in_window(&state.timestamps, now, 3_600_000.0) {
             let needed = oldest + 3_600_000.0 - now;
             if needed > wait {
                 wait = needed;
             }
         }
-    }
 
     // Apply minimum cooldown
     let cooldown = state.config.cooldown_ms as f64;

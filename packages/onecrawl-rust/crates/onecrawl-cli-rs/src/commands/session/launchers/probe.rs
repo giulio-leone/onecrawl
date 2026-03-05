@@ -1,12 +1,9 @@
 
 
 /// Probe a CDP debugging port. Returns `(ws_url, user_agent_string)` if reachable.
-
 /// Kill a process by PID.
-
 /// Start the proxy server as a child process and create an instance + default tab.
 /// Returns (port, server_pid, instance_id, tab_id, ws_url).
-
 /// Copy only the session-critical files from a real Chrome profile to a
 /// non-default destination directory.  Cache, GPU cache, and code cache are
 /// intentionally skipped to keep the copy fast (< 1 s for typical profiles).
@@ -14,7 +11,6 @@
 /// Cookies are encrypted with the macOS Keychain "Chrome Safe Storage" key.
 /// Since we copy to a path on the same machine under the same OS user, Chrome
 /// decrypts them identically — login sessions survive the copy.
-
 /// Launch the system Chrome browser with the user's real profile and no automation flags.
 ///
 /// Strategy (in order):
@@ -26,12 +22,10 @@
 ///
 /// Default profile: `~/.onecrawl/chrome-profile/` (persists between sessions; avoids
 /// macOS Chrome singleton conflicts with the user's own Chrome instance).
-
 /// Launch Chrome in `--headless=new` mode with the dedicated onecrawl profile.
 ///
 /// Chrome runs as a detached process so it survives after `session start` exits.
 /// A stealth init script (webdriver=undefined, UA spoof) is injected on every page.
-
 pub(crate) async fn cdp_probe(port: u16) -> Option<(String, String)> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(2))

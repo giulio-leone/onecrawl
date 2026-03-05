@@ -2,7 +2,6 @@ use colored::Colorize;
 use onecrawl_cdp::Page;
 
 /// Run a browser command that needs the BrowserSession (e.g. tab management).
-
 pub async fn with_page<F, Fut>(f: F)
 where
     F: FnOnce(Page) -> Fut,

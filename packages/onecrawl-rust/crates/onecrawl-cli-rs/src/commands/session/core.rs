@@ -89,25 +89,19 @@ pub enum SessionAction {
 }
 
 /// Load session info from disk.
-
 /// Save session info to disk.
-
 /// Remove session file.
-
 /// Connect to the active session and return the active page.
 ///
 /// If `active_tab_id` is set in the session file (written by `tab switch`),
 /// the page with that TargetId is returned. Otherwise falls back to the first
 /// Resolve passkey credentials from session info.
 /// Priority: explicit file → vault rp_id → empty.
-
 /// available page, creating a blank one if the browser has none.
 ///
 /// Retries target discovery up to 5×50ms because the chromiumoxide handler
 /// populates its `targets` map asynchronously after a fresh `connect()`.
-
 /// Find a free TCP port by binding to port 0.
-
 pub fn load_session() -> Option<SessionInfo> {
     let data = std::fs::read_to_string(SESSION_FILE).ok()?;
     serde_json::from_str(&data).ok()
@@ -202,15 +196,13 @@ pub async fn connect_to_session() -> Result<(BrowserSession, onecrawl_cdp::Page)
         // Virtual authenticators are also per-DevTools-session and must be
         // re-created on every connect_to_session() call.
         let passkey_creds = resolve_passkey_creds(&info);
-        if !passkey_creds.is_empty() {
-            if let Ok(()) = onecrawl_cdp::cdp_enable(&page).await {
-                if let Ok(auth_id) = onecrawl_cdp::cdp_create_authenticator(&page).await {
+        if !passkey_creds.is_empty()
+            && let Ok(()) = onecrawl_cdp::cdp_enable(&page).await
+                && let Ok(auth_id) = onecrawl_cdp::cdp_create_authenticator(&page).await {
                     for cred in &passkey_creds {
                         let _ = onecrawl_cdp::cdp_add_credential(&page, &auth_id, cred).await;
                     }
                 }
-            }
-        }
 
         return Ok((session, page));
     }
@@ -239,15 +231,13 @@ pub async fn connect_to_session() -> Result<(BrowserSession, onecrawl_cdp::Page)
         let _ = onecrawl_cdp::inject_persistent_stealth(&p, stale_info.fingerprint_ua.as_deref()).await;
             // Re-inject passkeys for the fallback page if configured.
             let passkey_creds = resolve_passkey_creds(&stale_info);
-            if !passkey_creds.is_empty() {
-                if let Ok(()) = onecrawl_cdp::cdp_enable(&p).await {
-                    if let Ok(auth_id) = onecrawl_cdp::cdp_create_authenticator(&p).await {
+            if !passkey_creds.is_empty()
+                && let Ok(()) = onecrawl_cdp::cdp_enable(&p).await
+                    && let Ok(auth_id) = onecrawl_cdp::cdp_create_authenticator(&p).await {
                         for cred in &passkey_creds {
                             let _ = onecrawl_cdp::cdp_add_credential(&p, &auth_id, cred).await;
                         }
                     }
-                }
-            }
             return Ok((session, p));
         }
         Err(format!(
@@ -376,11 +366,10 @@ pub async fn handle(action: SessionAction) {
                             eprintln!("{} Stealth injection failed: {e}", "⚠".yellow());
                         }
                         // Apply cookie import if requested
-                        if let Some(ref cookie_file) = import_cookies {
-                            if let Err(e) = apply_cookie_import(&ws_url, cookie_file).await {
+                        if let Some(ref cookie_file) = import_cookies
+                            && let Err(e) = apply_cookie_import(&ws_url, cookie_file).await {
                                 eprintln!("{} Cookie import failed: {e}", "⚠".yellow());
                             }
-                        }
                     }
                     Err(e) => {
                         eprintln!("{} Failed to start stealth headless Chrome: {e}", "✗".red());
@@ -417,11 +406,10 @@ pub async fn handle(action: SessionAction) {
                             std::process::exit(1);
                         }
                         // Apply cookie import if requested
-                        if let Some(ref cookie_file) = import_cookies {
-                            if let Err(e) = apply_cookie_import(&ws_url, cookie_file).await {
+                        if let Some(ref cookie_file) = import_cookies
+                            && let Err(e) = apply_cookie_import(&ws_url, cookie_file).await {
                                 eprintln!("{} Cookie import failed: {e}", "⚠".yellow());
                             }
-                        }
                         println!("{} Session started (direct CDP)", "✓".green());
                         println!("  WS: {}", ws_url.cyan());
                         println!("  File: {}", SESSION_FILE.dimmed());

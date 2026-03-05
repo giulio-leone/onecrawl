@@ -3,12 +3,9 @@ use super::probe::kill_process;
 use super::super::core::{find_free_port};
 
 /// Probe a CDP debugging port. Returns `(ws_url, user_agent_string)` if reachable.
-
 /// Kill a process by PID.
-
 /// Start the proxy server as a child process and create an instance + default tab.
 /// Returns (port, server_pid, instance_id, tab_id, ws_url).
-
 /// Copy only the session-critical files from a real Chrome profile to a
 /// non-default destination directory.  Cache, GPU cache, and code cache are
 /// intentionally skipped to keep the copy fast (< 1 s for typical profiles).
@@ -16,7 +13,6 @@ use super::super::core::{find_free_port};
 /// Cookies are encrypted with the macOS Keychain "Chrome Safe Storage" key.
 /// Since we copy to a path on the same machine under the same OS user, Chrome
 /// decrypts them identically — login sessions survive the copy.
-
 /// Launch the system Chrome browser with the user's real profile and no automation flags.
 ///
 /// Strategy (in order):
@@ -28,12 +24,10 @@ use super::super::core::{find_free_port};
 ///
 /// Default profile: `~/.onecrawl/chrome-profile/` (persists between sessions; avoids
 /// macOS Chrome singleton conflicts with the user's own Chrome instance).
-
 /// Launch Chrome in `--headless=new` mode with the dedicated onecrawl profile.
 ///
 /// Chrome runs as a detached process so it survives after `session start` exits.
 /// A stealth init script (webdriver=undefined, UA spoof) is injected on every page.
-
 pub(crate) async fn start_proxy_server(headless: bool) -> Result<(u16, u32, String, String, String), String> {
     let port = find_free_port().map_err(|e| format!("find port: {e}"))?;
 

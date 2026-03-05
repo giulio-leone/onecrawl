@@ -35,7 +35,7 @@ pub async fn route_add(pattern: &str, status: u16, body: Option<&str>, content_t
         page.evaluate(enable_js).await.map_err(|e| e.to_string())?;
         // Use CDP Fetch.enable for actual interception
         let cdp_enable = r#"{"method":"Fetch.enable","params":{"patterns":[{"requestStage":"Request"}]}}"#;
-        let _ = page.evaluate(format!("void(0)")).await; // keep alive
+        let _ = page.evaluate("void(0)".to_string()).await; // keep alive
         if block {
             println!("{} Route: blocking requests matching '{}'", "✓".green(), pat);
         } else {
