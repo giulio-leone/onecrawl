@@ -1,3 +1,4 @@
+use chromiumoxide::cdp::browser_protocol::input::InsertTextParams;
 use chromiumoxide::Page;
 use onecrawl_core::{Error, Result};
 
@@ -26,6 +27,10 @@ pub async fn click(page: &Page, selector: &str) -> Result<()> {
 }
 
 /// Type text into a focused element (key-by-key).
+///
+/// ASCII characters are dispatched via CDP key events (realistic keyDown/keyUp).
+/// Non-ASCII characters (emoji, CJK, accented, etc.) use `Input.insertText` which
+/// emulates IME/emoji-keyboard input — the same path a real user would take.
 pub async fn type_text(page: &Page, selector: &str, text: &str) -> Result<()> {
     let el = page
         .find_element(selector)
@@ -34,9 +39,29 @@ pub async fn type_text(page: &Page, selector: &str, text: &str) -> Result<()> {
     el.click()
         .await
         .map_err(|e| Error::Cdp(format!("focus failed: {e}")))?;
-    el.type_str(text)
-        .await
-        .map_err(|e| Error::Cdp(format!("type failed: {e}")))?;
+
+    let mut ascii_buf = String::new();
+    for ch in text.chars() {
+        if ch.is_ascii() {
+            ascii_buf.push(ch);
+        } else {
+            if !ascii_buf.is_empty() {
+                el.type_str(&ascii_buf)
+                    .await
+                    .map_err(|e| Error::Cdp(format!("type failed: {e}")))?;
+                ascii_buf.clear();
+            }
+            let s = ch.to_string();
+            page.execute(InsertTextParams::from(s))
+                .await
+                .map_err(|e| Error::Cdp(format!("insertText failed: {e}")))?;
+        }
+    }
+    if !ascii_buf.is_empty() {
+        el.type_str(&ascii_buf)
+            .await
+            .map_err(|e| Error::Cdp(format!("type failed: {e}")))?;
+    }
     Ok(())
 }
 

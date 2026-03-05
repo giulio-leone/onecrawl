@@ -265,6 +265,7 @@ if (gl) {
     if (di) { wv = gl.getParameter(di.UNMASKED_VENDOR_WEBGL); wr = gl.getParameter(di.UNMASKED_RENDERER_WEBGL); }
 }
 return JSON.stringify({
+    name: 'detected',
     user_agent: navigator.userAgent,
     platform: navigator.platform,
     vendor: navigator.vendor || '',
