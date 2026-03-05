@@ -97,9 +97,47 @@ pub fn captcha_types() {
     }
 }
 
+async fn get_page_url(page: &onecrawl_cdp::Page) -> String {
+    page.evaluate("window.location.href")
+        .await
+        .ok()
+        .and_then(|v| v.into_value().ok())
+        .unwrap_or_default()
+}
+
+async fn try_api_fallback(
+    page: &onecrawl_cdp::Page,
+    det: &onecrawl_cdp::captcha::CaptchaDetection,
+    context: &str,
+) -> std::result::Result<bool, String> {
+    let config = match onecrawl_cdp::captcha::load_solver_config() {
+        Some(c) => c,
+        None => return Ok(false),
+    };
+    let sitekey = match det.sitekey.as_deref() {
+        Some(k) => k,
+        None => {
+            eprintln!("{} {context} (no sitekey for API fallback)", "✗".red());
+            return Ok(false);
+        }
+    };
+    let page_url = get_page_url(page).await;
+    println!("  Trying {} API...", config.service.to_string().cyan());
+    match onecrawl_cdp::captcha::solve_via_api(&det.captcha_type, sitekey, &page_url, &config).await {
+        Ok(token) => {
+            let _ = onecrawl_cdp::captcha::inject_solution(page, det, &token).await;
+            println!("{} {} solved via {} API", "✓".green(), det.captcha_type.cyan(), config.service);
+            Ok(true)
+        }
+        Err(e) => {
+            eprintln!("{} API solve for {} failed: {}", "✗".red(), det.captcha_type, e);
+            Ok(false)
+        }
+    }
+}
+
 pub async fn captcha_solve(timeout: u64, use_api: bool) {
     with_page(|page| async move {
-        // First detect what captcha is present
         let det = onecrawl_cdp::captcha::detect_captcha(&page)
             .await
             .map_err(|e| e.to_string())?;
@@ -116,7 +154,6 @@ pub async fn captcha_solve(timeout: u64, use_api: bool) {
             if use_api { "— using API solver" } else { "— trying browser-native first" }
         );
 
-        // API solver path
         if use_api {
             let config = onecrawl_cdp::captcha::load_solver_config();
             if config.is_none() {
@@ -128,52 +165,21 @@ pub async fn captcha_solve(timeout: u64, use_api: bool) {
                 std::process::exit(1);
             }
             let config = config.unwrap();
-
             let sitekey = det.sitekey.as_deref().unwrap_or("");
             if sitekey.is_empty() {
                 eprintln!("{} No sitekey found — cannot use API solver", "✗".red());
-                eprintln!("  The CAPTCHA element doesn't expose a data-sitekey attribute.");
                 std::process::exit(1);
             }
-
-            let page_url: String = page.evaluate("window.location.href")
-                .await
-                .ok()
-                .and_then(|v| v.into_value().ok())
-                .unwrap_or_default();
-
-            println!(
-                "  Sending to {} (sitekey: {}...)",
-                config.service.to_string().cyan(),
-                &sitekey[..sitekey.len().min(12)]
-            );
-
-            match onecrawl_cdp::captcha::solve_via_api(
-                &det.captcha_type,
-                sitekey,
-                &page_url,
-                &config,
-            )
-            .await
-            {
+            let page_url = get_page_url(&page).await;
+            println!("  Sending to {} (sitekey: {}...)", config.service.to_string().cyan(), &sitekey[..sitekey.len().min(12)]);
+            match onecrawl_cdp::captcha::solve_via_api(&det.captcha_type, sitekey, &page_url, &config).await {
                 Ok(token) => {
-                    // Inject the token
                     let injected = onecrawl_cdp::captcha::inject_solution(&page, &det, &token)
-                        .await
-                        .map_err(|e| e.to_string())?;
+                        .await.map_err(|e| e.to_string())?;
                     if injected {
-                        println!(
-                            "{} {} solved via {} — token injected",
-                            "✓".green(),
-                            det.captcha_type.cyan(),
-                            config.service.to_string().cyan()
-                        );
+                        println!("{} {} solved via {} — token injected", "✓".green(), det.captcha_type.cyan(), config.service.to_string().cyan());
                     } else {
-                        println!(
-                            "{} Token received but injection failed — token: {}...",
-                            "⚠".yellow(),
-                            &token[..token.len().min(40)]
-                        );
+                        println!("{} Token received but injection failed — token: {}...", "⚠".yellow(), &token[..token.len().min(40)]);
                     }
                 }
                 Err(e) => {
@@ -184,52 +190,22 @@ pub async fn captcha_solve(timeout: u64, use_api: bool) {
             return Ok(());
         }
 
-        // Browser-native solve path
         match det.captcha_type.as_str() {
             "cloudflare_turnstile" => {
                 let solved = onecrawl_cdp::captcha::solve_turnstile_native(&page, timeout)
-                    .await
-                    .map_err(|e| e.to_string())?;
+                    .await.map_err(|e| e.to_string())?;
                 if solved {
                     println!("{} Turnstile solved (browser-native, free)", "✓".green());
                 } else {
-                    // Try API fallback if configured
-                    if let Some(config) = onecrawl_cdp::captcha::load_solver_config() {
-                        if let Some(sitekey) = det.sitekey.as_deref() {
-                            let page_url: String = page.evaluate("window.location.href")
-                                .await
-                                .ok()
-                                .and_then(|v| v.into_value().ok())
-                                .unwrap_or_default();
-                            println!("  Browser-native failed, trying {} API...", config.service.to_string().cyan());
-                            match onecrawl_cdp::captcha::solve_via_api(
-                                &det.captcha_type, sitekey, &page_url, &config,
-                            ).await {
-                                Ok(token) => {
-                                    let _ = onecrawl_cdp::captcha::inject_solution(&page, &det, &token).await;
-                                    println!("{} Turnstile solved via {} API", "✓".green(), config.service);
-                                }
-                                Err(e) => {
-                                    eprintln!("{} Turnstile did not clear within {}ms (API also failed: {})", "✗".red(), timeout, e);
-                                }
-                            }
-                        } else {
-                            eprintln!("{} Turnstile did not clear within {}ms (no sitekey for API fallback)", "✗".red(), timeout);
-                        }
-                    } else {
-                        eprintln!("{} Turnstile did not clear within {}ms", "✗".red(), timeout);
+                    let msg = format!("Turnstile did not clear within {timeout}ms");
+                    if !try_api_fallback(&page, &det, &msg).await.unwrap_or(false) {
+                        eprintln!("{} {msg}", "✗".red());
                     }
                 }
             }
             "recaptcha_v2" => {
                 match onecrawl_cdp::captcha::solve_recaptcha_audio(&page).await {
-                    Ok(text) => {
-                        println!(
-                            "{} reCAPTCHA solved via audio+Whisper: \"{}\"",
-                            "✓".green(),
-                            text.dimmed()
-                        );
-                    }
+                    Ok(text) => println!("{} reCAPTCHA solved via audio+Whisper: \"{}\"", "✓".green(), text.dimmed()),
                     Err(e) => {
                         eprintln!("{} reCAPTCHA audio solve failed: {}", "✗".red(), e);
                         eprintln!("  Ensure `whisper` CLI is installed: pip install openai-whisper");
@@ -238,45 +214,13 @@ pub async fn captcha_solve(timeout: u64, use_api: bool) {
                 }
             }
             "recaptcha_v3" => {
-                println!(
-                    "{} reCAPTCHA v3 is score-based — stealth mode should provide high score",
-                    "ℹ".cyan()
-                );
+                println!("{} reCAPTCHA v3 is score-based — stealth mode should provide high score", "ℹ".cyan());
                 println!("  No explicit solving needed. If blocked, check stealth with: onecrawl captcha check");
             }
             other => {
-                if let Some(config) = onecrawl_cdp::captcha::load_solver_config() {
-                    if let Some(sitekey) = det.sitekey.as_deref() {
-                        let page_url: String = page.evaluate("window.location.href")
-                            .await
-                            .ok()
-                            .and_then(|v| v.into_value().ok())
-                            .unwrap_or_default();
-                        println!("  Trying {} API for {}...", config.service.to_string().cyan(), other);
-                        match onecrawl_cdp::captcha::solve_via_api(
-                            &det.captcha_type, sitekey, &page_url, &config,
-                        ).await {
-                            Ok(token) => {
-                                let _ = onecrawl_cdp::captcha::inject_solution(&page, &det, &token).await;
-                                println!("{} {} solved via {} API", "✓".green(), other, config.service);
-                            }
-                            Err(e) => {
-                                eprintln!("{} API solve for {} failed: {}", "✗".red(), other, e);
-                            }
-                        }
-                    } else {
-                        println!(
-                            "{} No sitekey found for {} — cannot use API solver",
-                            "⚠".yellow(),
-                            other
-                        );
-                    }
-                } else {
-                    println!(
-                        "{} No free solver available for {} — use 'captcha inject <token>' with manual/API token",
-                        "⚠".yellow(),
-                        other
-                    );
+                let msg = format!("No free solver for {other}");
+                if !try_api_fallback(&page, &det, &msg).await.unwrap_or(false) {
+                    println!("{} Use 'captcha inject <token>' with manual/API token", "⚠".yellow());
                 }
             }
         }

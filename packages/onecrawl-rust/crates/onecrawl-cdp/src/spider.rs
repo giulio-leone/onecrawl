@@ -149,7 +149,6 @@ pub async fn crawl(page: &Page, config: SpiderConfig) -> Result<Vec<CrawlResult>
         config.start_urls.iter().map(|u| (u.clone(), 0)).collect();
     let mut results: Vec<CrawlResult> = Vec::with_capacity(config.max_pages);
 
-    // Pre-lowercase patterns once instead of per-URL
     let exclude_lower: Vec<String> = config
         .exclude_patterns
         .iter()
@@ -171,20 +170,13 @@ pub async fn crawl(page: &Page, config: SpiderConfig) -> Result<Vec<CrawlResult>
         if visited.len() >= config.max_pages {
             break;
         }
-        if depth > config.max_depth {
-            continue;
-        }
-        if visited.contains(&url) {
-            continue;
-        }
-        if is_non_page_url(&url) {
+        if depth > config.max_depth || visited.contains(&url) || is_non_page_url(&url) {
             continue;
         }
         let url_lower = url.to_ascii_lowercase();
-        if matches_exclude(&url_lower, &exclude_lower) {
-            continue;
-        }
-        if !matches_include(&url_lower, &include_lower) {
+        if matches_exclude(&url_lower, &exclude_lower)
+            || !matches_include(&url_lower, &include_lower)
+        {
             continue;
         }
         if config.same_domain_only && extract_domain(&url) != start_domain {
@@ -194,103 +186,8 @@ pub async fn crawl(page: &Page, config: SpiderConfig) -> Result<Vec<CrawlResult>
         visited.insert(url.clone());
         let start_time = std::time::Instant::now();
 
-        match tokio::time::timeout(
-            std::time::Duration::from_millis(config.timeout_ms),
-            page.goto(&url),
-        )
-        .await
-        {
-            Ok(Ok(_)) => {
-                // Small settling delay
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-                // Title
-                let title: String = page
-                    .evaluate("document.title")
-                    .await
-                    .ok()
-                    .and_then(|v| v.into_value::<String>().ok())
-                    .unwrap_or_default();
-
-                // Discover links
-                let mut links_found: usize = 0;
-                if config.follow_links && depth < config.max_depth {
-                    let links_js = r#"
-                        Array.from(document.querySelectorAll('a[href]'))
-                            .map(a => a.href)
-                            .filter(h => h.startsWith('http'))
-                    "#;
-                    if let Ok(val) = page.evaluate(links_js).await
-                        && let Ok(links) = val.into_value::<Vec<String>>()
-                    {
-                        for href in &links {
-                            if !visited.contains(href) {
-                                queue.push((href.clone(), depth + 1));
-                                links_found += 1;
-                            }
-                        }
-                    }
-                }
-
-                // Optional content extraction
-                let content = if let Some(ref sel) = config.extract_selector {
-                    let js = match config.extract_format.as_str() {
-                        "html" => format!(
-                            "document.querySelector('{}')?.innerHTML || ''",
-                            sel.replace('\'', "\\'")
-                        ),
-                        _ => format!(
-                            "document.querySelector('{}')?.textContent || ''",
-                            sel.replace('\'', "\\'")
-                        ),
-                    };
-                    page.evaluate(js)
-                        .await
-                        .ok()
-                        .and_then(|v| v.into_value::<String>().ok())
-                } else {
-                    None
-                };
-
-                results.push(CrawlResult {
-                    url,
-                    status: "success".to_string(),
-                    title,
-                    depth,
-                    links_found,
-                    content,
-                    error: None,
-                    duration_ms: start_time.elapsed().as_secs_f64() * 1000.0,
-                    timestamp: now_epoch_ms(),
-                });
-            }
-            Ok(Err(e)) => {
-                results.push(CrawlResult {
-                    url,
-                    status: "error".to_string(),
-                    title: String::new(),
-                    depth,
-                    links_found: 0,
-                    content: None,
-                    error: Some(e.to_string()),
-                    duration_ms: start_time.elapsed().as_secs_f64() * 1000.0,
-                    timestamp: now_epoch_ms(),
-                });
-            }
-            Err(_) => {
-                results.push(CrawlResult {
-                    url,
-                    status: "timeout".to_string(),
-                    title: String::new(),
-                    depth,
-                    links_found: 0,
-                    content: None,
-                    error: Some("Timeout".to_string()),
-                    duration_ms: config.timeout_ms as f64,
-                    timestamp: now_epoch_ms(),
-                });
-            }
-        }
+        let result = crawl_single_page(page, &config, &url, depth, &mut visited, &mut queue, start_time).await;
+        results.push(result);
 
         if config.delay_ms > 0 {
             tokio::time::sleep(std::time::Duration::from_millis(config.delay_ms)).await;
@@ -298,6 +195,96 @@ pub async fn crawl(page: &Page, config: SpiderConfig) -> Result<Vec<CrawlResult>
     }
 
     Ok(results)
+}
+
+async fn crawl_single_page(
+    page: &Page,
+    config: &SpiderConfig,
+    url: &str,
+    depth: usize,
+    visited: &mut HashSet<String>,
+    queue: &mut Vec<(String, usize)>,
+    start_time: std::time::Instant,
+) -> CrawlResult {
+    let make_result = |status: &str, title: String, links: usize, content: Option<String>, error: Option<String>, elapsed_ms: f64| {
+        CrawlResult {
+            url: url.to_string(),
+            status: status.to_string(),
+            title,
+            depth,
+            links_found: links,
+            content,
+            error,
+            duration_ms: elapsed_ms,
+            timestamp: now_epoch_ms(),
+        }
+    };
+
+    match tokio::time::timeout(
+        std::time::Duration::from_millis(config.timeout_ms),
+        page.goto(url),
+    )
+    .await
+    {
+        Ok(Ok(_)) => {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+            let title: String = page
+                .evaluate("document.title")
+                .await
+                .ok()
+                .and_then(|v| v.into_value::<String>().ok())
+                .unwrap_or_default();
+
+            let mut links_found: usize = 0;
+            if config.follow_links && depth < config.max_depth {
+                let links_js = r#"
+                    Array.from(document.querySelectorAll('a[href]'))
+                        .map(a => a.href)
+                        .filter(h => h.startsWith('http'))
+                "#;
+                if let Ok(val) = page.evaluate(links_js).await
+                    && let Ok(links) = val.into_value::<Vec<String>>()
+                {
+                    for href in &links {
+                        if !visited.contains(href) {
+                            queue.push((href.clone(), depth + 1));
+                            links_found += 1;
+                        }
+                    }
+                }
+            }
+
+            let content = if let Some(ref sel) = config.extract_selector {
+                let js = match config.extract_format.as_str() {
+                    "html" => format!(
+                        "document.querySelector('{}')?.innerHTML || ''",
+                        sel.replace('\'', "\\'")
+                    ),
+                    _ => format!(
+                        "document.querySelector('{}')?.textContent || ''",
+                        sel.replace('\'', "\\'")
+                    ),
+                };
+                page.evaluate(js)
+                    .await
+                    .ok()
+                    .and_then(|v| v.into_value::<String>().ok())
+            } else {
+                None
+            };
+
+            let ms = start_time.elapsed().as_secs_f64() * 1000.0;
+            make_result("success", title, links_found, content, None, ms)
+        }
+        Ok(Err(e)) => {
+            let ms = start_time.elapsed().as_secs_f64() * 1000.0;
+            make_result("error", String::new(), 0, None, Some(e.to_string()), ms)
+        }
+        Err(_) => {
+            make_result("timeout", String::new(), 0, None, Some("Timeout".to_string()), config.timeout_ms as f64)
+        }
+    }
 }
 
 /// Compute aggregate statistics from crawl results.

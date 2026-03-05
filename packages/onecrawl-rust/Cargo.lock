@@ -1956,7 +1956,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "onecrawl-benchmark"
-version = "1.0.0"
+version = "3.0.0"
 dependencies = [
  "onecrawl-cdp",
  "onecrawl-core",
@@ -1969,7 +1969,7 @@ dependencies = [
 
 [[package]]
 name = "onecrawl-cdp"
-version = "1.0.0"
+version = "3.0.0"
 dependencies = [
  "chromiumoxide",
  "futures",
@@ -1987,7 +1987,7 @@ dependencies = [
 
 [[package]]
 name = "onecrawl-cli-rs"
-version = "1.0.0"
+version = "3.0.0"
 dependencies = [
  "base64",
  "clap",
@@ -2011,7 +2011,7 @@ dependencies = [
 
 [[package]]
 name = "onecrawl-core"
-version = "1.0.0"
+version = "3.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2020,7 +2020,7 @@ dependencies = [
 
 [[package]]
 name = "onecrawl-crypto"
-version = "1.0.0"
+version = "3.0.0"
 dependencies = [
  "base64",
  "data-encoding",
@@ -2033,7 +2033,7 @@ dependencies = [
 
 [[package]]
 name = "onecrawl-e2e"
-version = "1.0.0"
+version = "3.0.0"
 dependencies = [
  "assert_cmd",
  "base64",
@@ -2054,7 +2054,7 @@ dependencies = [
 
 [[package]]
 name = "onecrawl-mcp-rs"
-version = "1.0.0"
+version = "3.0.0"
 dependencies = [
  "base64",
  "chromiumoxide",
@@ -2075,7 +2075,7 @@ dependencies = [
 
 [[package]]
 name = "onecrawl-napi"
-version = "1.0.0"
+version = "3.0.0"
 dependencies = [
  "base64",
  "napi",
@@ -2093,7 +2093,7 @@ dependencies = [
 
 [[package]]
 name = "onecrawl-parser"
-version = "1.0.0"
+version = "3.0.0"
 dependencies = [
  "lol_html",
  "onecrawl-core",
@@ -2105,7 +2105,7 @@ dependencies = [
 
 [[package]]
 name = "onecrawl-python"
-version = "1.0.0"
+version = "3.0.0"
 dependencies = [
  "base64",
  "onecrawl-cdp",
@@ -2122,7 +2122,7 @@ dependencies = [
 
 [[package]]
 name = "onecrawl-server"
-version = "1.0.0"
+version = "3.0.0"
 dependencies = [
  "axum",
  "base64",
@@ -2140,7 +2140,7 @@ dependencies = [
 
 [[package]]
 name = "onecrawl-storage"
-version = "1.0.0"
+version = "3.0.0"
 dependencies = [
  "onecrawl-core",
  "onecrawl-crypto",

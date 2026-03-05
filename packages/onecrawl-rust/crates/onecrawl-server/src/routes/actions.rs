@@ -36,42 +36,34 @@ pub async fn execute_actions(
     Ok(Json(results))
 }
 
+async fn eval_ref_action(
+    page: &chromiumoxide::Page,
+    ref_id: &str,
+    js_fn: impl FnOnce(i64) -> String,
+    action_name: &str,
+) -> ActionResult {
+    let idx = match parse_ref_id(ref_id) {
+        Ok(i) => i,
+        Err(e) => return ActionResult::err(e),
+    };
+    match page.evaluate(js_fn(idx)).await {
+        Ok(_) => ActionResult::ok(),
+        Err(e) => ActionResult::err(format!("{action_name} failed: {e}")),
+    }
+}
+
 fn execute_single_action<'a>(
     page: &'a chromiumoxide::Page,
     action: &'a Action,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ActionResult> + Send + 'a>> {
     Box::pin(async move {
     match action {
-        Action::Click { ref_id } => {
-            let idx = match parse_ref_id(ref_id) {
-                Ok(i) => i,
-                Err(e) => return ActionResult::err(e),
-            };
-            match page.evaluate(click_by_index_js(idx)).await {
-                Ok(_) => ActionResult::ok(),
-                Err(e) => ActionResult::err(format!("click failed: {e}")),
-            }
-        }
-        Action::Type { ref_id, text } => {
-            let idx = match parse_ref_id(ref_id) {
-                Ok(i) => i,
-                Err(e) => return ActionResult::err(e),
-            };
-            match page.evaluate(type_by_index_js(idx, text)).await {
-                Ok(_) => ActionResult::ok(),
-                Err(e) => ActionResult::err(format!("type failed: {e}")),
-            }
-        }
-        Action::Fill { ref_id, text } => {
-            let idx = match parse_ref_id(ref_id) {
-                Ok(i) => i,
-                Err(e) => return ActionResult::err(e),
-            };
-            match page.evaluate(fill_by_index_js(idx, text)).await {
-                Ok(_) => ActionResult::ok(),
-                Err(e) => ActionResult::err(format!("fill failed: {e}")),
-            }
-        }
+        Action::Click { ref_id } => eval_ref_action(page, ref_id, click_by_index_js, "click").await,
+        Action::Type { ref_id, text } => eval_ref_action(page, ref_id, |i| type_by_index_js(i, text), "type").await,
+        Action::Fill { ref_id, text } => eval_ref_action(page, ref_id, |i| fill_by_index_js(i, text), "fill").await,
+        Action::Hover { ref_id } => eval_ref_action(page, ref_id, hover_by_index_js, "hover").await,
+        Action::Focus { ref_id } => eval_ref_action(page, ref_id, focus_by_index_js, "focus").await,
+        Action::Select { ref_id, value } => eval_ref_action(page, ref_id, |i| select_by_index_js(i, value), "select").await,
         Action::Press { key, ref_id } => {
             if let Some(rid) = ref_id {
                 let idx = match parse_ref_id(rid) {
@@ -90,26 +82,6 @@ fn execute_single_action<'a>(
             match page.evaluate(js).await {
                 Ok(_) => ActionResult::ok(),
                 Err(e) => ActionResult::err(format!("press failed: {e}")),
-            }
-        }
-        Action::Hover { ref_id } => {
-            let idx = match parse_ref_id(ref_id) {
-                Ok(i) => i,
-                Err(e) => return ActionResult::err(e),
-            };
-            match page.evaluate(hover_by_index_js(idx)).await {
-                Ok(_) => ActionResult::ok(),
-                Err(e) => ActionResult::err(format!("hover failed: {e}")),
-            }
-        }
-        Action::Focus { ref_id } => {
-            let idx = match parse_ref_id(ref_id) {
-                Ok(i) => i,
-                Err(e) => return ActionResult::err(e),
-            };
-            match page.evaluate(focus_by_index_js(idx)).await {
-                Ok(_) => ActionResult::ok(),
-                Err(e) => ActionResult::err(format!("focus failed: {e}")),
             }
         }
         Action::Scroll { ref_id, pixels } => {
@@ -135,16 +107,6 @@ fn execute_single_action<'a>(
             match page.evaluate(js).await {
                 Ok(_) => ActionResult::ok(),
                 Err(e) => ActionResult::err(format!("scroll failed: {e}")),
-            }
-        }
-        Action::Select { ref_id, value } => {
-            let idx = match parse_ref_id(ref_id) {
-                Ok(i) => i,
-                Err(e) => return ActionResult::err(e),
-            };
-            match page.evaluate(select_by_index_js(idx, value)).await {
-                Ok(_) => ActionResult::ok(),
-                Err(e) => ActionResult::err(format!("select failed: {e}")),
             }
         }
         Action::Wait { time } => {

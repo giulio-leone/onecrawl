@@ -25,8 +25,8 @@ pub struct BlockStats {
 
 /// Get a predefined blocklist by category.
 pub fn get_blocklist(category: &str) -> Vec<String> {
-    match category {
-        "ads" => vec![
+    let domains: &[&str] = match category {
+        "ads" => &[
             "doubleclick.net",
             "googlesyndication.com",
             "googleadservices.com",
@@ -42,12 +42,8 @@ pub fn get_blocklist(category: &str) -> Vec<String> {
             "moatads.com",
             "pubmatic.com",
             "rubiconproject.com",
-        ]
-        .into_iter()
-        .map(String::from)
-        .collect(),
-
-        "trackers" => vec![
+        ],
+        "trackers" => &[
             "facebook.net",
             "facebook.com/tr",
             "connect.facebook.net",
@@ -66,12 +62,8 @@ pub fn get_blocklist(category: &str) -> Vec<String> {
             "clarity.ms",
             "newrelic.com",
             "sentry.io",
-        ]
-        .into_iter()
-        .map(String::from)
-        .collect(),
-
-        "social" => vec![
+        ],
+        "social" => &[
             "platform.twitter.com",
             "platform.linkedin.com",
             "connect.facebook.net",
@@ -82,36 +74,25 @@ pub fn get_blocklist(category: &str) -> Vec<String> {
             "s7.addthis.com",
             "disqus.com",
             "disquscdn.com",
-        ]
-        .into_iter()
-        .map(String::from)
-        .collect(),
-
-        "fonts" => vec![
+        ],
+        "fonts" => &[
             "fonts.googleapis.com",
             "fonts.gstatic.com",
             "use.typekit.net",
             "fast.fonts.net",
             "cloud.typography.com",
-        ]
-        .into_iter()
-        .map(String::from)
-        .collect(),
-
-        "media" => vec![
+        ],
+        "media" => &[
             "youtube.com",
             "vimeo.com",
             "dailymotion.com",
             "twitch.tv",
             "spotify.com",
             "soundcloud.com",
-        ]
-        .into_iter()
-        .map(String::from)
-        .collect(),
-
-        _ => vec![],
-    }
+        ],
+        _ => return vec![],
+    };
+    domains.iter().map(|s| (*s).to_string()).collect()
 }
 
 /// Available blocklist categories with their domain counts.

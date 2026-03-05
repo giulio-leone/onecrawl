@@ -94,6 +94,88 @@ pub async fn solve_via_api(
 }
 
 // ---------------------------------------------------------------------------
+// Shared JSON-API solver (used by CapSolver and AntiCaptcha)
+// ---------------------------------------------------------------------------
+
+struct JsonApiConfig<'a> {
+    service_name: &'a str,
+    create_url: &'a str,
+    poll_url: &'a str,
+    api_key: &'a str,
+    task: serde_json::Value,
+    poll_interval_secs: u64,
+    max_polls: usize,
+}
+
+/// Generic create-task + poll-result solver for JSON-based APIs.
+async fn solve_json_api(cfg: JsonApiConfig<'_>) -> Result<String> {
+    let client = reqwest::Client::new();
+    let name = cfg.service_name;
+
+    let create_body = serde_json::json!({
+        "clientKey": cfg.api_key,
+        "task": cfg.task,
+    });
+
+    let create_resp: serde_json::Value = client
+        .post(cfg.create_url)
+        .json(&create_body)
+        .send()
+        .await
+        .map_err(|e| Error::Cdp(format!("{name} createTask: {e}")))?
+        .json()
+        .await
+        .map_err(|e| Error::Cdp(format!("{name} createTask parse: {e}")))?;
+
+    if create_resp.get("errorId").and_then(|v| v.as_i64()).unwrap_or(0) != 0 {
+        let desc = create_resp.get("errorDescription").and_then(|v| v.as_str()).unwrap_or("unknown");
+        return Err(Error::Cdp(format!("{name} error: {desc}")));
+    }
+
+    // Extract task ID (string for CapSolver, int for AntiCaptcha)
+    let task_id = create_resp.get("taskId")
+        .ok_or_else(|| Error::Cdp(format!("{name}: no taskId in response")))?
+        .clone();
+
+    let poll_body = serde_json::json!({
+        "clientKey": cfg.api_key,
+        "taskId": task_id,
+    });
+
+    for _ in 0..cfg.max_polls {
+        tokio::time::sleep(std::time::Duration::from_secs(cfg.poll_interval_secs)).await;
+
+        let result: serde_json::Value = client
+            .post(cfg.poll_url)
+            .json(&poll_body)
+            .send()
+            .await
+            .map_err(|e| Error::Cdp(format!("{name} poll: {e}")))?
+            .json()
+            .await
+            .map_err(|e| Error::Cdp(format!("{name} poll parse: {e}")))?;
+
+        let status = result.get("status").and_then(|v| v.as_str()).unwrap_or("");
+
+        if status == "ready" {
+            return result
+                .get("solution")
+                .and_then(|s| s.get("token").or_else(|| s.get("gRecaptchaResponse")))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .ok_or_else(|| Error::Cdp(format!("{name}: no token in solution")));
+        }
+
+        if status == "failed" || result.get("errorId").and_then(|v| v.as_i64()).unwrap_or(0) != 0 {
+            let desc = result.get("errorDescription").and_then(|v| v.as_str()).unwrap_or("unknown");
+            return Err(Error::Cdp(format!("{name} task failed: {desc}")));
+        }
+    }
+
+    Err(Error::Cdp(format!("{name}: timeout waiting for solution")))
+}
+
+// ---------------------------------------------------------------------------
 // CapSolver (https://docs.capsolver.com)
 // ---------------------------------------------------------------------------
 
@@ -103,8 +185,6 @@ async fn solve_capsolver(
     page_url: &str,
     api_key: &str,
 ) -> Result<String> {
-    let client = reqwest::Client::new();
-
     let task_type = match captcha_type {
         "cloudflare_turnstile" => "AntiTurnstileTaskProxyLess",
         "recaptcha_v2" => "ReCaptchaV2TaskProxyLess",
@@ -113,84 +193,24 @@ async fn solve_capsolver(
         other => return Err(Error::Cdp(format!("CapSolver: unsupported type '{other}'"))),
     };
 
-    // Create task
     let mut task = serde_json::json!({
         "type": task_type,
         "websiteURL": page_url,
         "websiteKey": sitekey,
     });
-    // Turnstile needs metadata
     if captcha_type == "cloudflare_turnstile" {
         task["metadata"] = serde_json::json!({"type": "turnstile"});
     }
 
-    let create_body = serde_json::json!({
-        "clientKey": api_key,
-        "task": task,
-    });
-
-    let resp = client
-        .post("https://api.capsolver.com/createTask")
-        .json(&create_body)
-        .send()
-        .await
-        .map_err(|e| Error::Cdp(format!("CapSolver createTask request: {e}")))?;
-
-    let create_resp: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| Error::Cdp(format!("CapSolver createTask parse: {e}")))?;
-
-    if create_resp.get("errorId").and_then(|v| v.as_i64()).unwrap_or(0) != 0 {
-        let desc = create_resp.get("errorDescription").and_then(|v| v.as_str()).unwrap_or("unknown");
-        return Err(Error::Cdp(format!("CapSolver error: {desc}")));
-    }
-
-    let task_id = create_resp
-        .get("taskId")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| Error::Cdp("CapSolver: no taskId in response".into()))?
-        .to_string();
-
-    // Poll for result (max 120s)
-    let poll_body = serde_json::json!({
-        "clientKey": api_key,
-        "taskId": task_id,
-    });
-
-    for _ in 0..60 {
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-
-        let resp = client
-            .post("https://api.capsolver.com/getTaskResult")
-            .json(&poll_body)
-            .send()
-            .await
-            .map_err(|e| Error::Cdp(format!("CapSolver poll: {e}")))?;
-
-        let result: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| Error::Cdp(format!("CapSolver poll parse: {e}")))?;
-
-        let status = result.get("status").and_then(|v| v.as_str()).unwrap_or("");
-
-        if status == "ready" {
-            let solution = result
-                .get("solution")
-                .and_then(|s| s.get("token").or_else(|| s.get("gRecaptchaResponse")))
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| Error::Cdp("CapSolver: no token in solution".into()))?;
-            return Ok(solution.to_string());
-        }
-
-        if status == "failed" {
-            let desc = result.get("errorDescription").and_then(|v| v.as_str()).unwrap_or("unknown");
-            return Err(Error::Cdp(format!("CapSolver task failed: {desc}")));
-        }
-    }
-
-    Err(Error::Cdp("CapSolver: timeout waiting for solution (120s)".into()))
+    solve_json_api(JsonApiConfig {
+        service_name: "CapSolver",
+        create_url: "https://api.capsolver.com/createTask",
+        poll_url: "https://api.capsolver.com/getTaskResult",
+        api_key,
+        task,
+        poll_interval_secs: 2,
+        max_polls: 60,
+    }).await
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +232,6 @@ async fn solve_twocaptcha(
         other => return Err(Error::Cdp(format!("2captcha: unsupported type '{other}'"))),
     };
 
-    // Submit task
     let mut params = vec![
         ("key", api_key.to_string()),
         ("method", method.to_string()),
@@ -227,14 +246,12 @@ async fn solve_twocaptcha(
         params.push(("min_score", "0.5".to_string()));
     }
 
-    let resp = client
+    let submit: serde_json::Value = client
         .post("https://2captcha.com/in.php")
         .form(&params)
         .send()
         .await
-        .map_err(|e| Error::Cdp(format!("2captcha submit: {e}")))?;
-
-    let submit: serde_json::Value = resp
+        .map_err(|e| Error::Cdp(format!("2captcha submit: {e}")))?
         .json()
         .await
         .map_err(|e| Error::Cdp(format!("2captcha submit parse: {e}")))?;
@@ -250,35 +267,25 @@ async fn solve_twocaptcha(
         .ok_or_else(|| Error::Cdp("2captcha: no request ID".into()))?
         .to_string();
 
-    // Poll for result
     tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
     for _ in 0..40 {
-        let resp = client
+        let result: serde_json::Value = client
             .get("https://2captcha.com/res.php")
-            .query(&[
-                ("key", api_key),
-                ("action", "get"),
-                ("id", &request_id),
-                ("json", "1"),
-            ])
+            .query(&[("key", api_key), ("action", "get"), ("id", &request_id), ("json", "1")])
             .send()
             .await
-            .map_err(|e| Error::Cdp(format!("2captcha poll: {e}")))?;
-
-        let result: serde_json::Value = resp
+            .map_err(|e| Error::Cdp(format!("2captcha poll: {e}")))?
             .json()
             .await
             .map_err(|e| Error::Cdp(format!("2captcha poll parse: {e}")))?;
 
-        let status = result.get("status").and_then(|v| v.as_i64()).unwrap_or(0);
-
-        if status == 1 {
-            let token = result
+        if result.get("status").and_then(|v| v.as_i64()).unwrap_or(0) == 1 {
+            return result
                 .get("request")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| Error::Cdp("2captcha: no token in response".into()))?;
-            return Ok(token.to_string());
+                .map(|s| s.to_string())
+                .ok_or_else(|| Error::Cdp("2captcha: no token in response".into()));
         }
 
         let req = result.get("request").and_then(|v| v.as_str()).unwrap_or("");
@@ -302,8 +309,6 @@ async fn solve_anticaptcha(
     page_url: &str,
     api_key: &str,
 ) -> Result<String> {
-    let client = reqwest::Client::new();
-
     let task_type = match captcha_type {
         "cloudflare_turnstile" => "TurnstileTaskProxyless",
         "recaptcha_v2" => "RecaptchaV2TaskProxyless",
@@ -317,78 +322,20 @@ async fn solve_anticaptcha(
         "websiteURL": page_url,
         "websiteKey": sitekey,
     });
-
     if captcha_type == "recaptcha_v3" {
         task["minScore"] = serde_json::json!(0.5);
         task["pageAction"] = serde_json::json!("verify");
     }
 
-    let create_body = serde_json::json!({
-        "clientKey": api_key,
-        "task": task,
-    });
-
-    let resp = client
-        .post("https://api.anti-captcha.com/createTask")
-        .json(&create_body)
-        .send()
-        .await
-        .map_err(|e| Error::Cdp(format!("AntiCaptcha createTask: {e}")))?;
-
-    let create_resp: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| Error::Cdp(format!("AntiCaptcha createTask parse: {e}")))?;
-
-    if create_resp.get("errorId").and_then(|v| v.as_i64()).unwrap_or(0) != 0 {
-        let desc = create_resp.get("errorDescription").and_then(|v| v.as_str()).unwrap_or("unknown");
-        return Err(Error::Cdp(format!("AntiCaptcha error: {desc}")));
-    }
-
-    let task_id = create_resp
-        .get("taskId")
-        .and_then(|v| v.as_i64())
-        .ok_or_else(|| Error::Cdp("AntiCaptcha: no taskId".into()))?;
-
-    // Poll
-    let poll_body = serde_json::json!({
-        "clientKey": api_key,
-        "taskId": task_id,
-    });
-
-    for _ in 0..40 {
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-
-        let resp = client
-            .post("https://api.anti-captcha.com/getTaskResult")
-            .json(&poll_body)
-            .send()
-            .await
-            .map_err(|e| Error::Cdp(format!("AntiCaptcha poll: {e}")))?;
-
-        let result: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| Error::Cdp(format!("AntiCaptcha poll parse: {e}")))?;
-
-        let status = result.get("status").and_then(|v| v.as_str()).unwrap_or("");
-
-        if status == "ready" {
-            let solution = result
-                .get("solution")
-                .and_then(|s| s.get("token").or_else(|| s.get("gRecaptchaResponse")))
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| Error::Cdp("AntiCaptcha: no token in solution".into()))?;
-            return Ok(solution.to_string());
-        }
-
-        if result.get("errorId").and_then(|v| v.as_i64()).unwrap_or(0) != 0 {
-            let desc = result.get("errorDescription").and_then(|v| v.as_str()).unwrap_or("unknown");
-            return Err(Error::Cdp(format!("AntiCaptcha task failed: {desc}")));
-        }
-    }
-
-    Err(Error::Cdp("AntiCaptcha: timeout waiting for solution (120s)".into()))
+    solve_json_api(JsonApiConfig {
+        service_name: "AntiCaptcha",
+        create_url: "https://api.anti-captcha.com/createTask",
+        poll_url: "https://api.anti-captcha.com/getTaskResult",
+        api_key,
+        task,
+        poll_interval_secs: 3,
+        max_polls: 40,
+    }).await
 }
 
 #[cfg(test)]
