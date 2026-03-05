@@ -1528,6 +1528,103 @@ pub async fn passkey_remove(credential_id: &str) {
     .await;
 }
 
+/// Enable a CDP real virtual authenticator, wait for a passkey to be registered
+/// on the current page (e.g. x.com Settings → Security → Passkey), then export
+/// the credential (including private key) to a JSON file.
+///
+/// The credential exported here can later be injected via
+/// `session start --import-passkey FILE` for fully automated headless passkey auth.
+pub async fn passkey_register(output: &str, timeout_secs: u64) {
+    let output = output.to_string();
+    let (_session, page) = match super::session::connect_to_session().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("{} {e}", "✗".red());
+            std::process::exit(1);
+        }
+    };
+
+    // Enable CDP WebAuthn domain
+    if let Err(e) = onecrawl_cdp::cdp_enable(&page).await {
+        eprintln!("{} WebAuthn.enable failed: {e}", "✗".red());
+        std::process::exit(1);
+    }
+
+    // Create a CTAP2.1 platform authenticator with auto-presence simulation
+    let auth_id = match onecrawl_cdp::cdp_create_authenticator(&page).await {
+        Ok(id) => id,
+        Err(e) => {
+            eprintln!("{} addVirtualAuthenticator failed: {e}", "✗".red());
+            std::process::exit(1);
+        }
+    };
+
+    println!("{} CDP virtual authenticator ready (ID: {})", "✓".green(), auth_id.cyan());
+    println!(
+        "  {}",
+        "Please register a passkey on the current page (e.g. x.com Settings → Security → Passkey)."
+            .dimmed()
+    );
+    println!("  Waiting up to {}s for credential creation…", timeout_secs);
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+    loop {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        match onecrawl_cdp::cdp_get_credentials(&page, &auth_id).await {
+            Ok(creds) if !creds.is_empty() => {
+                println!("{} {} credential(s) registered", "✓".green(), creds.len());
+                let path = std::path::Path::new(&output);
+                match onecrawl_cdp::save_passkeys(path, &creds) {
+                    Ok(()) => {
+                        println!("{} Passkeys saved to {}", "✓".green(), output.cyan());
+                        println!(
+                            "  {}",
+                            "Use `session start --import-passkey FILE` to enable headless passkey auth."
+                                .dimmed()
+                        );
+                    }
+                    Err(e) => eprintln!("{} Failed to save passkeys: {e}", "✗".red()),
+                }
+                return;
+            }
+            Ok(_) => {} // no credentials yet — keep polling
+            Err(e) => {
+                eprintln!("{} getCredentials error: {e}", "⚠".yellow());
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            eprintln!("{} Timeout: no passkey registered within {}s", "✗".red(), timeout_secs);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Store the passkey file path in the active session so that CDP WebAuthn is
+/// automatically re-enabled and credentials are injected on every
+/// `connect_to_session()` call (same lifecycle as stealth scripts).
+pub async fn passkey_set_file(file: &str) {
+    match super::session::load_session() {
+        Some(mut info) => {
+            info.passkey_file = Some(file.to_string());
+            match super::session::save_session(&info) {
+                Ok(()) => println!(
+                    "{} Passkey file set: {} (will be injected on every connect)",
+                    "✓".green(),
+                    file.cyan()
+                ),
+                Err(e) => {
+                    eprintln!("{} Failed to save session: {e}", "✗".red());
+                    std::process::exit(1);
+                }
+            }
+        }
+        None => {
+            eprintln!("{} No active session. Start one with `session start`.", "✗".red());
+            std::process::exit(1);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Stealth
 // ---------------------------------------------------------------------------

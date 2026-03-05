@@ -1257,6 +1257,28 @@ enum AuthAction {
         #[arg(long)]
         credential_id: String,
     },
+    /// Enable CDP virtual authenticator, watch for passkey creation, export credential.
+    ///
+    /// Run this BEFORE registering a passkey on x.com (or other site):
+    ///   1. Start a headed session and log in
+    ///   2. Run `auth passkey-register --output /tmp/xcom-passkey.json`
+    ///   3. Register the passkey in the browser (x.com Settings → Security → Passkey)
+    ///   4. The credential is exported automatically when Chrome records it
+    PasskeyRegister {
+        /// File to write the exported passkey credentials (JSON)
+        #[arg(long, default_value = "/tmp/onecrawl-passkeys.json")]
+        output: String,
+        /// Seconds to wait for the passkey to be registered (default: 120)
+        #[arg(long, default_value_t = 120u64)]
+        timeout_secs: u64,
+    },
+    /// Store a passkey file path in the session so CDP WebAuthn is re-injected
+    /// on every connect. Use with `session start --import-passkey FILE`.
+    PasskeySetFile {
+        /// Path to passkey JSON file produced by `auth passkey-register`
+        #[arg(long)]
+        file: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2165,6 +2187,12 @@ async fn main() {
             AuthAction::PasskeyDisable => commands::browser::passkey_disable().await,
             AuthAction::PasskeyRemove { credential_id } => {
                 commands::browser::passkey_remove(&credential_id).await
+            }
+            AuthAction::PasskeyRegister { output, timeout_secs } => {
+                commands::browser::passkey_register(&output, timeout_secs).await
+            }
+            AuthAction::PasskeySetFile { file } => {
+                commands::browser::passkey_set_file(&file).await
             }
         },
 

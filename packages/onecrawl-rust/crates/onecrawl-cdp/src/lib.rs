@@ -93,7 +93,11 @@ pub use screenshot::{ImageFormat, PdfOptions, ScreenshotOptions};
 pub use stealth::{Fingerprint, generate_fingerprint, get_stealth_init_script, inject_persistent_stealth};
 pub use throttle::NetworkProfile;
 pub use tracing_cdp::PerformanceMetric;
-pub use webauthn::{VirtualAuthenticator, VirtualCredential};
+pub use webauthn::{
+    VirtualAuthenticator, VirtualCredential,
+    PasskeyCredential, cdp_enable, cdp_create_authenticator,
+    cdp_get_credentials, cdp_add_credential, save_passkeys, load_passkeys,
+};
 pub use websocket::WsRecorder;
 pub use workers::ServiceWorkerInfo;
 

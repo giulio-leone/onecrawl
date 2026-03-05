@@ -1,11 +1,150 @@
 //! WebAuthn/FIDO2 virtual authenticator simulation.
 //!
-//! Monkey-patches `navigator.credentials` to simulate passkey registration
-//! and authentication flows without real hardware tokens.
+//! Two backends:
+//! 1. **JS mock** (`enable_virtual_authenticator` etc.) — monkey-patches
+//!    `navigator.credentials` for quick in-page testing.
+//! 2. **CDP native** (`cdp_enable` / `cdp_create_authenticator` etc.) — uses
+//!    Chrome's real WebAuthn implementation via `WebAuthn.*` CDP commands.
+//!    Credentials produced by this path are cryptographically valid and pass
+//!    server-side verification (e.g. x.com passkey login).
 
+use chromiumoxide::cdp::browser_protocol::web_authn::{
+    AddCredentialParams, AddVirtualAuthenticatorParams, AuthenticatorId,
+    AuthenticatorProtocol, AuthenticatorTransport, Ctap2Version, EnableParams,
+    GetCredentialsParams, VirtualAuthenticatorOptions,
+};
 use chromiumoxide::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
+
+// ─── CDP-native passkey credential (persisted to JSON) ────────────────────────
+
+/// A passkey credential exported from Chrome's CDP virtual authenticator.
+///
+/// Contains the real ECDSA P-256 private key in PKCS#8 format (base64), which
+/// Chrome uses to generate valid WebAuthn assertions for server verification.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PasskeyCredential {
+    /// Base64-encoded credential ID (assigned by Chrome).
+    pub credential_id: String,
+    /// Base64-encoded ECDSA P-256 private key in PKCS#8 format.
+    pub private_key: String,
+    /// Relying party ID (e.g. `"x.com"` or `"twitter.com"`).
+    pub rp_id: String,
+    /// Base64-encoded user handle (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_handle: Option<String>,
+    /// Signature counter — incremented on each successful assertion.
+    pub sign_count: i64,
+    /// Whether this is a resident/discoverable credential.
+    pub is_resident_credential: bool,
+}
+
+/// Enable the WebAuthn CDP domain for the current DevTools session.
+///
+/// Must be called before `cdp_create_authenticator`.  The virtual authenticator
+/// environment lives only for the lifetime of the DevTools session — re-call on
+/// every new `connect_to_session()` for headless sessions.
+pub async fn cdp_enable(page: &Page) -> Result<()> {
+    page.execute(EnableParams::default())
+        .await
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("WebAuthn.enable: {e}")))?;
+    Ok(())
+}
+
+/// Create a CTAP2.1 platform virtual authenticator with user-verification.
+///
+/// Returns the opaque `authenticator_id` string that must be passed to all
+/// subsequent `cdp_get_credentials` / `cdp_add_credential` calls.
+pub async fn cdp_create_authenticator(page: &Page) -> Result<String> {
+    let mut options = VirtualAuthenticatorOptions::new(
+        AuthenticatorProtocol::Ctap2,
+        AuthenticatorTransport::Internal,
+    );
+    options.ctap2_version = Some(Ctap2Version::Ctap21);
+    options.has_resident_key = Some(true);
+    options.has_user_verification = Some(true);
+    options.is_user_verified = Some(true);
+    options.automatic_presence_simulation = Some(true);
+
+    let result = page
+        .execute(AddVirtualAuthenticatorParams::new(options))
+        .await
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("addVirtualAuthenticator: {e}")))?;
+    Ok(result.authenticator_id.inner().clone())
+}
+
+/// Retrieve all credentials stored in the virtual authenticator.
+pub async fn cdp_get_credentials(
+    page: &Page,
+    authenticator_id: &str,
+) -> Result<Vec<PasskeyCredential>> {
+    let result = page
+        .execute(GetCredentialsParams::new(AuthenticatorId::new(
+            authenticator_id,
+        )))
+        .await
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("getCredentials: {e}")))?;
+    Ok(result
+        .credentials
+        .clone()
+        .into_iter()
+        .map(|c| PasskeyCredential {
+            credential_id: String::from(c.credential_id),
+            private_key: String::from(c.private_key),
+            rp_id: c.rp_id.unwrap_or_default(),
+            user_handle: c.user_handle.map(String::from),
+            sign_count: c.sign_count,
+            is_resident_credential: c.is_resident_credential,
+        })
+        .collect())
+}
+
+/// Inject a saved passkey credential into the virtual authenticator.
+///
+/// The credential's `private_key` field is used by Chrome for real ECDSA
+/// signing — assertions produced are cryptographically valid.
+pub async fn cdp_add_credential(
+    page: &Page,
+    authenticator_id: &str,
+    credential: &PasskeyCredential,
+) -> Result<()> {
+    use chromiumoxide::cdp::browser_protocol::web_authn::Credential;
+    let mut cdp_cred = Credential::new(
+        credential.credential_id.clone(),
+        credential.is_resident_credential,
+        credential.private_key.clone(),
+        credential.sign_count,
+    );
+    cdp_cred.rp_id = Some(credential.rp_id.clone());
+    cdp_cred.user_handle = credential.user_handle.clone().map(Into::into);
+    page.execute(AddCredentialParams::new(
+        AuthenticatorId::new(authenticator_id),
+        cdp_cred,
+    ))
+    .await
+    .map_err(|e| onecrawl_core::Error::Cdp(format!("addCredential: {e}")))?;
+    Ok(())
+}
+
+/// Serialize passkey credentials to a pretty-printed JSON file.
+pub fn save_passkeys(path: &std::path::Path, credentials: &[PasskeyCredential]) -> Result<()> {
+    let json = serde_json::to_string_pretty(credentials)
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("serialize passkeys: {e}")))?;
+    std::fs::write(path, json)
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("write passkeys: {e}")))?;
+    Ok(())
+}
+
+/// Deserialize passkey credentials from a JSON file produced by `save_passkeys`.
+pub fn load_passkeys(path: &std::path::Path) -> Result<Vec<PasskeyCredential>> {
+    let json = std::fs::read_to_string(path)
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("read passkeys: {e}")))?;
+    serde_json::from_str(&json)
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("parse passkeys: {e}")))
+}
+
+// ─── JS-mock backend (kept for backward compatibility) ────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VirtualAuthenticator {
@@ -517,5 +656,86 @@ mod tests {
         assert_eq!(u2f_json["protocol"], "u2f");
         assert_eq!(ctap2_json["transport"], "usb");
         assert_eq!(u2f_json["transport"], "nfc");
+    }
+
+    // ── PasskeyCredential (CDP-native) tests ─────────────────────────────────
+
+    fn sample_passkey() -> PasskeyCredential {
+        PasskeyCredential {
+            credential_id: "Y3JlZElk".to_string(),
+            private_key: "cHJpdmF0ZUtleQ==".to_string(),
+            rp_id: "x.com".to_string(),
+            user_handle: Some("dXNlckhhbmRsZQ==".to_string()),
+            sign_count: 0,
+            is_resident_credential: true,
+        }
+    }
+
+    #[test]
+    fn test_passkey_credential_roundtrip() {
+        let cred = sample_passkey();
+        let json = serde_json::to_string(&cred).unwrap();
+        let parsed: PasskeyCredential = serde_json::from_str(&json).unwrap();
+        assert_eq!(cred, parsed);
+    }
+
+    #[test]
+    fn test_passkey_credential_no_user_handle() {
+        let cred = PasskeyCredential {
+            credential_id: "abc".into(),
+            private_key: "def".into(),
+            rp_id: "twitter.com".into(),
+            user_handle: None,
+            sign_count: 5,
+            is_resident_credential: false,
+        };
+        let json = serde_json::to_string(&cred).unwrap();
+        // user_handle must be omitted from JSON when None
+        assert!(!json.contains("user_handle"));
+        let parsed: PasskeyCredential = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.user_handle, None);
+        assert_eq!(parsed.sign_count, 5);
+    }
+
+    #[test]
+    fn test_save_load_passkeys_roundtrip() {
+        let creds = vec![sample_passkey(), PasskeyCredential {
+            credential_id: "id2".into(),
+            private_key: "key2".into(),
+            rp_id: "x.com".into(),
+            user_handle: None,
+            sign_count: 10,
+            is_resident_credential: true,
+        }];
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("passkeys.json");
+        save_passkeys(&path, &creds).expect("save_passkeys");
+        let loaded = load_passkeys(&path).expect("load_passkeys");
+        assert_eq!(creds, loaded);
+    }
+
+    #[test]
+    fn test_load_passkeys_invalid_json() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("bad.json");
+        std::fs::write(&path, b"not json").unwrap();
+        assert!(load_passkeys(&path).is_err());
+    }
+
+    #[test]
+    fn test_load_passkeys_missing_file() {
+        let path = std::path::Path::new("/tmp/__onecrawl_no_such_file__.json");
+        assert!(load_passkeys(path).is_err());
+    }
+
+    #[test]
+    fn test_passkey_credential_field_names_in_json() {
+        let cred = sample_passkey();
+        let val: serde_json::Value = serde_json::to_value(&cred).unwrap();
+        assert!(val.get("credential_id").is_some());
+        assert!(val.get("private_key").is_some());
+        assert!(val.get("rp_id").is_some());
+        assert!(val.get("sign_count").is_some());
+        assert!(val.get("is_resident_credential").is_some());
     }
 }
