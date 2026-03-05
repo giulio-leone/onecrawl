@@ -29,6 +29,7 @@ pub mod geofencing;
 pub mod http_client;
 
 pub mod har;
+pub mod human;
 pub mod iframe;
 pub mod input;
 pub mod intercept;

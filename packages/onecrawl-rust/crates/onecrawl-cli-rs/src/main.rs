@@ -26,6 +26,9 @@ enum Commands {
         /// Wait after navigation (ms)
         #[arg(short, long, default_value = "0")]
         wait: u64,
+        /// Auto-wait up to 30s for Cloudflare challenge to clear
+        #[arg(long)]
+        wait_cf: bool,
     },
     /// Go back in history
     Back,
@@ -1991,7 +1994,7 @@ async fn main() {
         Commands::Session { action } => commands::session::handle(action).await,
 
         // ── Navigation ──────────────────────────────────────────────
-        Commands::Navigate { url, wait } => commands::browser::navigate(&url, wait).await,
+        Commands::Navigate { url, wait, wait_cf } => commands::browser::navigate(&url, wait, wait_cf).await,
         Commands::Back => commands::browser::back().await,
         Commands::Forward => commands::browser::forward().await,
         Commands::Reload => commands::browser::reload().await,

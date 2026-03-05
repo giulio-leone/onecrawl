@@ -43,7 +43,7 @@ where
 // Navigation
 // ---------------------------------------------------------------------------
 
-pub async fn navigate(url: &str, wait: u64) {
+pub async fn navigate(url: &str, wait: u64, wait_cf: bool) {
     let t0 = std::time::Instant::now();
     // Try proxy first (avoids CDP reconnect overhead)
     if let Some(proxy) = super::proxy::ServerProxy::from_session().await {
@@ -65,6 +65,14 @@ pub async fn navigate(url: &str, wait: u64) {
             .map_err(|e| e.to_string())?;
         if wait > 0 {
             onecrawl_cdp::navigation::wait_ms(wait).await;
+        }
+        if wait_cf {
+            let passed = onecrawl_cdp::human::wait_for_cf_clearance(&page, 30_000).await;
+            if passed {
+                println!("{} Cloudflare challenge cleared", "✓".green());
+            } else {
+                eprintln!("{} Cloudflare challenge did not clear within 30s", "✗".red());
+            }
         }
         let ms = t0.elapsed().as_millis();
         println!("{} Navigated to {} {}", "✓".green(), url.cyan(), format!("{ms}ms").dimmed());
@@ -256,7 +264,7 @@ pub async fn set_content(html: &str) {
 pub async fn click(selector: &str) {
     let sel = selector.to_string();
     with_page(|page| async move {
-        onecrawl_cdp::element::click(&page, &sel)
+        onecrawl_cdp::human::human_click(&page, &sel)
             .await
             .map_err(|e| e.to_string())?;
         println!("{} Clicked {}", "✓".green(), sel.dimmed());
