@@ -94,7 +94,7 @@ pub async fn a11y_tree() {
 }
 
 pub async fn a11y_element(selector: &str) {
-    let sel = selector.to_string();
+    let sel = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         let result = onecrawl_cdp::accessibility::get_element_accessibility(&page, &sel)
             .await

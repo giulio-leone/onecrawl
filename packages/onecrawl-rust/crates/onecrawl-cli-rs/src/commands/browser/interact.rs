@@ -10,7 +10,7 @@ use super::helpers::{with_page};
 // ---------------------------------------------------------------------------
 
 pub async fn click(selector: &str) {
-    let sel = selector.to_string();
+    let sel = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         onecrawl_cdp::human::human_click(&page, &sel)
             .await
@@ -22,7 +22,7 @@ pub async fn click(selector: &str) {
 }
 
 pub async fn dblclick(selector: &str) {
-    let sel = selector.to_string();
+    let sel = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         onecrawl_cdp::element::double_click(&page, &sel)
             .await
@@ -34,7 +34,7 @@ pub async fn dblclick(selector: &str) {
 }
 
 pub async fn type_text(selector: &str, text: &str) {
-    let sel = selector.to_string();
+    let sel = onecrawl_cdp::accessibility::resolve_ref(selector);
     let txt = text.to_string();
     with_page(|page| async move {
         onecrawl_cdp::element::type_text(&page, &sel, &txt)
@@ -47,7 +47,7 @@ pub async fn type_text(selector: &str, text: &str) {
 }
 
 pub async fn fill(selector: &str, text: &str) {
-    let sel = selector.to_string();
+    let sel = onecrawl_cdp::accessibility::resolve_ref(selector);
     let txt = text.to_string();
     with_page(|page| async move {
         onecrawl_cdp::keyboard::fill(&page, &sel, &txt)
@@ -60,7 +60,7 @@ pub async fn fill(selector: &str, text: &str) {
 }
 
 pub async fn focus(selector: &str) {
-    let sel = selector.to_string();
+    let sel = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         onecrawl_cdp::element::focus(&page, &sel)
             .await
@@ -72,7 +72,7 @@ pub async fn focus(selector: &str) {
 }
 
 pub async fn hover(selector: &str) {
-    let sel = selector.to_string();
+    let sel = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         onecrawl_cdp::element::hover(&page, &sel)
             .await
@@ -84,7 +84,7 @@ pub async fn hover(selector: &str) {
 }
 
 pub async fn scroll_into_view(selector: &str) {
-    let sel = selector.to_string();
+    let sel = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         onecrawl_cdp::element::scroll_into_view(&page, &sel)
             .await
@@ -96,7 +96,7 @@ pub async fn scroll_into_view(selector: &str) {
 }
 
 pub async fn check(selector: &str) {
-    let sel = selector.to_string();
+    let sel = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         onecrawl_cdp::element::check(&page, &sel)
             .await
@@ -108,7 +108,7 @@ pub async fn check(selector: &str) {
 }
 
 pub async fn uncheck(selector: &str) {
-    let sel = selector.to_string();
+    let sel = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         onecrawl_cdp::element::uncheck(&page, &sel)
             .await
@@ -120,7 +120,7 @@ pub async fn uncheck(selector: &str) {
 }
 
 pub async fn select_option(selector: &str, value: &str) {
-    let sel = selector.to_string();
+    let sel = onecrawl_cdp::accessibility::resolve_ref(selector);
     let val = value.to_string();
     with_page(|page| async move {
         onecrawl_cdp::element::select_option(&page, &sel, &val)
@@ -133,7 +133,7 @@ pub async fn select_option(selector: &str, value: &str) {
 }
 
 pub async fn tap(selector: &str) {
-    let sel = selector.to_string();
+    let sel = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         onecrawl_cdp::input::tap(&page, &sel)
             .await
@@ -158,7 +158,7 @@ pub async fn drag(from: &str, to: &str) {
 }
 
 pub async fn upload(selector: &str, file_path: &str) {
-    let sel = selector.to_string();
+    let sel = onecrawl_cdp::accessibility::resolve_ref(selector);
     let fp = file_path.to_string();
     with_page(|page| async move {
         onecrawl_cdp::input::set_file_input(&page, &sel, std::slice::from_ref(&fp))
@@ -176,7 +176,7 @@ pub async fn upload(selector: &str, file_path: &str) {
 }
 
 pub async fn bounding_box(selector: &str) {
-    let sel = selector.to_string();
+    let sel = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         let (x, y, w, h) = onecrawl_cdp::input::bounding_box(&page, &sel)
             .await

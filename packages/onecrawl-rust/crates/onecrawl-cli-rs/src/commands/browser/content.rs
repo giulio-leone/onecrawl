@@ -16,6 +16,8 @@ use super::helpers::{with_page};
 // ──────────────── Structured Data ────────────────
 
 pub async fn get(what: &str, selector: Option<&str>) {
+    let selector = selector.map(|s| onecrawl_cdp::accessibility::resolve_ref(s));
+    let selector = selector.as_deref();
     // Proxy fast-path for simple content retrieval (no selector)
     if selector.is_none() {
         if let Some(proxy) = super::super::proxy::ServerProxy::from_session().await {
@@ -156,7 +158,7 @@ pub async fn set_content(html: &str) {
 
 pub async fn extract_content(format: &str, selector: Option<&str>, output: Option<&str>) {
     let format = format.to_string();
-    let selector = selector.map(String::from);
+    let selector = selector.map(|s| onecrawl_cdp::accessibility::resolve_ref(s));
     let output = output.map(String::from);
     with_page(|page| async move {
         let fmt =
@@ -205,7 +207,7 @@ pub async fn stream_extract(
     format: &str,
 ) {
     let fields = fields.to_vec();
-    let item_selector = item_selector.to_string();
+    let item_selector = onecrawl_cdp::accessibility::resolve_ref(item_selector);
     let paginate = paginate.map(String::from);
     let output = output.map(String::from);
     let format = format.to_string();

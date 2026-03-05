@@ -22,7 +22,7 @@ use super::helpers::{with_page};
 // ---------------------------------------------------------------------------
 
 pub async fn adaptive_fingerprint(selector: &str) {
-    let sel = selector.to_string();
+    let sel = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         let fp = onecrawl_cdp::adaptive::fingerprint_element(&page, &sel)
             .await
@@ -130,7 +130,7 @@ pub async fn adaptive_load(path: &str) {
 }
 
 pub async fn dom_observe(selector: Option<&str>) {
-    let sel = selector.map(String::from);
+    let sel = selector.map(|s| onecrawl_cdp::accessibility::resolve_ref(s));
     with_page(|page| async move {
         onecrawl_cdp::dom_observer::start_dom_observer(&page, sel.as_deref())
             .await
@@ -167,7 +167,7 @@ pub async fn dom_stop() {
 }
 
 pub async fn dom_snapshot(selector: Option<&str>) {
-    let sel = selector.map(String::from);
+    let sel = selector.map(|s| onecrawl_cdp::accessibility::resolve_ref(s));
     with_page(|page| async move {
         let html = onecrawl_cdp::dom_observer::get_dom_snapshot(&page, sel.as_deref())
             .await
@@ -216,7 +216,7 @@ pub async fn iframe_content(index: usize) {
 }
 
 pub async fn select_css(selector: &str) {
-    let selector = selector.to_string();
+    let selector = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         let result = onecrawl_cdp::selectors::css_select(&page, &selector)
             .await
@@ -278,7 +278,7 @@ pub async fn select_regex(pattern: &str, tag: Option<&str>) {
 }
 
 pub async fn select_auto(selector: &str) {
-    let selector = selector.to_string();
+    let selector = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         let result = onecrawl_cdp::selectors::auto_selector(&page, &selector)
             .await
@@ -290,7 +290,7 @@ pub async fn select_auto(selector: &str) {
 }
 
 pub async fn nav_parent(selector: &str) {
-    let selector = selector.to_string();
+    let selector = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         let result = onecrawl_cdp::dom_nav::get_parent(&page, &selector)
             .await
@@ -305,7 +305,7 @@ pub async fn nav_parent(selector: &str) {
 }
 
 pub async fn nav_children(selector: &str) {
-    let selector = selector.to_string();
+    let selector = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         let result = onecrawl_cdp::dom_nav::get_children(&page, &selector)
             .await
@@ -320,7 +320,7 @@ pub async fn nav_children(selector: &str) {
 }
 
 pub async fn nav_next_sibling(selector: &str) {
-    let selector = selector.to_string();
+    let selector = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         let result = onecrawl_cdp::dom_nav::get_next_sibling(&page, &selector)
             .await
@@ -335,7 +335,7 @@ pub async fn nav_next_sibling(selector: &str) {
 }
 
 pub async fn nav_prev_sibling(selector: &str) {
-    let selector = selector.to_string();
+    let selector = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         let result = onecrawl_cdp::dom_nav::get_prev_sibling(&page, &selector)
             .await
@@ -350,7 +350,7 @@ pub async fn nav_prev_sibling(selector: &str) {
 }
 
 pub async fn nav_siblings(selector: &str) {
-    let selector = selector.to_string();
+    let selector = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         let result = onecrawl_cdp::dom_nav::get_siblings(&page, &selector)
             .await
@@ -365,7 +365,7 @@ pub async fn nav_siblings(selector: &str) {
 }
 
 pub async fn nav_similar(selector: &str) {
-    let selector = selector.to_string();
+    let selector = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         let result = onecrawl_cdp::dom_nav::find_similar(&page, &selector)
             .await
@@ -380,7 +380,7 @@ pub async fn nav_similar(selector: &str) {
 }
 
 pub async fn nav_above(selector: &str, limit: usize) {
-    let selector = selector.to_string();
+    let selector = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         let result = onecrawl_cdp::dom_nav::above_elements(&page, &selector, limit)
             .await
@@ -395,7 +395,7 @@ pub async fn nav_above(selector: &str, limit: usize) {
 }
 
 pub async fn nav_below(selector: &str, limit: usize) {
-    let selector = selector.to_string();
+    let selector = onecrawl_cdp::accessibility::resolve_ref(selector);
     with_page(|page| async move {
         let result = onecrawl_cdp::dom_nav::below_elements(&page, &selector, limit)
             .await
