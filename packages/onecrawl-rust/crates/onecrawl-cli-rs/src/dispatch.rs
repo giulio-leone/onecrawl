@@ -928,8 +928,8 @@ pub(crate) async fn dispatch(command: Commands) {
             CaptchaAction::Inject { solution } => {
                 commands::browser::captcha_inject(&solution).await;
             }
-            CaptchaAction::Solve { timeout } => {
-                commands::browser::captcha_solve(timeout).await;
+            CaptchaAction::Solve { timeout, api } => {
+                commands::browser::captcha_solve(timeout, api).await;
             }
             CaptchaAction::Check => {
                 commands::browser::stealth_check().await;

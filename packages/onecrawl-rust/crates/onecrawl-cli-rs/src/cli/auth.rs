@@ -22,10 +22,17 @@ pub(crate) enum CaptchaAction {
     ///
     /// Turnstile: clicks checkbox + waits for auto-clear.
     /// reCAPTCHA v2: switches to audio challenge + local Whisper transcription.
+    ///
+    /// With `--api`: uses external solver (CapSolver/2captcha/AntiCaptcha).
+    /// Configure in `~/.onecrawl/config.json`: `{"capsolver_key":"CAP-xxx"}` or
+    /// `{"twocaptcha_key":"abc"}` or `{"anticaptcha_key":"xyz"}`.
     Solve {
         /// Timeout in ms for solving
         #[arg(short, long, default_value = "30000")]
         timeout: u64,
+        /// Use external API solver (reads key from ~/.onecrawl/config.json)
+        #[arg(long)]
+        api: bool,
     },
     /// Run comprehensive stealth fingerprint check
     ///

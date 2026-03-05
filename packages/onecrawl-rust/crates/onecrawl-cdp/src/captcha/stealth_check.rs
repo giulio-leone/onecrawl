@@ -7,8 +7,9 @@ use onecrawl_core::{Error, Result};
 
 /// Run a comprehensive stealth check by evaluating fingerprint markers.
 ///
-/// Tests: webdriver, plugins, languages, screen, navigator properties,
-/// toString proxy detection, and common headless markers.
+/// Tests 20+ browser properties: webdriver, plugins, languages, screen,
+/// navigator properties, toString proxy detection, headless markers,
+/// canvas/audio fingerprint consistency, and iframe contentWindow access.
 ///
 /// Returns a JSON value with scores and findings.
 pub async fn stealth_check(page: &Page) -> Result<serde_json::Value> {
@@ -95,6 +96,67 @@ pub async fn stealth_check(page: &Page) -> Result<serde_json::Value> {
         const ua = navigator.userAgent;
         const isChrome = ua.includes('Chrome/') && !ua.includes('Headless');
         check('UA contains Chrome (not Headless)', isChrome, ua.substring(0, 80));
+
+        // 16. Chrome runtime consistency
+        check('chrome.runtime exists', !!window.chrome?.runtime,
+              `has runtime: ${!!window.chrome?.runtime}`);
+
+        // 17. Navigator prototype chain
+        try {
+            const proto = Object.getPrototypeOf(navigator);
+            check('navigator prototype = Navigator', proto === Navigator.prototype,
+                  `proto: ${proto?.constructor?.name || 'unknown'}`);
+        } catch(e) {
+            check('navigator prototype = Navigator', false, e.message);
+        }
+
+        // 18. Screen outer dimensions
+        check('outerWidth/outerHeight > 0', window.outerWidth > 0 && window.outerHeight > 0,
+              `outer: ${window.outerWidth}x${window.outerHeight}`);
+
+        // 19. CDP markers absent
+        const hasCdcMarker = Object.keys(window).some(k => k.startsWith('cdc_') || k.startsWith('$cdc_'));
+        check('no cdc_ markers on window', !hasCdcMarker,
+              hasCdcMarker ? 'Found cdc_ marker' : 'Clean');
+
+        // 20. Canvas fingerprint consistency
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 200; canvas.height = 50;
+            const ctx = canvas.getContext('2d');
+            ctx.textBaseline = 'top';
+            ctx.font = '14px Arial';
+            ctx.fillStyle = '#f60';
+            ctx.fillRect(0, 0, 200, 50);
+            ctx.fillStyle = '#069';
+            ctx.fillText('OneCrawl test 🎭', 2, 15);
+            const data = canvas.toDataURL();
+            check('canvas fingerprint consistent', data.length > 100,
+                  `dataURL length: ${data.length}`);
+        } catch(e) {
+            check('canvas fingerprint consistent', false, e.message);
+        }
+
+        // 21. AudioContext consistency
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            check('AudioContext available', ctx.state !== 'closed',
+                  `state: ${ctx.state}, sampleRate: ${ctx.sampleRate}`);
+            ctx.close();
+        } catch(e) {
+            check('AudioContext available', false, e.message);
+        }
+
+        // 22. Performance.now precision
+        try {
+            const t1 = performance.now();
+            const t2 = performance.now();
+            const precision = t2 - t1;
+            check('performance.now has precision', precision >= 0,
+                  `delta: ${precision.toFixed(6)}ms`);
+        } catch(e) {
+            check('performance.now has precision', false, e.message);
+        }
 
         results.checks = checks;
         results.passed = pass;

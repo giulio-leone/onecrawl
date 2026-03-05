@@ -1,7 +1,9 @@
 //! Human-like behavior simulation and Cloudflare challenge detection.
 //!
 //! Provides:
-//! - Bezier-curve mouse movement before clicks
+//! - Bezier-curve mouse movement with easing (acceleration/deceleration)
+//! - Micro-hesitations during mouse travel for realism
+//! - Human-like scrolling with momentum and deceleration
 //! - Random pre/post-action delays matching human reaction times
 //! - Cloudflare Bot Management challenge detection
 //! - Auto-wait for CF clearance (up to configurable timeout)
@@ -21,7 +23,6 @@ use tokio::time::sleep;
 /// A random control point adds a natural curve (not a straight line).
 fn bezier_path(x0: f64, y0: f64, x1: f64, y1: f64, steps: usize) -> Vec<(f64, f64)> {
     let mut rng = rand::rng();
-    // Control point offset: ±30% of the distance for a gentle curve
     let dist = ((x1 - x0).powi(2) + (y1 - y0).powi(2)).sqrt().max(50.0);
     let cx = (x0 + x1) / 2.0 + rng.random_range(-dist * 0.35..dist * 0.35);
     let cy = (y0 + y1) / 2.0 + rng.random_range(-dist * 0.35..dist * 0.35);
@@ -36,8 +37,19 @@ fn bezier_path(x0: f64, y0: f64, x1: f64, y1: f64, steps: usize) -> Vec<(f64, f6
         .collect()
 }
 
+/// Easing function: slow start → fast middle → slow end (ease-in-out cubic).
+fn ease_in_out(t: f64) -> f64 {
+    if t < 0.5 {
+        4.0 * t * t * t
+    } else {
+        1.0 - (-2.0 * t + 2.0).powi(3) / 2.0
+    }
+}
+
 /// Move the mouse from `(x0,y0)` to `(x1,y1)` along a bezier curve.
-/// Dispatches CDP `mouseMoved` events at 60-120 fps timing.
+///
+/// Uses easing for speed variation (slow start/end, fast middle) and
+/// occasional micro-hesitations (~5% chance per step) for realism.
 pub async fn mouse_move_bezier(
     page: &Page,
     x0: f64,
@@ -48,14 +60,66 @@ pub async fn mouse_move_bezier(
     let mut rng = rand::rng();
     let steps: usize = rng.random_range(15..28);
     let path = bezier_path(x0, y0, x1, y1, steps);
+    let total = path.len().max(1) as f64;
 
-    for (x, y) in path {
+    for (i, (x, y)) in path.into_iter().enumerate() {
         page.move_mouse(Point { x, y })
             .await
             .map_err(|e| Error::Cdp(format!("mouse_move_bezier: {e}")))?;
-        // 8–16 ms between moves (simulates ~62–125 fps cursor update rate)
-        sleep(Duration::from_millis(rng.random_range(8..17))).await;
+
+        // Variable speed via easing: slow at endpoints, fast in the middle
+        let progress = i as f64 / total;
+        let speed_factor = ease_in_out(progress);
+        let base_delay = 6.0 + (1.0 - speed_factor) * 18.0; // 6ms fast → 24ms slow
+        let jitter = rng.random_range(-2.0f64..2.0);
+        let delay_ms = (base_delay + jitter).max(4.0) as u64;
+        sleep(Duration::from_millis(delay_ms)).await;
+
+        // ~5% chance of a micro-hesitation (30–80ms pause)
+        if rng.random_range(0u32..100) < 5 {
+            sleep(Duration::from_millis(rng.random_range(30..80))).await;
+        }
     }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Human-like scrolling
+// ---------------------------------------------------------------------------
+
+/// Scroll with momentum and deceleration (like a real mouse wheel).
+///
+/// Divides total `pixels` into a series of decreasing increments with
+/// variable timing, simulating flick + coast + stop physics.
+pub async fn human_scroll(page: &Page, dx_total: i64, dy_total: i64) -> Result<()> {
+    let mut rng = rand::rng();
+    let total = ((dx_total as f64).powi(2) + (dy_total as f64).powi(2)).sqrt().max(1.0);
+    let direction_x = dx_total as f64 / total;
+    let direction_y = dy_total as f64 / total;
+
+    let mut remaining = total;
+    let mut velocity = rng.random_range(0.4..0.7); // initial speed factor
+
+    while remaining > 1.0 {
+        // Each step scrolls a fraction of remaining distance
+        let step = (remaining * velocity).max(1.0).min(remaining);
+        let step_dx = (direction_x * step).round() as i64;
+        let step_dy = (direction_y * step).round() as i64;
+
+        if step_dx != 0 || step_dy != 0 {
+            let js = format!("window.scrollBy({step_dx},{step_dy})");
+            page.evaluate(js)
+                .await
+                .map_err(|e| Error::Cdp(format!("human_scroll: {e}")))?;
+        }
+
+        remaining -= step;
+        // Decelerate: reduce velocity each step
+        velocity *= rng.random_range(0.75..0.90);
+        // Timing: 12–30ms between scroll events
+        sleep(Duration::from_millis(rng.random_range(12..30))).await;
+    }
+
     Ok(())
 }
 

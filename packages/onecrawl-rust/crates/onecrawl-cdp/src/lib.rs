@@ -110,7 +110,7 @@ pub use passkey_store::{
 pub use websocket::WsRecorder;
 pub use workers::ServiceWorkerInfo;
 
-pub use captcha::{CaptchaConfig, CaptchaDetection, CaptchaResult};
+pub use captcha::{CaptchaConfig, CaptchaDetection, CaptchaResult, SolverConfig, SolverService, solve_via_api, load_solver_config};
 pub use cookie_jar::{CookieJar, StoredCookie};
 pub use data_pipeline::{Pipeline, PipelineResult, PipelineStep};
 pub use dom_nav::NavElement;
