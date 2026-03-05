@@ -3,10 +3,11 @@ use colored::Colorize;
 use onecrawl_cdp::BrowserSession;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use std::process::Stdio;
 
 const SESSION_FILE: &str = "/tmp/onecrawl-session.json";
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInfo {
     pub ws_url: String,
     pub pid: Option<u32>,
@@ -18,6 +19,9 @@ pub struct SessionInfo {
     pub default_tab_id: Option<String>,
     #[serde(default)]
     pub instance_id: Option<String>,
+    /// Raw TargetId string of the currently active tab, set by `tab switch`.
+    #[serde(default)]
+    pub active_tab_id: Option<String>,
 }
 
 #[derive(Subcommand)]
@@ -33,6 +37,15 @@ pub enum SessionAction {
         /// Fork browser to background
         #[arg(short, long)]
         background: bool,
+        /// Launch the system Chrome with the real user profile (no automation flags).
+        /// Enables stealth login on sites that detect automation browsers.
+        /// Cannot be combined with --headless.
+        #[arg(long)]
+        normal_chrome: bool,
+        /// Chrome user-data-dir to use with --normal-chrome.
+        /// Defaults to ~/Library/Application Support/Google/Chrome on macOS.
+        #[arg(long, value_name = "DIR")]
+        chrome_profile: Option<String>,
     },
     /// Show session info
     Info,
@@ -47,7 +60,7 @@ pub fn load_session() -> Option<SessionInfo> {
 }
 
 /// Save session info to disk.
-fn save_session(info: &SessionInfo) -> std::io::Result<()> {
+pub fn save_session(info: &SessionInfo) -> std::io::Result<()> {
     let data = serde_json::to_string_pretty(info)?;
     std::fs::write(SESSION_FILE, data)
 }
@@ -57,7 +70,14 @@ fn remove_session() {
     let _ = std::fs::remove_file(SESSION_FILE);
 }
 
-/// Connect to the active session and return the first page.
+/// Connect to the active session and return the active page.
+///
+/// If `active_tab_id` is set in the session file (written by `tab switch`),
+/// the page with that TargetId is returned. Otherwise falls back to the first
+/// available page, creating a blank one if the browser has none.
+///
+/// Retries target discovery up to 5×50ms because the chromiumoxide handler
+/// populates its `targets` map asynchronously after a fresh `connect()`.
 pub async fn connect_to_session() -> Result<(BrowserSession, onecrawl_cdp::Page), String> {
     let info = load_session().ok_or_else(|| {
         format!(
@@ -69,22 +89,77 @@ pub async fn connect_to_session() -> Result<(BrowserSession, onecrawl_cdp::Page)
         .await
         .map_err(|e| format!("Failed to connect to session: {e}"))?;
 
-    let pages = session
-        .browser()
-        .pages()
-        .await
-        .map_err(|e| format!("Failed to list pages: {e}"))?;
+    // The chromiumoxide handler discovers targets asynchronously after connect.
+    // Retry page lookup with short backoff to avoid a race-condition where
+    // `pages()` returns an empty list right after connecting.
+    const MAX_ATTEMPTS: u8 = 5;
+    const WAIT_MS: u64 = 50;
 
-    let page = if let Some(p) = pages.into_iter().next() {
-        p
+    for attempt in 0..MAX_ATTEMPTS {
+        if attempt > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(WAIT_MS)).await;
+        }
+
+        let mut pages = session
+            .browser()
+            .pages()
+            .await
+            .map_err(|e| format!("Failed to list pages: {e}"))?;
+        // Sort for stable index-consistent ordering across reconnections.
+        pages.sort_by(|a, b| a.target_id().inner().cmp(b.target_id().inner()));
+
+        if pages.is_empty() {
+            continue; // handler not ready yet, retry
+        }
+
+        let page = if let Some(ref tid) = info.active_tab_id {
+            // Find the page whose raw TargetId matches the saved one.
+            match pages.into_iter().find(|p| p.target_id().inner() == tid) {
+                Some(p) => p,
+                None => continue, // target not yet visible, retry
+            }
+        } else {
+            // No active tab preference — use the first available page.
+            pages.into_iter().next().unwrap() // safe: pages is non-empty
+        };
+
+        return Ok((session, page));
+    }
+
+    // All retries exhausted — either no pages exist or active_tab_id is stale.
+    if let Some(ref tid) = info.active_tab_id {
+        // active_tab_id is stale (tab was closed). Try one more time for any page.
+        let pages = session
+            .browser()
+            .pages()
+            .await
+            .map_err(|e| format!("Failed to list pages: {e}"))?;
+        let mut sorted = pages;
+        sorted.sort_by(|a, b| a.target_id().inner().cmp(b.target_id().inner()));
+        if let Some(p) = sorted.into_iter().next() {
+            eprintln!(
+                "⚠ Active tab '{}' not found (closed?). Falling back to first available tab.",
+                tid
+            );
+            // Clear the stale active_tab_id from disk.
+            let mut stale_info = info.clone();
+            stale_info.active_tab_id = None;
+            let _ = save_session(&stale_info);
+            return Ok((session, p));
+        }
+        Err(format!(
+            "Active tab '{}' not found and no other pages available. \
+             Try `onecrawl tab new` to open a fresh tab.",
+            tid
+        ))
     } else {
-        session
+        // No pages at all — create a fresh blank page.
+        let page = session
             .new_page("about:blank")
             .await
-            .map_err(|e| format!("Failed to create page: {e}"))?
-    };
-
-    Ok((session, page))
+            .map_err(|e| format!("Failed to create page: {e}"))?;
+        Ok((session, page))
+    }
 }
 
 pub async fn handle(action: SessionAction) {
@@ -93,6 +168,8 @@ pub async fn handle(action: SessionAction) {
             headless,
             connect,
             background: _,
+            normal_chrome,
+            chrome_profile,
         } => {
             if Path::new(SESSION_FILE).exists()
                 && let Some(info) = load_session()
@@ -110,7 +187,51 @@ pub async fn handle(action: SessionAction) {
                 remove_session();
             }
 
-            if connect.is_some() || !headless {
+            if normal_chrome {
+                // Normal Chrome mode — attach to existing Chrome via DevToolsActivePort,
+                // or launch Chrome fully detached with real profile and no automation flags.
+                // The session-start command exits immediately after saving the session file;
+                // Chrome lives independently as a detached process.
+                match launch_normal_chrome(chrome_profile.as_deref()).await {
+                    Ok((ws_url, maybe_pid)) => {
+                        let info = SessionInfo {
+                            ws_url: ws_url.clone(),
+                            pid: maybe_pid,
+                            server_port: None,
+                            server_pid: None,
+                            default_tab_id: None,
+                            instance_id: None,
+                            active_tab_id: None,
+                        };
+                        if let Err(e) = save_session(&info) {
+                            eprintln!("{} Failed to save session: {e}", "✗".red());
+                            std::process::exit(1);
+                        }
+                        match maybe_pid {
+                            Some(pid) => println!(
+                                "{} Session started (normal Chrome, PID {})",
+                                "✓".green(),
+                                pid
+                            ),
+                            None => println!(
+                                "{} Session attached to existing Chrome",
+                                "✓".green()
+                            ),
+                        }
+                        println!("  WS: {}", ws_url.cyan());
+                        println!("  File: {}", SESSION_FILE.dimmed());
+                        println!(
+                            "  {}",
+                            "Chrome is running. Use 'session close' to end the session."
+                                .dimmed()
+                        );
+                    }
+                    Err(e) => {
+                        eprintln!("{} Failed to start normal Chrome: {e}", "✗".red());
+                        std::process::exit(1);
+                    }
+                }
+            } else if connect.is_some() || !headless {
                 // Direct CDP mode — connect or headed, no proxy
                 let result = if let Some(ref url) = connect {
                     println!("{} Connecting to {}", "→".blue(), url.cyan());
@@ -129,6 +250,7 @@ pub async fn handle(action: SessionAction) {
                             server_pid: None,
                             default_tab_id: None,
                             instance_id: None,
+                            active_tab_id: None,
                         };
                         if let Err(e) = save_session(&info) {
                             eprintln!("{} Failed to save session: {e}", "✗".red());
@@ -161,6 +283,7 @@ pub async fn handle(action: SessionAction) {
                             server_pid: Some(server_pid),
                             default_tab_id: Some(tab_id),
                             instance_id: Some(instance_id),
+                            active_tab_id: None,
                         };
                         if let Err(e) = save_session(&info) {
                             eprintln!("{} Failed to save session: {e}", "✗".red());
@@ -195,6 +318,7 @@ pub async fn handle(action: SessionAction) {
                                     server_pid: None,
                                     default_tab_id: None,
                                     instance_id: None,
+                                    active_tab_id: None,
                                 };
                                 if let Err(e) = save_session(&info) {
                                     eprintln!("{} Failed to save session: {e}", "✗".red());
@@ -395,4 +519,363 @@ async fn start_proxy_server(headless: bool) -> Result<(u16, u32, String, String,
         .to_string();
 
     Ok((port, server_pid, instance_id, tab_id, ws_url))
+}
+
+/// Launch the system Chrome browser with the user's real profile and no automation flags.
+///
+/// Strategy (in order):
+///   1. Read `DevToolsActivePort` from the onecrawl Chrome profile dir → attach if live.
+///   2. Scan Chrome process args for `--remote-debugging-port=N` → try each (non-headless).
+///   3. Dedicated profile is in use (no debug port) → wait up to 60s for user to close it.
+///   4. Profile not in use → launch Chrome via `open -na` (macOS) or direct spawn (Linux)
+///      with `--remote-debugging-port` and no automation flags.
+///
+/// Default profile: `~/.onecrawl/chrome-profile/` (persists between sessions; avoids
+/// macOS Chrome singleton conflicts with the user's own Chrome instance).
+async fn launch_normal_chrome(
+    chrome_profile: Option<&str>,
+) -> Result<(String, Option<u32>), String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME not set".to_string())?;
+    let user_data_dir = if let Some(dir) = chrome_profile {
+        dir.to_string()
+    } else {
+        // Use a dedicated onecrawl profile so we never interfere with (or require
+        // closing) the user's main Chrome.  The profile persists between sessions,
+        // so cookies/login state are preserved after the first login.
+        format!("{home}/.onecrawl/chrome-profile")
+    };
+
+    // Ensure the profile directory exists before Chrome tries to open it.
+    std::fs::create_dir_all(&user_data_dir)
+        .map_err(|e| format!("Cannot create Chrome profile dir {user_data_dir}: {e}"))?;
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .unwrap();
+
+    // Chrome's canonical file indicating the active debug port.
+    // onecrawl NEVER writes to this file — Chrome manages it exclusively.
+    let active_port_file = format!("{user_data_dir}/DevToolsActivePort");
+
+    // Probe a CDP port: returns (ws_url, is_headless) or None if not reachable.
+    let probe = async |port: u16| -> Option<(String, bool)> {
+        let resp = client
+            .get(format!("http://127.0.0.1:{port}/json/version"))
+            .send()
+            .await
+            .ok()?;
+        if !resp.status().is_success() {
+            return None;
+        }
+        let body: serde_json::Value = resp.json().await.ok()?;
+        let ws_url = body
+            .get("webSocketDebuggerUrl")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())?;
+        // Headless Chrome reports "HeadlessChrome" in its User-Agent string.
+        let headless = body
+            .get("User-Agent")
+            .and_then(|v| v.as_str())
+            .map(|ua| ua.contains("HeadlessChrome"))
+            .unwrap_or(false);
+        Some((ws_url, headless))
+    };
+
+    // Count real HTTP tabs (http:// / https://) on a given port.
+    let count_http_tabs = async |port: u16| -> usize {
+        (async {
+            let resp = client
+                .get(format!("http://127.0.0.1:{port}/json/list"))
+                .send()
+                .await
+                .ok()?;
+            if !resp.status().is_success() {
+                return None;
+            }
+            let arr: serde_json::Value = resp.json().await.ok()?;
+            let tabs = arr.as_array()?;
+            Some(
+                tabs.iter()
+                    .filter(|t| {
+                        t.get("url")
+                            .and_then(|u| u.as_str())
+                            .map(|u| u.starts_with("http://") || u.starts_with("https://"))
+                            .unwrap_or(false)
+                    })
+                    .count(),
+            )
+        })
+        .await
+        .unwrap_or(0)
+    };
+
+    // --- Step 1: DevToolsActivePort (written by Chrome itself, read-only for us) ---
+    // The file contains "<port>\n<ws-path>" (Chrome 144+) or just "<port>" (older).
+    if let Ok(content) = std::fs::read_to_string(&active_port_file) {
+        // Only trust the file if it looks like a valid 2-line Chrome file (has ws-path).
+        let mut lines = content.lines();
+        if let (Some(port_str), Some(_ws_path)) = (lines.next(), lines.next()) {
+            if let Ok(port) = port_str.trim().parse::<u16>() {
+                if let Some((ws_url, _)) = probe(port).await {
+                    println!(
+                        "{} Attached to Chrome on port {} (DevToolsActivePort)",
+                        "✓".green(), port
+                    );
+                    return Ok((ws_url, None));
+                }
+                // Port in file is stale / not reachable — fall through to process scan.
+            }
+        }
+    }
+
+    // --- Step 2: Scan process args for --remote-debugging-port=N ---
+    // Extract distinct ports from Chrome/renderer process list.
+    let profile_dir_clone = user_data_dir.clone();
+    let raw_proc_output = std::process::Command::new("sh")
+        .args([
+            "-c",
+            r#"ps -eo pid,args | grep 'Google Chrome\|Chromium\|chromium' | grep 'remote-debugging-port=[1-9]' | grep -v grep"#,
+        ])
+        .output()
+        .map(|o| o.stdout)
+        .unwrap_or_default();
+
+    // Parse: extract (port, uses_real_profile) from process list.
+    // Headless detection is done via CDP /json/version (more reliable than ps truncation).
+    let mut candidate_ports: Vec<(u16, bool)> = vec![]; // (port, real_profile)
+    for line in String::from_utf8_lossy(&raw_proc_output).lines() {
+        let port: u16 = line
+            .split_whitespace()
+            .find_map(|a| {
+                a.strip_prefix("--remote-debugging-port=")
+                    .and_then(|p| p.parse().ok())
+                    .filter(|&p: &u16| p > 0)
+            })
+            .unwrap_or(0);
+        if port == 0 {
+            continue;
+        }
+        let real_profile = line.contains(&profile_dir_clone);
+        candidate_ports.push((port, real_profile));
+    }
+    candidate_ports.dedup_by_key(|p| p.0);
+
+    // Priority: real-profile headed > headed > headless.
+    // Headless detection via CDP User-Agent (contains "HeadlessChrome").
+    // Within same tier, prefer the port with the most HTTP tabs.
+    let mut best_ws: Option<String> = None;
+    let mut best_port: u16 = 0;
+    let mut best_score: usize = 0;
+    let mut best_tier: u8 = 0; // 3=real+headed, 2=headed, 1=headless
+
+    for (port, real_profile) in &candidate_ports {
+        let port = *port;
+        let (ws_url, cdp_headless) = match probe(port).await {
+            Some(pair) => pair,
+            None => continue,
+        };
+        let tier: u8 = if *real_profile && !cdp_headless {
+            3
+        } else if !cdp_headless {
+            2
+        } else {
+            1
+        };
+        let tab_score = count_http_tabs(port).await;
+        if tier > best_tier || (tier == best_tier && tab_score > best_score) {
+            best_ws = Some(ws_url);
+            best_port = port;
+            best_score = tab_score;
+            best_tier = tier;
+        }
+    }
+
+    if let Some(ws_url) = best_ws {
+        if best_tier >= 2 {
+            // Headed (or real-profile headed) Chrome found — use it.
+            let mode = if best_tier == 3 { "real profile" } else { "headed" };
+            println!(
+                "{} Attached to existing Chrome on port {} ({mode}, {} HTTP tabs)",
+                "✓".green(), best_port, best_score
+            );
+            return Ok((ws_url, None));
+        }
+        // All found instances are headless automation browsers — skip them.
+        // Fall through to Step 3/4 to find or launch a real Chrome.
+    }
+
+    // scan_ports: re-scan for poll loop (Step 3); only non-headless processes.
+    let scan_ports = move || -> Vec<u16> {
+        let stdout_bytes = std::process::Command::new("sh")
+            .args([
+                "-c",
+                r#"ps -eo pid,args | grep 'Google Chrome\|Chromium\|chromium' | grep 'remote-debugging-port=[1-9]' | grep -v headless | grep -v grep | grep -o -- '--remote-debugging-port=[0-9]*' | sort -u | sed 's/--remote-debugging-port=//'"#,
+            ])
+            .output()
+            .map(|o| o.stdout)
+            .unwrap_or_default();
+        String::from_utf8_lossy(&stdout_bytes)
+            .lines()
+            .filter_map(|l| l.trim().parse::<u16>().ok())
+            .collect()
+    };
+
+    // --- Step 3: Real Chrome with user's profile is running but no debug port ---
+    // Check specifically for Chrome processes using the user's actual profile directory.
+    // Playwright/Puppeteer always use temp profiles (/tmp, /var/folders) — skip those.
+    let real_chrome_running = std::process::Command::new("sh")
+        .args(["-c", &format!(
+            r#"ps -eo args | grep -F '{}' | grep -v grep | grep -q '.'"#,
+            user_data_dir
+        )])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+
+    if real_chrome_running {
+        // Remote debugging cannot be added to an already-running Chrome process.
+        // The only way is to quit Chrome and relaunch it with --remote-debugging-port.
+        println!("{} Chrome is running with your profile but remote debugging is not enabled.", "⚠".yellow());
+        println!("  {} Please {} Chrome completely (Cmd+Q on macOS).", "→".blue(), "quit".bold());
+        println!("  {} onecrawl will then relaunch Chrome with debug mode enabled.", "→".blue());
+        println!("  (Press Ctrl+C to abort)");
+
+        // Poll up to 60s for Chrome to quit (check that the profile is no longer in ps args)
+        let quit_check = format!(
+            r#"ps -eo args | grep -F '{}' | grep -v grep | grep -q '.'"#,
+            user_data_dir
+        );
+        for _ in 0..120 {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            let still_running = std::process::Command::new("sh")
+                .args(["-c", &quit_check])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if !still_running {
+                println!("{} Chrome closed. Relaunching with remote debugging...", "✓".green());
+                // Fall through to Step 4 by breaking out of the loop
+                break;
+            }
+        }
+
+        // Re-check; if still running after 60s, bail out
+        let still_running = std::process::Command::new("sh")
+            .args(["-c", &quit_check])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if still_running {
+            return Err(
+                "Timed out (60s) waiting for Chrome to quit.\n\
+                 Please quit Chrome (Cmd+Q) and run the command again."
+                    .to_string(),
+            );
+        }
+        // Small delay to let Chrome fully release its files before we relaunch
+        tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    }
+
+    // --- Step 4: Launch Chrome with dedicated onecrawl profile + remote debugging ---
+    // macOS: use `open -na "Google Chrome" --args …` which always creates a new Chrome
+    //        process even if Chrome is already running with a different profile.
+    //        We intentionally do NOT capture the PID via 'open'; Chrome will persist
+    //        after onecrawl exits so the user can keep browsing.
+    // Linux: direct binary spawn (no macOS singleton issue).
+    let port = find_free_port().map_err(|e| format!("find port: {e}"))?;
+    println!("{} Launching Chrome on port {} (dedicated onecrawl profile)...", "→".blue(), port);
+    println!("  Profile: {}", user_data_dir.dimmed());
+
+    #[cfg(target_os = "macos")]
+    {
+        let chrome_app = if std::path::Path::new("/Applications/Google Chrome.app").exists() {
+            "Google Chrome"
+        } else if std::path::Path::new("/Applications/Chromium.app").exists() {
+            "Chromium"
+        } else {
+            return Err("Chrome not found in /Applications/. Install Google Chrome first.".to_string());
+        };
+
+        std::process::Command::new("open")
+            .arg("-na")
+            .arg(chrome_app)
+            .arg("--args")
+            .arg(format!("--remote-debugging-port={port}"))
+            .arg(format!("--user-data-dir={user_data_dir}"))
+            .arg("--no-first-run")
+            .arg("--no-default-browser-check")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| format!("open Chrome: {e}"))?;
+
+        // open(1) returns immediately; poll until CDP is alive.
+        let mut ws_debugger_url: Option<String> = None;
+        for attempt in 0..60 {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            if let Some((ws, _)) = probe(port).await {
+                ws_debugger_url = Some(ws);
+                break;
+            }
+            if attempt % 10 == 9 {
+                println!("  Waiting for Chrome to start ({}/30)...", attempt / 10 + 1);
+            }
+        }
+
+        let ws_url = ws_debugger_url
+            .ok_or_else(|| format!("Chrome did not expose CDP on port {port} within 30s"))?;
+        println!("{} Chrome ready on port {}", "✓".green(), port);
+        return Ok((ws_url, None)); // Chrome persists — no PID to track
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("sh")
+            .args(["-c", "which google-chrome google-chrome-stable chromium-browser chromium 2>/dev/null | head -1"])
+            .output()
+            .map_err(|e| format!("which: {e}"))?;
+        let chrome_bin = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if chrome_bin.is_empty() {
+            return Err("Chrome/Chromium not found in PATH".to_string());
+        }
+
+        use std::os::unix::process::CommandExt;
+        let child = unsafe {
+            std::process::Command::new(&chrome_bin)
+                .arg(format!("--remote-debugging-port={port}"))
+                .arg(format!("--user-data-dir={user_data_dir}"))
+                .arg("--no-first-run")
+                .arg("--no-default-browser-check")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .pre_exec(|| { libc::setsid(); Ok(()) })
+                .spawn()
+                .map_err(|e| format!("spawn Chrome: {e}"))?
+        };
+        let chrome_pid = child.id();
+
+        let mut ws_debugger_url: Option<String> = None;
+        for attempt in 0..60 {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            if let Some((ws, _)) = probe(port).await {
+                ws_debugger_url = Some(ws);
+                break;
+            }
+            if attempt % 10 == 9 {
+                println!("  Waiting for Chrome to start ({}/30)...", attempt / 10 + 1);
+            }
+        }
+
+        let ws_url = ws_debugger_url.ok_or_else(|| {
+            let _ = kill_process(chrome_pid);
+            format!("Chrome did not expose CDP on port {port} within 30s")
+        })?;
+
+        println!("{} Chrome ready on port {}", "✓".green(), port);
+        return Ok((ws_url, Some(chrome_pid)));
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    return Err("--normal-chrome is only supported on macOS and Linux".to_string());
 }

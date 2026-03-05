@@ -2177,9 +2177,18 @@ pub async fn tab_close(index: usize) {
 
 pub async fn tab_switch(index: usize) {
     with_session(|session, _page| async move {
-        let _tab = onecrawl_cdp::tabs::get_tab(session.browser(), index)
+        let tab = onecrawl_cdp::tabs::get_tab(session.browser(), index)
             .await
             .map_err(|e| e.to_string())?;
+        let target_id = tab.target_id().inner().clone();
+
+        // Persist the active tab so every subsequent command uses this tab.
+        let mut info = super::session::load_session()
+            .ok_or_else(|| "No active session".to_string())?;
+        info.active_tab_id = Some(target_id);
+        super::session::save_session(&info)
+            .map_err(|e| format!("Failed to save session: {e}"))?;
+
         println!("{} Switched to tab {}", "✓".green(), index);
         Ok(())
     })

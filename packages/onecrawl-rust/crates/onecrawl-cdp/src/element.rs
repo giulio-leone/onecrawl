@@ -2,6 +2,11 @@ use chromiumoxide::Page;
 use onecrawl_core::{Error, Result};
 
 /// Click an element by CSS selector.
+///
+/// Uses CDP `Input.dispatchMouseEvent` (mousePressed + mouseReleased) followed by a
+/// JavaScript synthetic `click` event.  The synthetic event is required for React /
+/// SPA frameworks because CDP mouse events do NOT automatically fire the browser's
+/// `click` event when dispatched via the DevTools protocol.
 pub async fn click(page: &Page, selector: &str) -> Result<()> {
     let el = page
         .find_element(selector)
@@ -10,6 +15,13 @@ pub async fn click(page: &Page, selector: &str) -> Result<()> {
     el.click()
         .await
         .map_err(|e| Error::Cdp(format!("click failed: {e}")))?;
+    // Also dispatch a synthetic click so React / SPA synthetic event handlers fire.
+    let esc = selector.replace('\\', "\\\\").replace('`', "\\`");
+    page.evaluate(format!(
+        "document.querySelector(`{esc}`)?.dispatchEvent(new MouseEvent('click', {{bubbles:true, cancelable:true, view:window}}))"
+    ))
+    .await
+    .map_err(|e| Error::Cdp(format!("synthetic click failed: {e}")))?;
     Ok(())
 }
 
