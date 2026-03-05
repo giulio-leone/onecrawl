@@ -9,10 +9,16 @@ pub struct BrowserSession {
 }
 
 impl BrowserSession {
-    /// Launch a new headless browser.
+    /// Launch a new stealth headless browser.
+    ///
+    /// Uses Chrome's `--headless=new` mode (Chrome 112+) which shares the same
+    /// rendering pipeline as headed Chrome and is significantly harder to detect
+    /// than the legacy `--headless` flag.  The caller should apply UA spoofing
+    /// and antibot patches on the first page to complete the stealth stack.
     pub async fn launch_headless() -> Result<Self> {
         Self::launch_with_config(
             BrowserConfig::builder()
+                .new_headless_mode()
                 .build()
                 .map_err(|e| Error::Cdp(format!("config error: {e}")))?,
             false,
@@ -55,6 +61,36 @@ impl BrowserSession {
     /// Connect to an existing browser via CDP WebSocket URL.
     pub async fn connect(ws_url: &str) -> Result<Self> {
         let (browser, mut handler) = Browser::connect(ws_url)
+            .await
+            .map_err(|e| Error::Cdp(format!("connect failed: {e}")))?;
+
+        let handler_task = tokio::spawn(async move {
+            while let Some(h) = handler.next().await {
+                if h.is_err() {
+                    break;
+                }
+            }
+        });
+
+        Ok(Self {
+            browser,
+            _handler_task: handler_task,
+        })
+    }
+
+    /// Connect with an extended navigation timeout (90 seconds).
+    ///
+    /// Use this for sessions where pages (like SPAs) may take longer than the
+    /// default 30 seconds to fire their "load" event.
+    pub async fn connect_with_nav_timeout(ws_url: &str) -> Result<Self> {
+        use chromiumoxide::handler::HandlerConfig;
+
+        let config = HandlerConfig {
+            request_timeout: std::time::Duration::from_secs(90),
+            ..HandlerConfig::default()
+        };
+
+        let (browser, mut handler) = Browser::connect_with_config(ws_url, config)
             .await
             .map_err(|e| Error::Cdp(format!("connect failed: {e}")))?;
 

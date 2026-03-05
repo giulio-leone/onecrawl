@@ -9,117 +9,185 @@ pub fn get_stealth_init_script(fp: &Fingerprint) -> String {
 
     format!(
         r#"(() => {{
+  // Canary: confirm this script executed
+  window.__onecrawl_stealth = true;
+
+  // === 0. document.hidden / visibilityState (headless indicator) ===
+  try {{
+    Object.defineProperty(document, 'hidden', {{ get: () => false, configurable: true }});
+  }} catch(e) {{}}
+  try {{
+    Object.defineProperty(document, 'visibilityState', {{ get: () => 'visible', configurable: true }});
+  }} catch(e) {{}}
+  try {{
+    document.dispatchEvent(new Event('visibilitychange'));
+  }} catch(e) {{}}
+
   // === 1. navigator.webdriver ===
-  Object.defineProperty(navigator, 'webdriver', {{
-    get: () => false,
-    configurable: true,
-  }});
+  try {{
+    Object.defineProperty(navigator, 'webdriver', {{
+      get: () => false,
+      configurable: true,
+    }});
+  }} catch(e) {{}}
 
   // === 2. Chrome runtime mock ===
-  if (!window.chrome) window.chrome = {{}};
-  if (!window.chrome.runtime) {{
-    window.chrome.runtime = {{
-      connect: () => ({{ onMessage: {{ addListener: () => {{}}, removeListener: () => {{}} }}, postMessage: () => {{}}, disconnect: () => {{}} }}),
-      sendMessage: (_msg, cb) => {{ if (cb) cb(); }},
-    }};
-  }}
+  try {{
+    if (!window.chrome) window.chrome = {{}};
+    if (!window.chrome.runtime) {{
+      Object.defineProperty(window.chrome, 'runtime', {{
+        value: {{
+          connect: () => ({{ onMessage: {{ addListener: () => {{}}, removeListener: () => {{}} }}, postMessage: () => {{}}, disconnect: () => {{}} }}),
+          sendMessage: (_msg, cb) => {{ if (cb) cb(); }},
+        }},
+        writable: true,
+        configurable: true,
+      }});
+    }}
+  }} catch(e) {{}}
 
   // === 3. Plugins mock ===
-  Object.defineProperty(navigator, 'plugins', {{
-    get: () => [
-      {{ name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' }},
-      {{ name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' }},
-      {{ name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }},
-    ],
-  }});
+  try {{
+    Object.defineProperty(navigator, 'plugins', {{
+      get: () => {{
+        const arr = [
+          {{ name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format' }},
+          {{ name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' }},
+          {{ name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }},
+          {{ name: 'PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' }},
+          {{ name: 'Google Slides', filename: 'internal-nacl-plugin', description: '' }},
+        ];
+        arr.item = (n) => arr[n] || null;
+        arr.namedItem = (n) => arr.find(p => p.name === n) || null;
+        arr.refresh = () => {{}};
+        return arr;
+      }},
+      configurable: true,
+    }});
+  }} catch(e) {{}}
 
   // === 4. Languages ===
-  Object.defineProperty(navigator, 'languages', {{
-    get: () => {languages_json},
-  }});
-  Object.defineProperty(navigator, 'language', {{
-    get: () => '{language}',
-  }});
+  try {{
+    Object.defineProperty(navigator, 'languages', {{
+      get: () => {languages_json},
+      configurable: true,
+    }});
+    Object.defineProperty(navigator, 'language', {{
+      get: () => '{language}',
+      configurable: true,
+    }});
+  }} catch(e) {{}}
 
   // === 5. Platform ===
-  Object.defineProperty(navigator, 'platform', {{
-    get: () => '{platform}',
-  }});
+  try {{
+    Object.defineProperty(navigator, 'platform', {{
+      get: () => '{platform}',
+      configurable: true,
+    }});
+  }} catch(e) {{}}
 
   // === 6. Hardware concurrency ===
-  Object.defineProperty(navigator, 'hardwareConcurrency', {{
-    get: () => {hw_concurrency},
-  }});
+  try {{
+    Object.defineProperty(navigator, 'hardwareConcurrency', {{
+      get: () => {hw_concurrency},
+      configurable: true,
+    }});
+  }} catch(e) {{}}
 
   // === 7. Device memory ===
-  Object.defineProperty(navigator, 'deviceMemory', {{
-    get: () => {device_memory},
-  }});
+  try {{
+    Object.defineProperty(navigator, 'deviceMemory', {{
+      get: () => {device_memory},
+      configurable: true,
+    }});
+  }} catch(e) {{}}
 
   // === 8. WebGL fingerprint ===
-  const origGetParameter = WebGLRenderingContext.prototype.getParameter;
-  WebGLRenderingContext.prototype.getParameter = function(param) {{
-    if (param === 0x9245) return '{webgl_vendor}';
-    if (param === 0x9246) return '{webgl_renderer}';
-    return origGetParameter.call(this, param);
-  }};
-  if (typeof WebGL2RenderingContext !== 'undefined') {{
-    const origGetParameter2 = WebGL2RenderingContext.prototype.getParameter;
-    WebGL2RenderingContext.prototype.getParameter = function(param) {{
+  try {{
+    const origGetParameter = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function(param) {{
       if (param === 0x9245) return '{webgl_vendor}';
       if (param === 0x9246) return '{webgl_renderer}';
-      return origGetParameter2.call(this, param);
+      return origGetParameter.call(this, param);
     }};
-  }}
+    if (typeof WebGL2RenderingContext !== 'undefined') {{
+      const origGetParameter2 = WebGL2RenderingContext.prototype.getParameter;
+      WebGL2RenderingContext.prototype.getParameter = function(param) {{
+        if (param === 0x9245) return '{webgl_vendor}';
+        if (param === 0x9246) return '{webgl_renderer}';
+        return origGetParameter2.call(this, param);
+      }};
+    }}
+  }} catch(e) {{}}
 
   // === 9. Canvas fingerprint noise ===
-  const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
-  HTMLCanvasElement.prototype.toDataURL = function(type) {{
-    const ctx = this.getContext('2d');
-    if (ctx) {{
-      const imgData = ctx.getImageData(0, 0, this.width > 0 ? this.width : 1, this.height > 0 ? this.height : 1);
-      for (let i = 0; i < imgData.data.length; i += 4) {{
-        imgData.data[i] = imgData.data[i] ^ (Math.random() > 0.5 ? 1 : 0);
+  try {{
+    const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL = function(type) {{
+      const ctx = this.getContext('2d');
+      if (ctx) {{
+        const imgData = ctx.getImageData(0, 0, this.width > 0 ? this.width : 1, this.height > 0 ? this.height : 1);
+        for (let i = 0; i < imgData.data.length; i += 4) {{
+          imgData.data[i] = imgData.data[i] ^ (Math.random() > 0.5 ? 1 : 0);
+        }}
+        ctx.putImageData(imgData, 0, 0);
       }}
-      ctx.putImageData(imgData, 0, 0);
-    }}
-    return origToDataURL.apply(this, arguments);
-  }};
+      return origToDataURL.apply(this, arguments);
+    }};
+  }} catch(e) {{}}
 
   // === 10. AudioContext fingerprint noise ===
-  if (typeof AudioContext !== 'undefined') {{
-    const origCreateOscillator = AudioContext.prototype.createOscillator;
-    AudioContext.prototype.createOscillator = function() {{
-      const osc = origCreateOscillator.call(this);
-      osc.frequency.value += (Math.random() - 0.5) * 0.01;
-      return osc;
-    }};
-  }}
+  try {{
+    if (typeof AudioContext !== 'undefined') {{
+      const origCreateOscillator = AudioContext.prototype.createOscillator;
+      AudioContext.prototype.createOscillator = function() {{
+        const osc = origCreateOscillator.call(this);
+        osc.frequency.value += (Math.random() - 0.5) * 0.01;
+        return osc;
+      }};
+    }}
+  }} catch(e) {{}}
 
   // === 11. Permissions mock ===
-  const origQuery = navigator.permissions?.query;
-  if (origQuery) {{
-    navigator.permissions.query = (params) => {{
-      if (params.name === 'notifications') {{
-        return Promise.resolve({{ state: 'prompt', onchange: null }});
-      }}
-      return origQuery.call(navigator.permissions, params);
-    }};
-  }}
+  try {{
+    const origQuery = navigator.permissions?.query;
+    if (origQuery) {{
+      navigator.permissions.query = (params) => {{
+        if (params.name === 'notifications') {{
+          return Promise.resolve({{ state: 'prompt', onchange: null }});
+        }}
+        return origQuery.call(navigator.permissions, params);
+      }};
+    }}
+  }} catch(e) {{}}
 
-  // === 12. Window dimensions (fix headless outerWidth=0) ===
-  if (window.outerWidth === 0) {{
-    Object.defineProperty(window, 'outerWidth', {{ get: () => {viewport_width} }});
-    Object.defineProperty(window, 'outerHeight', {{ get: () => {viewport_height} }});
-  }}
+  // === 12. Window / screen dimensions (fix headless outerWidth=0, screen=800x600) ===
+  try {{
+    if (window.outerWidth === 0) {{
+      Object.defineProperty(window, 'outerWidth', {{ get: () => {viewport_width}, configurable: true }});
+    }}
+  }} catch(e) {{}}
+  try {{
+    if (window.outerHeight === 0) {{
+      Object.defineProperty(window, 'outerHeight', {{ get: () => {viewport_height} + 85, configurable: true }});
+    }}
+  }} catch(e) {{}}
+  try {{
+    Object.defineProperty(window.screen, 'width', {{ get: () => {viewport_width}, configurable: true }});
+    Object.defineProperty(window.screen, 'height', {{ get: () => {viewport_height}, configurable: true }});
+    Object.defineProperty(window.screen, 'availWidth', {{ get: () => {viewport_width}, configurable: true }});
+    Object.defineProperty(window.screen, 'availHeight', {{ get: () => {viewport_height} - 40, configurable: true }});
+  }} catch(e) {{}}
 
   // === 13. Console.debug filter ===
-  const origDebug = console.debug;
-  console.debug = function() {{
-    const args = Array.from(arguments);
-    if (args.some(a => typeof a === 'string' && a.includes('Headless'))) return;
-    return origDebug.apply(console, arguments);
-  }};
+  try {{
+    const origDebug = console.debug;
+    console.debug = function() {{
+      const args = Array.from(arguments);
+      if (args.some(a => typeof a === 'string' && a.includes('Headless'))) return;
+      return origDebug.apply(console, arguments);
+    }};
+  }} catch(e) {{}}
 }})();"#,
         languages_json = languages_json,
         language = fp.language,
@@ -140,6 +208,29 @@ pub fn get_ua_override(fp: &Fingerprint) -> (String, String, String) {
         fp.language.clone(),
         fp.platform.clone(),
     )
+}
+
+/// Register the stealth init script to run before every page's scripts in the browser session.
+///
+/// Uses `Page.addScriptToEvaluateOnNewDocument` which is persistent for the lifetime
+/// of the browser session (survives navigations and new tabs).
+pub async fn inject_persistent_stealth(
+    page: &chromiumoxide::Page,
+) -> onecrawl_core::Result<()> {
+    use chromiumoxide::cdp::browser_protocol::page::AddScriptToEvaluateOnNewDocumentParams;
+    use crate::emulation;
+
+    let fp = super::fingerprint::generate_fingerprint();
+    let script = get_stealth_init_script(&fp);
+
+    page.execute(AddScriptToEvaluateOnNewDocumentParams::new(script))
+        .await
+        .map_err(|e| onecrawl_core::Error::Cdp(format!("addScriptToEvaluateOnNewDocument: {e}")))?;
+
+    emulation::set_user_agent(page, &fp.user_agent)
+        .await?;
+
+    Ok(())
 }
 
 #[cfg(test)]

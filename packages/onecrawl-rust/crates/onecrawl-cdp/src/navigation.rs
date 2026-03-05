@@ -2,10 +2,41 @@ use chromiumoxide::Page;
 use onecrawl_core::{Error, Result};
 
 /// Navigate to a URL and wait for load.
+///
+/// Uses JS-based navigation (`window.location.href = url`) to bypass chromiumoxide's
+/// navigation watcher, which can timeout on SPAs (like x.com) that keep background
+/// connections open and never truly fire the "load" event.
+///
+/// After triggering JS navigation, polls until the URL changes to the target domain
+/// or 60 seconds elapse.
 pub async fn goto(page: &Page, url: &str) -> Result<()> {
-    page.goto(url)
+    // Escape single quotes in URL to avoid JS injection issues
+    let safe_url = url.replace('\'', "\\'");
+
+    // Trigger navigation via JS — chromiumoxide does NOT intercept JS navigations
+    // as CDP Page.navigate, so there is no 30s CDP-level timeout.
+    page.evaluate(format!("window.location.href = '{safe_url}'"))
         .await
         .map_err(|e| Error::Cdp(format!("goto failed: {e}")))?;
+
+    // Poll until URL changes to the target domain (or 60s elapsed)
+    let target_domain = url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .split('/')
+        .next()
+        .unwrap_or("");
+    let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_secs(60);
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        let current = page.url().await.ok().flatten().unwrap_or_default();
+        if !current.is_empty() && current != "about:blank" && (target_domain.is_empty() || current.contains(target_domain)) {
+            break;
+        }
+        if tokio::time::Instant::now() >= deadline {
+            break;
+        }
+    }
     Ok(())
 }
 

@@ -1116,6 +1116,17 @@ enum CookieAction {
     },
     /// Clear all cookies
     Clear,
+    /// Export all current page cookies to a JSON file (compatible with --import-cookies)
+    Export {
+        /// Output file path (defaults to stdout if omitted)
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+    /// Import cookies from a JSON file (format produced by 'cookie export')
+    Import {
+        /// Path to the JSON cookie file
+        path: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -1941,6 +1952,12 @@ async fn main() {
                 commands::browser::cookie_delete(&name, &domain).await
             }
             CookieAction::Clear => commands::browser::cookie_clear().await,
+            CookieAction::Export { output } => {
+                commands::browser::cookie_export(output.as_deref()).await
+            }
+            CookieAction::Import { path } => {
+                commands::browser::cookie_import(&path).await
+            }
         },
 
         // ── Emulation ───────────────────────────────────────────────

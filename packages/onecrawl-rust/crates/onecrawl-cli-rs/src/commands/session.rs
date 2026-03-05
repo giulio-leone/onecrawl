@@ -22,6 +22,12 @@ pub struct SessionInfo {
     /// Raw TargetId string of the currently active tab, set by `tab switch`.
     #[serde(default)]
     pub active_tab_id: Option<String>,
+    /// Whether this session was started with --headless. When true, stealth patches
+    /// are re-registered on every `connect_to_session()` call because
+    /// `Page.addScriptToEvaluateOnNewDocument` is per-DevTools-session and is
+    /// removed when the session that registered it disconnects.
+    #[serde(default)]
+    pub headless: bool,
 }
 
 #[derive(Subcommand)]
@@ -46,6 +52,10 @@ pub enum SessionAction {
         /// Defaults to ~/Library/Application Support/Google/Chrome on macOS.
         #[arg(long, value_name = "DIR")]
         chrome_profile: Option<String>,
+        /// Import cookies from a JSON file into the new session.
+        /// Use 'cookie export' to generate this file from a headed session.
+        #[arg(long, value_name = "FILE")]
+        import_cookies: Option<String>,
     },
     /// Show session info
     Info,
@@ -85,7 +95,7 @@ pub async fn connect_to_session() -> Result<(BrowserSession, onecrawl_cdp::Page)
             "onecrawl session start".yellow()
         )
     })?;
-    let session = BrowserSession::connect(&info.ws_url)
+    let session = BrowserSession::connect_with_nav_timeout(&info.ws_url)
         .await
         .map_err(|e| format!("Failed to connect to session: {e}"))?;
 
@@ -119,9 +129,29 @@ pub async fn connect_to_session() -> Result<(BrowserSession, onecrawl_cdp::Page)
                 None => continue, // target not yet visible, retry
             }
         } else {
-            // No active tab preference — use the first available page.
-            pages.into_iter().next().unwrap() // safe: pages is non-empty
+            // No active tab preference — prefer the first web page (http/https/about:blank).
+            // Chrome's internal pages (chrome://, devtools://) must be skipped.
+            let mut web_page = None;
+            for p in pages {
+                let url = p.url().await.ok().flatten().unwrap_or_default();
+                if url.is_empty() || url.starts_with("http") || url == "about:blank" {
+                    web_page = Some(p);
+                    break;
+                }
+            }
+            match web_page {
+                Some(p) => p,
+                None => continue,
+            }
         };
+
+        // For headless sessions: re-register stealth on every connection.
+        // Page.addScriptToEvaluateOnNewDocument is per-DevTools-session and is
+        // removed when the session that registered it disconnects. Re-registering
+        // here ensures stealth scripts run before every future navigation.
+        if info.headless {
+            let _ = onecrawl_cdp::inject_persistent_stealth(&page).await;
+        }
 
         return Ok((session, page));
     }
@@ -134,9 +164,10 @@ pub async fn connect_to_session() -> Result<(BrowserSession, onecrawl_cdp::Page)
             .pages()
             .await
             .map_err(|e| format!("Failed to list pages: {e}"))?;
-        let mut sorted = pages;
-        sorted.sort_by(|a, b| a.target_id().inner().cmp(b.target_id().inner()));
-        if let Some(p) = sorted.into_iter().next() {
+        // Prefer web pages over Chrome-internal ones.
+        let mut web_first = pages;
+        web_first.sort_by(|a, b| a.target_id().inner().cmp(b.target_id().inner()));
+        if let Some(p) = web_first.into_iter().next() {
             eprintln!(
                 "⚠ Active tab '{}' not found (closed?). Falling back to first available tab.",
                 tid
@@ -145,6 +176,10 @@ pub async fn connect_to_session() -> Result<(BrowserSession, onecrawl_cdp::Page)
             let mut stale_info = info.clone();
             stale_info.active_tab_id = None;
             let _ = save_session(&stale_info);
+            // Re-register stealth for the fallback page if headless.
+            if stale_info.headless {
+                let _ = onecrawl_cdp::inject_persistent_stealth(&p).await;
+            }
             return Ok((session, p));
         }
         Err(format!(
@@ -170,6 +205,7 @@ pub async fn handle(action: SessionAction) {
             background: _,
             normal_chrome,
             chrome_profile,
+            import_cookies,
         } => {
             if Path::new(SESSION_FILE).exists()
                 && let Some(info) = load_session()
@@ -202,6 +238,7 @@ pub async fn handle(action: SessionAction) {
                             default_tab_id: None,
                             instance_id: None,
                             active_tab_id: None,
+                            headless: false,
                         };
                         if let Err(e) = save_session(&info) {
                             eprintln!("{} Failed to save session: {e}", "✗".red());
@@ -231,6 +268,45 @@ pub async fn handle(action: SessionAction) {
                         std::process::exit(1);
                     }
                 }
+            } else if headless && connect.is_none() {
+                // Stealth headless mode — launch Chrome with --headless=new + dedicated profile.
+                // Chrome runs as a detached process (survives this command's exit).
+                // Stealth patches (UA spoof, webdriver=false) are applied on the first page.
+                match launch_stealth_headless(chrome_profile.as_deref()).await {
+                    Ok((ws_url, maybe_pid)) => {
+                        let info = SessionInfo {
+                            ws_url: ws_url.clone(),
+                            pid: maybe_pid,
+                            server_port: None,
+                            server_pid: None,
+                            default_tab_id: None,
+                            instance_id: None,
+                            active_tab_id: None,
+                            headless: true,
+                        };
+                        if let Err(e) = save_session(&info) {
+                            eprintln!("{} Failed to save session: {e}", "✗".red());
+                            std::process::exit(1);
+                        }
+                        println!("{} Stealth headless session started (--headless=new)", "✓".green());
+                        println!("  WS: {}", ws_url.cyan());
+                        println!("  File: {}", SESSION_FILE.dimmed());
+                        // Auto-inject persistent stealth patches (runs before every page's scripts)
+                        if let Err(e) = apply_stealth_persistent(&ws_url).await {
+                            eprintln!("{} Stealth injection failed: {e}", "⚠".yellow());
+                        }
+                        // Apply cookie import if requested
+                        if let Some(ref cookie_file) = import_cookies {
+                            if let Err(e) = apply_cookie_import(&ws_url, cookie_file).await {
+                                eprintln!("{} Cookie import failed: {e}", "⚠".yellow());
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("{} Failed to start stealth headless Chrome: {e}", "✗".red());
+                        std::process::exit(1);
+                    }
+                }
             } else if connect.is_some() || !headless {
                 // Direct CDP mode — connect or headed, no proxy
                 let result = if let Some(ref url) = connect {
@@ -251,10 +327,17 @@ pub async fn handle(action: SessionAction) {
                             default_tab_id: None,
                             instance_id: None,
                             active_tab_id: None,
+                            headless: false,
                         };
                         if let Err(e) = save_session(&info) {
                             eprintln!("{} Failed to save session: {e}", "✗".red());
                             std::process::exit(1);
+                        }
+                        // Apply cookie import if requested
+                        if let Some(ref cookie_file) = import_cookies {
+                            if let Err(e) = apply_cookie_import(&ws_url, cookie_file).await {
+                                eprintln!("{} Cookie import failed: {e}", "⚠".yellow());
+                            }
                         }
                         println!("{} Session started (direct CDP)", "✓".green());
                         println!("  WS: {}", ws_url.cyan());
@@ -284,6 +367,7 @@ pub async fn handle(action: SessionAction) {
                             default_tab_id: Some(tab_id),
                             instance_id: Some(instance_id),
                             active_tab_id: None,
+                            headless: false,
                         };
                         if let Err(e) = save_session(&info) {
                             eprintln!("{} Failed to save session: {e}", "✗".red());
@@ -319,6 +403,7 @@ pub async fn handle(action: SessionAction) {
                                     default_tab_id: None,
                                     instance_id: None,
                                     active_tab_id: None,
+                                    headless: false,
                                 };
                                 if let Err(e) = save_session(&info) {
                                     eprintln!("{} Failed to save session: {e}", "✗".red());
@@ -401,6 +486,33 @@ pub async fn handle(action: SessionAction) {
 fn find_free_port() -> std::io::Result<u16> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
     Ok(listener.local_addr()?.port())
+}
+
+/// Probe a CDP debugging port. Returns `(ws_url, user_agent_string)` if reachable.
+async fn cdp_probe(port: u16) -> Option<(String, String)> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .ok()?;
+    let resp = client
+        .get(format!("http://127.0.0.1:{port}/json/version"))
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let body: serde_json::Value = resp.json().await.ok()?;
+    let ws_url = body
+        .get("webSocketDebuggerUrl")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())?;
+    let ua = body
+        .get("User-Agent")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    Some((ws_url, ua))
 }
 
 /// Kill a process by PID.
@@ -878,4 +990,207 @@ async fn launch_normal_chrome(
 
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     return Err("--normal-chrome is only supported on macOS and Linux".to_string());
+}
+
+/// Launch Chrome in `--headless=new` mode with the dedicated onecrawl profile.
+///
+/// Chrome runs as a detached process so it survives after `session start` exits.
+/// A stealth init script (webdriver=undefined, UA spoof) is injected on every page.
+async fn launch_stealth_headless(
+    chrome_profile: Option<&str>,
+) -> Result<(String, Option<u32>), String> {
+    let user_data_dir = if let Some(dir) = chrome_profile {
+        dir.to_string()
+    } else {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+        format!("{home}/.onecrawl/chrome-profile")
+    };
+
+    // Ensure the profile directory exists
+    std::fs::create_dir_all(&user_data_dir)
+        .map_err(|e| format!("create profile dir: {e}"))?;
+
+    // --- Step 1: Reuse running headless Chrome on our profile (DevToolsActivePort) ---
+    let port_file = format!("{user_data_dir}/DevToolsActivePort");
+    if let Ok(contents) = std::fs::read_to_string(&port_file) {
+        let port_str = contents.lines().next().unwrap_or("").trim();
+        if let Ok(port) = port_str.parse::<u16>() {
+            if let Some((ws, ua)) = cdp_probe(port).await {
+                if ua.contains("HeadlessChrome") {
+                    println!("{} Reusing running headless Chrome on port {}", "✓".green(), port);
+                    return Ok((ws, None));
+                }
+            }
+        }
+    }
+
+    let port = find_free_port().map_err(|e| format!("find port: {e}"))?;
+    println!("{} Launching headless Chrome (--headless=new) on port {}...", "→".blue(), port);
+    println!("  Profile: {}", user_data_dir.dimmed());
+
+    // Stealth args: UA override removes HeadlessChrome from navigator.userAgent
+    let stealth_ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36";
+
+    #[cfg(target_os = "macos")]
+    {
+        let chrome_bin = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+        if !std::path::Path::new(chrome_bin).exists() {
+            let chromium_bin = "/Applications/Chromium.app/Contents/MacOS/Chromium";
+            if !std::path::Path::new(chromium_bin).exists() {
+                return Err("Chrome not found in /Applications/. Install Google Chrome first.".to_string());
+            }
+        }
+        let chrome_bin = if std::path::Path::new(chrome_bin).exists() {
+            chrome_bin
+        } else {
+            "/Applications/Chromium.app/Contents/MacOS/Chromium"
+        };
+
+        // For headless mode, spawn the binary directly (no `open -na` needed — no GUI singleton issue).
+        use std::os::unix::process::CommandExt;
+        let child = unsafe {
+            std::process::Command::new(chrome_bin)
+                .arg("--headless=new")
+                .arg(format!("--remote-debugging-port={port}"))
+                .arg(format!("--user-data-dir={user_data_dir}"))
+                .arg(format!("--user-agent={stealth_ua}"))
+                .arg("--no-first-run")
+                .arg("--no-default-browser-check")
+                .arg("--disable-blink-features=AutomationControlled")
+                .arg("--window-size=1920,1080")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .pre_exec(|| { libc::setsid(); Ok(()) })
+                .spawn()
+                .map_err(|e| format!("spawn headless Chrome: {e}"))?
+        };
+        let chrome_pid = child.id();
+
+        let mut ws_debugger_url: Option<String> = None;
+        for attempt in 0..60 {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            if let Some((ws, _)) = cdp_probe(port).await {
+                ws_debugger_url = Some(ws);
+                break;
+            }
+            if attempt % 10 == 9 {
+                println!("  Waiting for headless Chrome ({}/30)...", attempt / 10 + 1);
+            }
+        }
+
+        let ws_url = ws_debugger_url.ok_or_else(|| {
+            let _ = kill_process(chrome_pid);
+            format!("Headless Chrome did not expose CDP on port {port} within 30s")
+        })?;
+        println!("{} Headless Chrome ready on port {} (PID {})", "✓".green(), port, chrome_pid);
+        return Ok((ws_url, Some(chrome_pid)));
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let output = std::process::Command::new("sh")
+            .args(["-c", "which google-chrome google-chrome-stable chromium-browser chromium 2>/dev/null | head -1"])
+            .output()
+            .map_err(|e| format!("which: {e}"))?;
+        let chrome_bin = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if chrome_bin.is_empty() {
+            return Err("Chrome/Chromium not found in PATH".to_string());
+        }
+
+        use std::os::unix::process::CommandExt;
+        let child = unsafe {
+            std::process::Command::new(&chrome_bin)
+                .arg("--headless=new")
+                .arg(format!("--remote-debugging-port={port}"))
+                .arg(format!("--user-data-dir={user_data_dir}"))
+                .arg(format!("--user-agent={stealth_ua}"))
+                .arg("--no-first-run")
+                .arg("--no-default-browser-check")
+                .arg("--disable-blink-features=AutomationControlled")
+                .arg("--window-size=1920,1080")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .pre_exec(|| { libc::setsid(); Ok(()) })
+                .spawn()
+                .map_err(|e| format!("spawn headless Chrome: {e}"))?
+        };
+        let chrome_pid = child.id();
+
+        let mut ws_debugger_url: Option<String> = None;
+        for attempt in 0..60 {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            if let Some((ws, _)) = cdp_probe(port).await {
+                ws_debugger_url = Some(ws);
+                break;
+            }
+            if attempt % 10 == 9 {
+                println!("  Waiting for headless Chrome ({}/30)...", attempt / 10 + 1);
+            }
+        }
+
+        let ws_url = ws_debugger_url.ok_or_else(|| {
+            let _ = kill_process(chrome_pid);
+            format!("Headless Chrome did not expose CDP on port {port} within 30s")
+        })?;
+
+        println!("{} Headless Chrome ready on port {}", "✓".green(), port);
+        return Ok((ws_url, Some(chrome_pid)));
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    return Err("--headless is only supported on macOS and Linux".to_string());
+}
+
+/// Connect to a running browser session and import cookies from a JSON file.
+/// The file must be in the CookieJar format produced by `cookie export`.
+async fn apply_cookie_import(ws_url: &str, cookie_file: &str) -> Result<(), String> {
+    println!("{} Importing cookies from {}...", "→".blue(), cookie_file);
+    let session = BrowserSession::connect(ws_url)
+        .await
+        .map_err(|e| format!("connect for cookie import: {e}"))?;
+
+    let page = session
+        .new_page("about:blank")
+        .await
+        .map_err(|e| format!("open blank page for cookie import: {e}"))?;
+
+    let count = onecrawl_cdp::cookie_jar::load_cookies_from_file(&page, std::path::Path::new(cookie_file))
+        .await
+        .map_err(|e| format!("load cookies: {e}"))?;
+
+    println!("{} Imported {} cookies", "✓".green(), count);
+    Ok(())
+}
+
+/// Inject the stealth init script persistently via `Page.addScriptToEvaluateOnNewDocument`.
+/// This runs before any page's own scripts on every navigation, ensuring:
+///   - navigator.webdriver = undefined
+///   - navigator.plugins populated
+///   - User-Agent, languages, platform match the fingerprint
+///   - WebGL vendor/renderer spoofed
+///   - chrome.runtime present (so x.com sees a "normal" Chrome extension API)
+async fn apply_stealth_persistent(ws_url: &str) -> Result<(), String> {
+    let session = BrowserSession::connect(ws_url)
+        .await
+        .map_err(|e| format!("connect for stealth inject: {e}"))?;
+
+    let page = session
+        .new_page("about:blank")
+        .await
+        .map_err(|e| format!("open blank page for stealth: {e}"))?;
+
+    // Persist this tab's TargetId so connect_to_session() always returns this
+    // specific tab — the one where stealth scripts are registered.
+    let tab_id = page.target_id().inner().clone();
+    if let Some(mut info) = load_session() {
+        info.active_tab_id = Some(tab_id);
+        let _ = save_session(&info);
+    }
+
+    onecrawl_cdp::inject_persistent_stealth(&page)
+        .await
+        .map_err(|e| format!("stealth inject: {e}"))?;
+
+    println!("{} Persistent stealth patches registered for all pages", "✓".green());
+    Ok(())
 }

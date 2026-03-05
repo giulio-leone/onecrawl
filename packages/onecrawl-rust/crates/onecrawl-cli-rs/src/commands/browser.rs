@@ -678,6 +678,18 @@ pub async fn cookie_clear() {
     .await;
 }
 
+/// Export all cookies from the current page as a CookieJar JSON file.
+/// Delegates to `cookie_jar::save_cookies_to_file` (or prints JSON to stdout).
+pub async fn cookie_export(output: Option<&str>) {
+    cookie_jar_export(output).await;
+}
+
+/// Import cookies from a CookieJar JSON file into the current page.
+/// Delegates to `cookie_jar::load_cookies_from_file`.
+pub async fn cookie_import(path: &str) {
+    cookie_jar_import(path).await;
+}
+
 // ---------------------------------------------------------------------------
 // Emulation
 // ---------------------------------------------------------------------------

@@ -90,7 +90,7 @@ pub use network_log::{NetworkEntry, NetworkSummary};
 pub use print::DetailedPdfOptions;
 pub use proxy::{ProxyConfig, ProxyPool, RotationStrategy};
 pub use screenshot::{ImageFormat, PdfOptions, ScreenshotOptions};
-pub use stealth::{Fingerprint, generate_fingerprint, get_stealth_init_script};
+pub use stealth::{Fingerprint, generate_fingerprint, get_stealth_init_script, inject_persistent_stealth};
 pub use throttle::NetworkProfile;
 pub use tracing_cdp::PerformanceMetric;
 pub use webauthn::{VirtualAuthenticator, VirtualCredential};

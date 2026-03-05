@@ -7,4 +7,4 @@ pub mod fingerprint;
 pub mod scripts;
 
 pub use fingerprint::{Fingerprint, generate_fingerprint};
-pub use scripts::get_stealth_init_script;
+pub use scripts::{get_stealth_init_script, inject_persistent_stealth};
