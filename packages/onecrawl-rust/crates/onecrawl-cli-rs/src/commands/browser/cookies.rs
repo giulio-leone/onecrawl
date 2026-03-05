@@ -1,11 +1,6 @@
 use colored::Colorize;
 use super::helpers::{with_page};
 
-// ---------------------------------------------------------------------------
-// Cookies
-// ---------------------------------------------------------------------------
-
-// Export all cookies from the current page as a CookieJar JSON file.
 // Delegates to `cookie_jar::save_cookies_to_file` (or prints JSON to stdout).
 // Import cookies from a CookieJar JSON file into the current page.
 // Delegates to `cookie_jar::load_cookies_from_file`.

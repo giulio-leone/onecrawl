@@ -142,7 +142,6 @@ pub(crate) async fn launch_normal_chrome(
         .unwrap_or(0)
     };
 
-    // --- Step 1: DevToolsActivePort (written by Chrome itself, read-only for us) ---
     // The file contains "<port>\n<ws-path>" (Chrome 144+) or just "<port>" (older).
     if let Ok(content) = std::fs::read_to_string(&active_port_file) {
         // Only trust the file if it looks like a valid 2-line Chrome file (has ws-path).
@@ -159,8 +158,6 @@ pub(crate) async fn launch_normal_chrome(
                 // Port in file is stale / not reachable — fall through to process scan.
     }
 
-    // --- Step 2: Scan process args for --remote-debugging-port=N ---
-    // Extract distinct ports from Chrome/renderer process list.
     let profile_dir_clone = user_data_dir.clone();
     let raw_proc_output = std::process::Command::new("sh")
         .args([
@@ -250,8 +247,6 @@ pub(crate) async fn launch_normal_chrome(
             .collect()
     };
 
-    // --- Step 3: Real Chrome with user's profile is running but no debug port ---
-    // Check specifically for Chrome processes using the user's actual profile directory.
     // Playwright/Puppeteer always use temp profiles (/tmp, /var/folders) — skip those.
     // Only match the Chrome main process: must have --user-data-dir=<path>.
     // Crashpad handlers use --database= and --metrics-dir= with the same path but never
@@ -309,9 +304,6 @@ pub(crate) async fn launch_normal_chrome(
         tokio::time::sleep(std::time::Duration::from_millis(800)).await;
     }
 
-    // --- Step 4: Launch Chrome with dedicated onecrawl profile + remote debugging ---
-    // macOS: use `open -na "Google Chrome" --args …` which always creates a new Chrome
-    //        process even if Chrome is already running with a different profile.
     //        We intentionally do NOT capture the PID via 'open'; Chrome will persist
     //        after onecrawl exits so the user can keep browsing.
     // Linux: direct binary spawn (no macOS singleton issue).

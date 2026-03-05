@@ -44,7 +44,6 @@ pub(crate) async fn launch_stealth_headless(
     std::fs::create_dir_all(&user_data_dir)
         .map_err(|e| format!("create profile dir: {e}"))?;
 
-    // --- Step 1: Reuse running headless Chrome on our profile (DevToolsActivePort) ---
     let port_file = format!("{user_data_dir}/DevToolsActivePort");
     if let Ok(contents) = std::fs::read_to_string(&port_file) {
         let port_str = contents.lines().next().unwrap_or("").trim();

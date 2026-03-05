@@ -62,8 +62,6 @@ impl ServerProxy {
         Some(proxy)
     }
 
-    // ── Navigation ──────────────────────────────────────────────
-
     pub async fn navigate(&self, url: &str) -> Result<serde_json::Value, String> {
         let resp = self
             .client
@@ -74,8 +72,6 @@ impl ServerProxy {
             .map_err(|e| e.to_string())?;
         resp.json().await.map_err(|e| e.to_string())
     }
-
-    // ── Content ─────────────────────────────────────────────────
 
     pub async fn get_text(&self) -> Result<String, String> {
         let resp = self
@@ -98,8 +94,6 @@ impl ServerProxy {
             .map_err(|e| e.to_string())?;
         resp.json().await.map_err(|e| e.to_string())
     }
-
-    // ── Screenshot ──────────────────────────────────────────────
 
     pub async fn screenshot(&self) -> Result<Vec<u8>, String> {
         let resp = self
