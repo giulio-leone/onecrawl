@@ -56,7 +56,6 @@ hex = "0.4"
 
 # MCP
 rmcp = { version = "0.5", features = ["server", "transport-io", "transport-sse-server"] }
-schemars = "0.8"
 tracing-subscriber = "0.3"
 
 # Testing
@@ -79,7 +78,7 @@ pyo3 = { version = "0.24", features = ["extension-module"] }
 # ── Build profiles ──────────────────────────────────────────
 [profile.release]
 opt-level = 3
-lto = "thin"
+lto = "fat"
 codegen-units = 1
 strip = true
 panic = "abort"
