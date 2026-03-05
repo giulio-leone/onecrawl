@@ -24,12 +24,9 @@ pub fn get_stealth_init_script(fp: &Fingerprint) -> String {
   }} catch(e) {{}}
 
   // === 1. navigator.webdriver ===
-  try {{
-    Object.defineProperty(navigator, 'webdriver', {{
-      get: () => false,
-      configurable: true,
-    }});
-  }} catch(e) {{}}
+  // Handled natively via Emulation.setAutomationOverride(enabled: false) CDP command.
+  // The native Navigator.prototype.webdriver getter returns false without any JS patch,
+  // so no own property is added to the navigator instance and creepjs lie detection passes.
 
   // === 2. Chrome runtime mock (always override to pass hasBadChromeRuntime check) ===
   try {{
@@ -257,10 +254,17 @@ pub async fn inject_persistent_stealth(
     page: &chromiumoxide::Page,
 ) -> onecrawl_core::Result<()> {
     use chromiumoxide::cdp::browser_protocol::page::AddScriptToEvaluateOnNewDocumentParams;
+    use chromiumoxide::cdp::browser_protocol::emulation::SetAutomationOverrideParams;
     use crate::emulation;
 
     let fp = super::fingerprint::generate_fingerprint();
     let script = get_stealth_init_script(&fp);
+
+    // Disable the automation flag at the native level so navigator.webdriver returns false
+    // without any JS own-property override (invisible to creepjs lie detection).
+    let _ = page
+        .execute(SetAutomationOverrideParams::new(false))
+        .await;
 
     page.execute(AddScriptToEvaluateOnNewDocumentParams::new(script))
         .await
@@ -282,7 +286,8 @@ mod tests {
         let fp = generate_fingerprint();
         let script = get_stealth_init_script(&fp);
 
-        assert!(script.contains("navigator.webdriver"));
+        // navigator.webdriver is handled via Emulation.setAutomationOverride CDP (comment in script)
+        assert!(script.contains("webdriver"));
         assert!(script.contains("window.chrome"));
         assert!(script.contains("'plugins'"));
         assert!(script.contains("'languages'"));
