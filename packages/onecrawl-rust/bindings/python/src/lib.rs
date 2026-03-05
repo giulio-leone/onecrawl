@@ -3279,6 +3279,148 @@ impl Browser {
             .block_on(onecrawl_cdp::webauthn::remove_virtual_credential(page, &credential_id))
             .map_err(py_err)
     }
+
+    // ── CDP-native passkey (real ECDSA, server-verifiable) ─────────────────
+
+    /// Enable Chrome's CDP WebAuthn domain. Must be called before `cdp_create_authenticator`.
+    fn cdp_passkey_enable(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::cdp_enable(page))
+            .map_err(py_err)
+    }
+
+    /// Create a CTAP2.1 virtual authenticator. Returns authenticator_id string.
+    fn cdp_create_authenticator(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::cdp_create_authenticator(page))
+            .map_err(py_err)
+    }
+
+    /// Get all credentials from a CDP virtual authenticator as JSON array string.
+    fn cdp_get_credentials(&self, authenticator_id: String) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let creds = self.rt
+            .block_on(onecrawl_cdp::cdp_get_credentials(page, &authenticator_id))
+            .map_err(py_err)?;
+        serde_json::to_string(&creds).map_err(py_err)
+    }
+
+    /// Inject a passkey credential JSON into the CDP virtual authenticator.
+    fn cdp_add_credential(
+        &self,
+        authenticator_id: String,
+        credential_json: String,
+    ) -> PyResult<()> {
+        let cred: onecrawl_cdp::PasskeyCredential =
+            serde_json::from_str(&credential_json)
+                .map_err(|e| py_err(format!("invalid credential JSON: {e}")))?;
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::cdp_add_credential(page, &authenticator_id, &cred))
+            .map_err(py_err)
+    }
+
+    // ── Passkey vault ───────────────────────────────────────────────────────
+
+    /// List vault rp_ids and counts. Returns JSON: `[{"rpId": str, "count": int}]`.
+    fn passkey_vault_list(&self) -> PyResult<String> {
+        let vault = onecrawl_cdp::load_vault().map_err(py_err)?;
+        let list: Vec<serde_json::Value> = onecrawl_cdp::vault_list(&vault)
+            .into_iter()
+            .map(|(rp_id, count)| serde_json::json!({ "rpId": rp_id, "count": count }))
+            .collect();
+        serde_json::to_string(&list).map_err(py_err)
+    }
+
+    /// Get credentials for an rp_id from vault as JSON array string.
+    fn passkey_vault_get(&self, rp_id: String) -> PyResult<String> {
+        let vault = onecrawl_cdp::load_vault().map_err(py_err)?;
+        let creds = onecrawl_cdp::vault_get(&vault, &rp_id);
+        serde_json::to_string(&creds).map_err(py_err)
+    }
+
+    /// Add credentials (JSON array) to the vault. Deduplicates by credential_id.
+    fn passkey_vault_add(&self, credentials_json: String) -> PyResult<()> {
+        let creds: Vec<onecrawl_cdp::PasskeyCredential> =
+            serde_json::from_str(&credentials_json)
+                .map_err(|e| py_err(format!("invalid credentials JSON: {e}")))?;
+        let mut vault = onecrawl_cdp::load_vault().map_err(py_err)?;
+        onecrawl_cdp::vault_add(&mut vault, creds);
+        onecrawl_cdp::save_vault(&vault).map_err(py_err)
+    }
+
+    /// Remove a credential from the vault by credential_id. Returns True if removed.
+    fn passkey_vault_remove(&self, credential_id: String) -> PyResult<bool> {
+        let mut vault = onecrawl_cdp::load_vault().map_err(py_err)?;
+        let removed = onecrawl_cdp::vault_remove(&mut vault, &credential_id);
+        if removed {
+            onecrawl_cdp::save_vault(&vault).map_err(py_err)?;
+        }
+        Ok(removed)
+    }
+
+    /// Import passkeys from a Bitwarden JSON export. Returns JSON array of credentials.
+    ///
+    /// If `save_to_vault=True` (default), saves to `~/.onecrawl/passkeys/vault.json`.
+    #[pyo3(signature = (file_path, save_to_vault=true))]
+    fn passkey_import_bitwarden(
+        &self,
+        file_path: String,
+        save_to_vault: bool,
+    ) -> PyResult<String> {
+        let creds = onecrawl_cdp::import_bitwarden(std::path::Path::new(&file_path))
+            .map_err(py_err)?;
+        if save_to_vault && !creds.is_empty() {
+            let mut vault = onecrawl_cdp::load_vault().map_err(py_err)?;
+            onecrawl_cdp::vault_add(&mut vault, creds.clone());
+            onecrawl_cdp::save_vault(&vault).map_err(py_err)?;
+        }
+        serde_json::to_string(&creds).map_err(py_err)
+    }
+
+    /// Import passkeys from a 1Password export.data JSON file (extracted from .1pux).
+    ///
+    /// If `save_to_vault=True` (default), saves to vault.
+    #[pyo3(signature = (file_path, save_to_vault=true))]
+    fn passkey_import_1password(
+        &self,
+        file_path: String,
+        save_to_vault: bool,
+    ) -> PyResult<String> {
+        let creds = onecrawl_cdp::import_1password_json(std::path::Path::new(&file_path))
+            .map_err(py_err)?;
+        if save_to_vault && !creds.is_empty() {
+            let mut vault = onecrawl_cdp::load_vault().map_err(py_err)?;
+            onecrawl_cdp::vault_add(&mut vault, creds.clone());
+            onecrawl_cdp::save_vault(&vault).map_err(py_err)?;
+        }
+        serde_json::to_string(&creds).map_err(py_err)
+    }
+
+    /// Import passkeys from a FIDO Alliance CXF v1.0 JSON file.
+    ///
+    /// If `save_to_vault=True` (default), saves to vault.
+    #[pyo3(signature = (file_path, save_to_vault=true))]
+    fn passkey_import_cxf(
+        &self,
+        file_path: String,
+        save_to_vault: bool,
+    ) -> PyResult<String> {
+        let creds = onecrawl_cdp::import_cxf(std::path::Path::new(&file_path))
+            .map_err(py_err)?;
+        if save_to_vault && !creds.is_empty() {
+            let mut vault = onecrawl_cdp::load_vault().map_err(py_err)?;
+            onecrawl_cdp::vault_add(&mut vault, creds.clone());
+            onecrawl_cdp::save_vault(&vault).map_err(py_err)?;
+        }
+        serde_json::to_string(&creds).map_err(py_err)
+    }
 }
 
 // ──────────────────────────── Module ────────────────────────────

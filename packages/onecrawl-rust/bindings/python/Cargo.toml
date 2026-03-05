@@ -10,6 +10,9 @@ authors.workspace = true
 name = "onecrawl"
 crate-type = ["cdylib"]
 
+[build-dependencies]
+pyo3-build-config = "0.24"
+
 [dependencies]
 pyo3 = { workspace = true }
 onecrawl-core = { path = "../../crates/onecrawl-core" }

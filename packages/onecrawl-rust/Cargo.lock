@@ -2078,6 +2078,7 @@ dependencies = [
  "onecrawl-server",
  "onecrawl-storage",
  "pyo3",
+ "pyo3-build-config",
  "serde_json",
  "tokio",
 ]

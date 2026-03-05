@@ -3225,7 +3225,7 @@ impl NativeBrowser {
         let config = match config_or_preset {
             Some(s) => {
                 let presets = onecrawl_cdp::rate_limiter::presets();
-                if let Some(cfg) = presets.get(&s) {
+                if let Some(cfg) = presets.get(s.as_str()) {
                     cfg.clone()
                 } else {
                     serde_json::from_str(&s)
@@ -3930,6 +3930,180 @@ impl NativeBrowser {
         onecrawl_cdp::webauthn::remove_virtual_credential(page, &credential_id)
             .await
             .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── CDP-native passkey (real ECDSA, server-verifiable) ─────────────────
+
+    /// Enable Chrome's CDP WebAuthn domain for the current session.
+    /// Must be called before `cdpCreateAuthenticator`.
+    #[napi]
+    pub async fn cdp_passkey_enable(&self) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::cdp_enable(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Create a CTAP2.1 virtual authenticator with UV + resident key support.
+    /// Returns the authenticator ID needed for subsequent credential operations.
+    #[napi]
+    pub async fn cdp_create_authenticator(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::cdp_create_authenticator(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get all credentials from a CDP virtual authenticator as JSON.
+    ///
+    /// Returns an array of `PasskeyCredential` objects with PKCS#8 private keys.
+    #[napi]
+    pub async fn cdp_get_credentials(&self, authenticator_id: String) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        let creds = onecrawl_cdp::cdp_get_credentials(page, &authenticator_id)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&creds).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Inject a saved passkey credential JSON into the CDP virtual authenticator.
+    ///
+    /// `credentialJson` is a single-object JSON string matching the `PasskeyCredential` schema.
+    #[napi]
+    pub async fn cdp_add_credential(
+        &self,
+        authenticator_id: String,
+        credential_json: String,
+    ) -> Result<()> {
+        let cred: onecrawl_cdp::PasskeyCredential =
+            serde_json::from_str(&credential_json)
+                .map_err(|e| Error::from_reason(format!("invalid credential JSON: {e}")))?;
+        let guard = self.page.lock().await;
+        let page = guard.as_ref().ok_or_else(|| Error::from_reason("no page"))?;
+        onecrawl_cdp::cdp_add_credential(page, &authenticator_id, &cred)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ── Passkey vault (multi-site persistent store) ─────────────────────────
+
+    /// List all rp_ids and credential counts in the passkey vault.
+    ///
+    /// Returns `[{ rpId: string, count: number }]` JSON.
+    #[napi]
+    pub fn passkey_vault_list(&self) -> Result<String> {
+        let vault = onecrawl_cdp::load_vault()
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let list: Vec<serde_json::Value> = onecrawl_cdp::vault_list(&vault)
+            .into_iter()
+            .map(|(rp_id, count)| serde_json::json!({ "rpId": rp_id, "count": count }))
+            .collect();
+        serde_json::to_string(&list).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get credentials for a specific rp_id from the vault as JSON array.
+    #[napi]
+    pub fn passkey_vault_get(&self, rp_id: String) -> Result<String> {
+        let vault = onecrawl_cdp::load_vault()
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let creds = onecrawl_cdp::vault_get(&vault, &rp_id);
+        serde_json::to_string(&creds).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Add credentials (JSON array of PasskeyCredential) to the vault.
+    ///
+    /// Deduplicates by `credentialId`.
+    #[napi]
+    pub fn passkey_vault_add(&self, credentials_json: String) -> Result<()> {
+        let creds: Vec<onecrawl_cdp::PasskeyCredential> =
+            serde_json::from_str(&credentials_json)
+                .map_err(|e| Error::from_reason(format!("invalid credentials JSON: {e}")))?;
+        let mut vault = onecrawl_cdp::load_vault()
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        onecrawl_cdp::vault_add(&mut vault, creds);
+        onecrawl_cdp::save_vault(&vault)
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Remove a credential from the vault by credential_id. Returns true if removed.
+    #[napi]
+    pub fn passkey_vault_remove(&self, credential_id: String) -> Result<bool> {
+        let mut vault = onecrawl_cdp::load_vault()
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let removed = onecrawl_cdp::vault_remove(&mut vault, &credential_id);
+        if removed {
+            onecrawl_cdp::save_vault(&vault)
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+        }
+        Ok(removed)
+    }
+
+    /// Import passkeys from a Bitwarden unencrypted JSON export.
+    ///
+    /// Parses `items[].login.fido2Credentials` entries.
+    /// If `saveToVault` is true, imports are saved to `~/.onecrawl/passkeys/vault.json`.
+    /// Returns the imported credentials as JSON.
+    #[napi]
+    pub fn passkey_import_bitwarden(
+        &self,
+        file_path: String,
+        save_to_vault: Option<bool>,
+    ) -> Result<String> {
+        let creds = onecrawl_cdp::import_bitwarden(std::path::Path::new(&file_path))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        if save_to_vault.unwrap_or(true) && !creds.is_empty() {
+            let mut vault = onecrawl_cdp::load_vault()
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+            onecrawl_cdp::vault_add(&mut vault, creds.clone());
+            onecrawl_cdp::save_vault(&vault)
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+        }
+        serde_json::to_string(&creds).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Import passkeys from a 1Password `export.data` JSON file (extracted from .1pux).
+    ///
+    /// Parses passkey items (categoryUuid "119"). Returns imported credentials as JSON.
+    #[napi]
+    pub fn passkey_import_1password(
+        &self,
+        file_path: String,
+        save_to_vault: Option<bool>,
+    ) -> Result<String> {
+        let creds = onecrawl_cdp::import_1password_json(std::path::Path::new(&file_path))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        if save_to_vault.unwrap_or(true) && !creds.is_empty() {
+            let mut vault = onecrawl_cdp::load_vault()
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+            onecrawl_cdp::vault_add(&mut vault, creds.clone());
+            onecrawl_cdp::save_vault(&vault)
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+        }
+        serde_json::to_string(&creds).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Import passkeys from a FIDO Alliance CXF v1.0 unencrypted JSON file.
+    ///
+    /// Returns imported credentials as JSON.
+    #[napi]
+    pub fn passkey_import_cxf(
+        &self,
+        file_path: String,
+        save_to_vault: Option<bool>,
+    ) -> Result<String> {
+        let creds = onecrawl_cdp::import_cxf(std::path::Path::new(&file_path))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        if save_to_vault.unwrap_or(true) && !creds.is_empty() {
+            let mut vault = onecrawl_cdp::load_vault()
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+            onecrawl_cdp::vault_add(&mut vault, creds.clone());
+            onecrawl_cdp::save_vault(&vault)
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+        }
+        serde_json::to_string(&creds).map_err(|e| Error::from_reason(e.to_string()))
     }
 }
 
