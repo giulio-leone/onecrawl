@@ -102,11 +102,22 @@ pub async fn clear_viewport(page: &Page) -> Result<()> {
     Ok(())
 }
 
-/// Set user agent override.
+/// Set user agent override with optional Accept-Language header.
 pub async fn set_user_agent(page: &Page, user_agent: &str) -> Result<()> {
-    let params = chromiumoxide::cdp::browser_protocol::emulation::SetUserAgentOverrideParams::new(
-        user_agent,
-    );
+    set_user_agent_with_lang(page, user_agent, None).await
+}
+
+/// Set user agent and Accept-Language header together.
+pub async fn set_user_agent_with_lang(
+    page: &Page,
+    user_agent: &str,
+    accept_language: Option<&str>,
+) -> Result<()> {
+    let mut params =
+        chromiumoxide::cdp::browser_protocol::emulation::SetUserAgentOverrideParams::new(
+            user_agent,
+        );
+    params.accept_language = accept_language.map(|s| s.to_string());
     page.execute(params)
         .await
         .map_err(|e| Error::Cdp(format!("SetUserAgentOverride failed: {e}")))?;

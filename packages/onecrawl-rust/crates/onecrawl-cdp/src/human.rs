@@ -92,8 +92,8 @@ pub async fn human_click(page: &Page, selector: &str) -> Result<()> {
     // Try to get element center; fall back gracefully.
     let (cx, cy) = match crate::input::bounding_box(page, selector).await {
         Ok((x, y, w, h)) => {
-            let jx = x + w / 2.0 + rng.random_range(-w * 0.15..w * 0.15);
-            let jy = y + h / 2.0 + rng.random_range(-h * 0.15..h * 0.15);
+            let jx = x + w / 2.0 + if w > 0.0 { rng.random_range(-w * 0.15..w * 0.15) } else { 0.0 };
+            let jy = y + h / 2.0 + if h > 0.0 { rng.random_range(-h * 0.15..h * 0.15) } else { 0.0 };
             (jx, jy)
         }
         Err(_) => {
