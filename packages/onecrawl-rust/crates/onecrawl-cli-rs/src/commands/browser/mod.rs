@@ -60,6 +60,7 @@ pub use content::{
     structured_twitter_card,
     structured_metadata,
     structured_validate,
+    find_action,
 };
 pub use cookies::{
     cookie_get,
@@ -196,6 +197,20 @@ pub use interact::{
     key_down,
     key_up,
     keyboard_shortcut,
+    keyboard_type,
+    keyboard_insert_text,
+    scroll,
+    is_check,
+    mouse_move,
+    mouse_down,
+    mouse_up,
+    mouse_wheel,
+    highlight,
+    page_errors,
+    window_new,
+    set_offline,
+    set_extra_headers,
+    set_credentials,
 };
 pub use media::{
     screenshot,
@@ -208,6 +223,16 @@ pub use media::{
     snapshot_compare,
     snapshot_watch,
     snapshot_agent,
+    diff_snapshot,
+    diff_screenshot,
+    diff_url,
+    auth_state_save,
+    auth_state_load,
+    auth_state_list,
+    auth_state_show,
+    auth_state_rename,
+    auth_state_clear,
+    auth_state_clean,
 };
 pub use monitoring::{
     coverage_js_start,
@@ -244,6 +269,9 @@ pub use nav::{
     wait_ms,
     wait_for_selector,
     wait_for_url,
+    wait_for_text,
+    wait_for_load,
+    wait_for_function,
 };
 pub use network::{
     network_block,

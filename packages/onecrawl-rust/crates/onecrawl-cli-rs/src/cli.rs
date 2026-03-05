@@ -36,12 +36,14 @@ pub(crate) enum Commands {
     Reload,
 
     // ── Content ─────────────────────────────────────────────────────
-    /// Get page content: text, html, url, title
+    /// Get page content: text, html, url, title, value, attr, count, styles
     Get {
-        /// What to get: text, html, url, title
+        /// What to get: text, html, url, title, value, attr, count, styles
         what: String,
-        /// CSS selector (for text/html)
+        /// CSS selector (for text/html/value/attr/count/styles)
         selector: Option<String>,
+        /// Extra argument (attribute name for "get attr")
+        arg: Option<String>,
     },
     /// Evaluate JavaScript expression
     Eval {
@@ -176,6 +178,9 @@ pub(crate) enum Commands {
         /// JPEG/WebP quality (0-100)
         #[arg(short, long)]
         quality: Option<u32>,
+        /// Annotate interactive elements with numbered labels
+        #[arg(short, long)]
+        annotate: bool,
     },
     /// Save page as PDF
     Pdf {
@@ -366,6 +371,115 @@ pub(crate) enum Commands {
         /// Timeout in ms
         #[arg(short, long, default_value = "30000")]
         timeout: u64,
+    },
+    /// Wait for text to appear on the page
+    WaitForText {
+        /// Text to wait for
+        text: String,
+        /// Timeout in ms
+        #[arg(short, long, default_value = "30000")]
+        timeout: u64,
+    },
+    /// Wait for a load state (load, domcontentloaded, networkidle)
+    WaitForLoad {
+        /// Load state: load, domcontentloaded, networkidle
+        #[arg(default_value = "networkidle")]
+        state: String,
+        /// Timeout in ms
+        #[arg(short, long, default_value = "30000")]
+        timeout: u64,
+    },
+    /// Wait for a JavaScript condition to be true
+    WaitForFunction {
+        /// JavaScript expression that should return truthy
+        expression: String,
+        /// Timeout in ms
+        #[arg(short, long, default_value = "30000")]
+        timeout: u64,
+    },
+
+    // ── State Checks ────────────────────────────────────────────────
+    /// Check element state: visible, enabled, checked
+    Is {
+        /// State to check: visible, enabled, checked
+        check: String,
+        /// CSS selector or @ref
+        selector: String,
+    },
+
+    // ── Scroll ──────────────────────────────────────────────────────
+    /// Scroll the page in a direction
+    Scroll {
+        /// Direction: up, down, left, right
+        direction: String,
+        /// Pixels to scroll (default: 500)
+        #[arg(default_value = "500")]
+        pixels: i64,
+        /// CSS selector to scroll within (instead of page)
+        #[arg(short, long)]
+        selector: Option<String>,
+    },
+
+    // ── Keyboard (focus-based) ──────────────────────────────────────
+    /// Keyboard input at current focus (no selector needed)
+    Keyboard {
+        #[command(subcommand)]
+        action: KeyboardAction,
+    },
+
+    // ── Mouse Control ───────────────────────────────────────────────
+    /// Low-level mouse control
+    Mouse {
+        #[command(subcommand)]
+        action: MouseAction,
+    },
+
+    // ── Find (Semantic Locators) ────────────────────────────────────
+    /// Find elements by semantic properties and perform an action
+    Find {
+        #[command(subcommand)]
+        action: FindAction,
+    },
+
+    // ── Diff ────────────────────────────────────────────────────────
+    /// Compare snapshots, screenshots, or URLs
+    Diff {
+        #[command(subcommand)]
+        action: DiffAction,
+    },
+
+    // ── Debug ───────────────────────────────────────────────────────
+    /// View page errors (uncaught JavaScript exceptions)
+    Errors {
+        /// Clear errors instead of viewing
+        #[arg(long)]
+        clear: bool,
+    },
+    /// Highlight an element on the page with a visible border
+    Highlight {
+        /// CSS selector or @ref
+        selector: String,
+    },
+
+    // ── Auth State Persistence ──────────────────────────────────────
+    /// Save/load browser authentication state (cookies + storage)
+    AuthState {
+        #[command(subcommand)]
+        action: AuthStateAction,
+    },
+
+    // ── Window ──────────────────────────────────────────────────────
+    /// Browser window management
+    Window {
+        #[command(subcommand)]
+        action: WindowAction,
+    },
+
+    // ── Set (Browser Config) ────────────────────────────────────────
+    /// Set browser configuration
+    Set {
+        #[command(subcommand)]
+        action: SetAction,
     },
 
     // ── Pages ───────────────────────────────────────────────────────
@@ -722,6 +836,18 @@ pub(crate) enum SnapshotAction {
         /// Only tag interactive elements (buttons, links, inputs). Default: false (includes headings/text).
         #[arg(long)]
         interactive_only: bool,
+        /// Include cursor-interactive elements (divs with onclick, tabindex, cursor:pointer)
+        #[arg(short = 'C', long)]
+        cursor: bool,
+        /// Compact mode: remove empty structural elements
+        #[arg(short, long)]
+        compact: bool,
+        /// Limit tree depth
+        #[arg(short, long)]
+        depth: Option<usize>,
+        /// Scope to a CSS selector
+        #[arg(short, long)]
+        selector: Option<String>,
     },
 }
 
@@ -1993,5 +2119,292 @@ pub(crate) enum GraphAction {
         graph_json: String,
         /// Output file path
         output_path: String,
+    },
+}
+
+// ── New sub-enums for agent-browser feature parity ──────────────────
+
+#[derive(Subcommand)]
+pub(crate) enum KeyboardAction {
+    /// Type text with real keystrokes at current focus (no selector)
+    Type {
+        /// Text to type
+        text: String,
+    },
+    /// Insert text without key events at current focus
+    InsertText {
+        /// Text to insert
+        text: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum MouseAction {
+    /// Move mouse to coordinates
+    Move {
+        /// X coordinate
+        x: f64,
+        /// Y coordinate
+        y: f64,
+    },
+    /// Press mouse button
+    Down {
+        /// Button: left, right, middle
+        #[arg(default_value = "left")]
+        button: String,
+    },
+    /// Release mouse button
+    Up {
+        /// Button: left, right, middle
+        #[arg(default_value = "left")]
+        button: String,
+    },
+    /// Scroll wheel
+    Wheel {
+        /// Vertical delta (positive = down)
+        dy: f64,
+        /// Horizontal delta (positive = right)
+        #[arg(default_value = "0")]
+        dx: f64,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum FindAction {
+    /// Find by ARIA role and perform action
+    Role {
+        /// ARIA role (button, link, textbox, heading, etc.)
+        role: String,
+        /// Action: click, fill, type, hover, focus, check, uncheck, text
+        action: String,
+        /// Value for fill/type actions
+        value: Option<String>,
+        /// Filter by accessible name
+        #[arg(long)]
+        name: Option<String>,
+        /// Require exact text match
+        #[arg(long)]
+        exact: bool,
+    },
+    /// Find by text content and perform action
+    Text {
+        /// Text to search for
+        text: String,
+        /// Action: click, fill, type, hover, focus, check, uncheck, text
+        action: String,
+        /// Value for fill/type actions
+        value: Option<String>,
+        /// Require exact text match
+        #[arg(long)]
+        exact: bool,
+    },
+    /// Find by associated label and perform action
+    Label {
+        /// Label text
+        label: String,
+        /// Action: click, fill, type, hover, focus, check, uncheck, text
+        action: String,
+        /// Value for fill/type actions
+        value: Option<String>,
+    },
+    /// Find by placeholder text and perform action
+    Placeholder {
+        /// Placeholder text
+        placeholder: String,
+        /// Action: click, fill, type, hover, focus, check, uncheck, text
+        action: String,
+        /// Value for fill/type actions
+        value: Option<String>,
+    },
+    /// Find by alt text and perform action
+    Alt {
+        /// Alt text
+        alt: String,
+        /// Action: click, fill, type, hover, focus, check, uncheck, text
+        action: String,
+    },
+    /// Find by title attribute and perform action
+    Title {
+        /// Title text
+        title: String,
+        /// Action: click, fill, type, hover, focus, check, uncheck, text
+        action: String,
+    },
+    /// Find by data-testid attribute and perform action
+    TestId {
+        /// data-testid value
+        testid: String,
+        /// Action: click, fill, type, hover, focus, check, uncheck, text
+        action: String,
+        /// Value for fill/type actions
+        value: Option<String>,
+    },
+    /// Find first matching element and perform action
+    First {
+        /// CSS selector
+        selector: String,
+        /// Action: click, fill, type, hover, focus, check, uncheck, text
+        action: String,
+        /// Value for fill/type actions
+        value: Option<String>,
+    },
+    /// Find last matching element and perform action
+    Last {
+        /// CSS selector
+        selector: String,
+        /// Action: click, fill, type, hover, focus, check, uncheck, text
+        action: String,
+        /// Value for fill/type actions
+        value: Option<String>,
+    },
+    /// Find nth matching element and perform action
+    Nth {
+        /// Zero-based index
+        n: usize,
+        /// CSS selector
+        selector: String,
+        /// Action: click, fill, type, hover, focus, check, uncheck, text
+        action: String,
+        /// Value for fill/type actions
+        value: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum DiffAction {
+    /// Compare current snapshot vs last (or baseline file)
+    Snapshot {
+        /// Path to baseline snapshot file
+        #[arg(long)]
+        baseline: Option<String>,
+        /// Scope to a CSS selector
+        #[arg(long)]
+        selector: Option<String>,
+        /// Compact diff output
+        #[arg(long)]
+        compact: bool,
+    },
+    /// Visual pixel diff of screenshots
+    Screenshot {
+        /// Path to baseline screenshot
+        #[arg(long)]
+        baseline: String,
+        /// Output diff image path
+        #[arg(short, long)]
+        output: Option<String>,
+        /// Color threshold (0-1)
+        #[arg(short, long, default_value = "0.1")]
+        threshold: f64,
+    },
+    /// Compare two URLs (snapshot diff)
+    Url {
+        /// First URL
+        url1: String,
+        /// Second URL
+        url2: String,
+        /// Also do visual diff
+        #[arg(long)]
+        screenshot: bool,
+        /// Wait strategy: load, domcontentloaded, networkidle
+        #[arg(long, default_value = "load")]
+        wait_until: String,
+        /// Scope to a CSS selector
+        #[arg(long)]
+        selector: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum AuthStateAction {
+    /// Save current auth state (cookies + localStorage) to a file
+    Save {
+        /// Output file path
+        path: String,
+    },
+    /// Load auth state from a file
+    Load {
+        /// Input file path
+        path: String,
+    },
+    /// List saved state files
+    List,
+    /// Show summary of a state file
+    Show {
+        /// Path to state file
+        path: String,
+    },
+    /// Rename a state file
+    Rename {
+        /// Old file name
+        old: String,
+        /// New file name
+        new: String,
+    },
+    /// Clear state files
+    Clear {
+        /// Clear all saved states
+        #[arg(long)]
+        all: bool,
+        /// Specific state name to clear
+        name: Option<String>,
+    },
+    /// Delete old state files
+    Clean {
+        /// Delete states older than N days
+        #[arg(long, default_value = "30")]
+        older_than: u64,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum WindowAction {
+    /// Open a new browser window
+    New,
+}
+
+#[derive(Subcommand)]
+pub(crate) enum SetAction {
+    /// Set viewport size
+    Viewport {
+        /// Width in pixels
+        width: u32,
+        /// Height in pixels
+        height: u32,
+    },
+    /// Emulate a device
+    Device {
+        /// Device name (e.g., "iPhone 14")
+        name: String,
+    },
+    /// Set geolocation
+    Geo {
+        /// Latitude
+        lat: f64,
+        /// Longitude
+        lng: f64,
+    },
+    /// Toggle offline mode
+    Offline {
+        /// on or off
+        #[arg(default_value = "on")]
+        state: String,
+    },
+    /// Set extra HTTP headers (JSON object)
+    Headers {
+        /// JSON object of headers
+        json: String,
+    },
+    /// Set HTTP basic auth credentials
+    Credentials {
+        /// Username
+        username: String,
+        /// Password
+        password: String,
+    },
+    /// Set color scheme (dark, light, no-preference)
+    Media {
+        /// Color scheme
+        #[arg(default_value = "dark")]
+        scheme: String,
     },
 }

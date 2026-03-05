@@ -32,9 +32,9 @@ pub(crate) async fn dispatch(command: Commands) {
         Commands::Reload => commands::browser::reload().await,
 
         // ── Content ─────────────────────────────────────────────────
-        Commands::Get { what, selector } => {
+        Commands::Get { what, selector, arg } => {
             let resolved_sel = selector.as_deref().map(|s| onecrawl_cdp::accessibility::resolve_ref(s));
-            commands::browser::get(&what, resolved_sel.as_deref()).await
+            commands::browser::get(&what, resolved_sel.as_deref(), arg.as_deref()).await
         }
         Commands::Eval { expression } => commands::browser::eval(&expression).await,
         Commands::SetContent { html } => commands::browser::set_content(&html).await,
@@ -75,8 +75,9 @@ pub(crate) async fn dispatch(command: Commands) {
             element,
             format,
             quality,
+            annotate,
         } => {
-            commands::browser::screenshot(&output, full, element.as_deref(), &format, quality).await
+            commands::browser::screenshot(&output, full, element.as_deref(), &format, quality, annotate).await
         }
         Commands::Pdf {
             output,
@@ -388,6 +389,93 @@ pub(crate) async fn dispatch(command: Commands) {
         Commands::WaitForUrl { url, timeout } => {
             commands::browser::wait_for_url(&url, timeout).await
         }
+        Commands::WaitForText { text, timeout } => {
+            commands::browser::wait_for_text(&text, timeout).await
+        }
+        Commands::WaitForLoad { state, timeout } => {
+            commands::browser::wait_for_load(&state, timeout).await
+        }
+        Commands::WaitForFunction { expression, timeout } => {
+            commands::browser::wait_for_function(&expression, timeout).await
+        }
+
+        // ── State Checks ───────────────────────────────────────────
+        Commands::Is { check, selector } => {
+            commands::browser::is_check(&check, &onecrawl_cdp::accessibility::resolve_ref(&selector)).await
+        }
+
+        // ── Scroll ─────────────────────────────────────────────────
+        Commands::Scroll { direction, pixels, selector } => {
+            let resolved_sel = selector.as_deref().map(|s| onecrawl_cdp::accessibility::resolve_ref(s));
+            commands::browser::scroll(&direction, pixels, resolved_sel.as_deref()).await
+        }
+
+        // ── Keyboard ───────────────────────────────────────────────
+        Commands::Keyboard { action } => match action {
+            KeyboardAction::Type { text } => commands::browser::keyboard_type(&text).await,
+            KeyboardAction::InsertText { text } => commands::browser::keyboard_insert_text(&text).await,
+        },
+
+        // ── Mouse ──────────────────────────────────────────────────
+        Commands::Mouse { action } => match action {
+            MouseAction::Move { x, y } => commands::browser::mouse_move(x, y).await,
+            MouseAction::Down { button } => commands::browser::mouse_down(&button).await,
+            MouseAction::Up { button } => commands::browser::mouse_up(&button).await,
+            MouseAction::Wheel { dy, dx } => commands::browser::mouse_wheel(dy, dx).await,
+        },
+
+        // ── Find ───────────────────────────────────────────────────
+        Commands::Find { action } => commands::browser::find_action(action).await,
+
+        // ── Diff ───────────────────────────────────────────────────
+        Commands::Diff { action } => match action {
+            DiffAction::Snapshot { baseline, .. } => commands::browser::diff_snapshot(baseline.as_deref()).await,
+            DiffAction::Screenshot { baseline, .. } => commands::browser::diff_screenshot(Some(&baseline)).await,
+            DiffAction::Url { url1, url2, .. } => commands::browser::diff_url(&url1, &url2).await,
+        },
+
+        // ── Errors ─────────────────────────────────────────────────
+        Commands::Errors { clear } => commands::browser::page_errors(clear).await,
+
+        // ── Highlight ──────────────────────────────────────────────
+        Commands::Highlight { selector } => {
+            commands::browser::highlight(&onecrawl_cdp::accessibility::resolve_ref(&selector)).await
+        }
+
+        // ── Auth State ─────────────────────────────────────────────
+        Commands::AuthState { action } => match action {
+            AuthStateAction::Save { path } => commands::browser::auth_state_save(&path).await,
+            AuthStateAction::Load { path } => commands::browser::auth_state_load(&path).await,
+            AuthStateAction::List => commands::browser::auth_state_list().await,
+            AuthStateAction::Show { path } => commands::browser::auth_state_show(&path).await,
+            AuthStateAction::Rename { old, new } => commands::browser::auth_state_rename(&old, &new).await,
+            AuthStateAction::Clear { all, name } => {
+                if all {
+                    commands::browser::auth_state_clean().await;
+                } else if let Some(n) = name {
+                    commands::browser::auth_state_clear(&n).await;
+                } else {
+                    eprintln!("Specify --all or a state name");
+                }
+            }
+            AuthStateAction::Clean { .. } => commands::browser::auth_state_clean().await,
+        },
+
+        // ── Window ─────────────────────────────────────────────────
+        Commands::Window { action } => match action {
+            WindowAction::New => commands::browser::window_new().await,
+        },
+
+        // ── Set ────────────────────────────────────────────────────
+        Commands::Set { action } => match action {
+            SetAction::Viewport { width, height } => commands::browser::emulate_viewport(width, height, 1.0).await,
+            SetAction::Device { name } => commands::browser::emulate_device(&name).await,
+            SetAction::Geo { lat, lng } => commands::browser::emulate_geolocation(lat, lng, 1.0).await,
+            SetAction::Offline { state } => commands::browser::set_offline(&state).await,
+            SetAction::Headers { json } => commands::browser::set_extra_headers(&json).await,
+            SetAction::Credentials { username, password } => commands::browser::set_credentials(&username, &password).await,
+            SetAction::Media { scheme } => commands::browser::emulate_color_scheme(&scheme).await,
+        },
 
         // ── Pages ───────────────────────────────────────────────────
         Commands::NewPage { url } => commands::browser::new_page(url.as_deref()).await,
@@ -711,8 +799,12 @@ pub(crate) async fn dispatch(command: Commands) {
             SnapshotAction::Agent {
                 json,
                 interactive_only,
+                cursor,
+                compact,
+                depth,
+                selector,
             } => {
-                commands::browser::snapshot_agent(json, interactive_only).await;
+                commands::browser::snapshot_agent(json, interactive_only, cursor, compact, depth, selector.as_deref()).await;
             }
         },
 
