@@ -477,6 +477,16 @@ pub(crate) async fn dispatch(command: Commands) {
             SetAction::Media { scheme } => commands::browser::emulate_color_scheme(&scheme).await,
         },
 
+        // ── Route / Unroute / Requests / Close ─────────────────────
+        Commands::Route { pattern, status, body, content_type, block } => {
+            commands::browser::route_add(&pattern, status, body.as_deref(), &content_type, block).await
+        }
+        Commands::Unroute { pattern } => commands::browser::route_remove(&pattern).await,
+        Commands::Requests { filter, limit, failed } => {
+            commands::browser::requests_list(filter.as_deref(), limit, failed).await
+        }
+        Commands::Close { all } => commands::browser::close_page(all).await,
+
         // ── Pages ───────────────────────────────────────────────────
         Commands::NewPage { url } => commands::browser::new_page(url.as_deref()).await,
 

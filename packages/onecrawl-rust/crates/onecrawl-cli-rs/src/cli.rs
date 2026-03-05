@@ -482,6 +482,51 @@ pub(crate) enum Commands {
         action: SetAction,
     },
 
+    // ── Route (request interception with response mocking) ─────────
+    /// Intercept requests matching a pattern and respond with custom data
+    Route {
+        /// URL pattern to match (glob: `**/*.png`, or regex with `/`)
+        pattern: String,
+        /// HTTP status code to respond with
+        #[arg(long, default_value = "200")]
+        status: u16,
+        /// Response body (string)
+        #[arg(long)]
+        body: Option<String>,
+        /// Response content-type
+        #[arg(long, default_value = "text/plain")]
+        content_type: String,
+        /// Block matching requests instead of responding
+        #[arg(long)]
+        block: bool,
+    },
+
+    /// Remove a previously set route
+    Unroute {
+        /// URL pattern to unroute (or "all" to clear everything)
+        pattern: String,
+    },
+
+    /// List recent network requests (quick inspection)
+    Requests {
+        /// Filter by URL substring
+        #[arg(long)]
+        filter: Option<String>,
+        /// Max number of requests to show
+        #[arg(short, long, default_value = "20")]
+        limit: usize,
+        /// Show only failed requests (4xx/5xx)
+        #[arg(long)]
+        failed: bool,
+    },
+
+    /// Close the current page or browser session
+    Close {
+        /// Close all pages (entire browser session)
+        #[arg(long)]
+        all: bool,
+    },
+
     // ── Pages ───────────────────────────────────────────────────────
     /// Open a new browser page/tab
     NewPage {

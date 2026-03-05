@@ -211,6 +211,10 @@ pub use interact::{
     set_offline,
     set_extra_headers,
     set_credentials,
+    route_add,
+    route_remove,
+    requests_list,
+    close_page,
 };
 pub use media::{
     screenshot,
