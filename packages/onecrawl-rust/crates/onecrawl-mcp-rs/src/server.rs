@@ -3,121 +3,14 @@ use rmcp::{
     ErrorData as McpError, ServerHandler,
     handler::server::{router::tool::ToolRouter, tool::Parameters},
     model::*,
-    schemars, tool, tool_router,
+    tool, tool_router,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::cdp_tools::*;
-
-// ──────────────────────────── Parameter types ────────────────────────────
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct EncryptRequest {
-    #[schemars(description = "Plaintext string to encrypt")]
-    pub plaintext: String,
-    #[schemars(description = "Password for key derivation")]
-    pub password: String,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct DecryptRequest {
-    #[schemars(description = "Base64-encoded ciphertext (salt + nonce + ciphertext)")]
-    pub ciphertext: String,
-    #[schemars(description = "Password for key derivation")]
-    pub password: String,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct TotpRequest {
-    #[schemars(description = "Base32-encoded TOTP secret")]
-    pub secret: String,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct HtmlRequest {
-    #[schemars(description = "Raw HTML string")]
-    pub html: String,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct SelectorRequest {
-    #[schemars(description = "Raw HTML string")]
-    pub html: String,
-    #[schemars(description = "CSS selector to query")]
-    pub selector: String,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct StoreSetRequest {
-    #[schemars(description = "Storage key")]
-    pub key: String,
-    #[schemars(description = "Value to store")]
-    pub value: String,
-}
-
-#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
-pub struct StoreGetRequest {
-    #[schemars(description = "Storage key to retrieve")]
-    pub key: String,
-}
-
-// ──────────────────────────── Typed MCP responses ────────────────────────────
-
-#[derive(serde::Serialize)]
-struct PkceResponse<'a> {
-    code_verifier: &'a str,
-    code_challenge: &'a str,
-}
-
-#[derive(serde::Serialize)]
-struct LinkInfo {
-    href: String,
-    text: String,
-    is_external: bool,
-}
-
-#[derive(serde::Serialize)]
-struct CrawlResult2 {
-    summary: onecrawl_cdp::spider::CrawlSummary,
-    pages_crawled: usize,
-}
-
-#[derive(serde::Serialize)]
-struct RobotsInfo {
-    sitemaps: Vec<String>,
-    crawl_delay: Option<f64>,
-    path_allowed: Option<bool>,
-}
-
-#[derive(serde::Serialize)]
-struct StealthInjectResult {
-    patches_applied: usize,
-    patches: Vec<String>,
-}
-
-#[derive(serde::Serialize)]
-struct FingerprintResult<'a> {
-    user_agent: &'a str,
-    platform: &'a str,
-}
-
-#[derive(serde::Serialize)]
-struct RateLimitResult {
-    can_proceed: bool,
-    stats: onecrawl_cdp::rate_limiter::RateLimitStats,
-}
-
-#[derive(serde::Serialize)]
-struct RetryResult {
-    id: String,
-    queue_stats: onecrawl_cdp::retry_queue::QueueStats,
-}
-
-#[derive(serde::Serialize)]
-struct RemovedResult {
-    removed: bool,
-}
+use crate::helpers::{mcp_err, ensure_page, json_ok, text_ok};
+use crate::types::*;
 
 // ──────────────────────────── Server ────────────────────────────
 
@@ -128,39 +21,6 @@ pub struct OneCrawlMcp {
     store_path: Arc<String>,
     store_password: Arc<String>,
     browser: SharedBrowser,
-}
-
-fn mcp_err(msg: impl Into<String>) -> McpError {
-    McpError::internal_error(msg.into(), None)
-}
-
-/// Ensure browser session + page are initialised, return a clone of the page handle.
-async fn ensure_page(browser: &SharedBrowser) -> Result<chromiumoxide::Page, McpError> {
-    let mut state = browser.lock().await;
-    if state.session.is_none() {
-        let session = onecrawl_cdp::BrowserSession::launch_headless()
-            .await
-            .map_err(|e| mcp_err(format!("browser launch failed: {e}")))?;
-        let page = session
-            .new_page("about:blank")
-            .await
-            .map_err(|e| mcp_err(format!("new page failed: {e}")))?;
-        state.session = Some(session);
-        state.page = Some(page);
-    }
-    state
-        .page
-        .clone()
-        .ok_or_else(|| mcp_err("no active page"))
-}
-
-fn json_ok(value: &impl serde::Serialize) -> Result<CallToolResult, McpError> {
-    let json = serde_json::to_string(value).map_err(|e| mcp_err(e.to_string()))?;
-    Ok(CallToolResult::success(vec![Content::text(json)]))
-}
-
-fn text_ok(msg: impl Into<String>) -> Result<CallToolResult, McpError> {
-    Ok(CallToolResult::success(vec![Content::text(msg.into())]))
 }
 
 #[tool_router]

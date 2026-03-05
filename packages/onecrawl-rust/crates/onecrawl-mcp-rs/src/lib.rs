@@ -1,4 +1,6 @@
 pub mod cdp_tools;
+pub mod helpers;
+pub mod types;
 pub mod server;
 
 pub use server::OneCrawlMcp;
