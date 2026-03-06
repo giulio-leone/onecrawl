@@ -342,11 +342,13 @@ pub async fn agent_snapshot(page: &Page, opts: &AgentSnapshotOptions) -> Result<
             const INTERACTIVE_TAGS = new Set(['a','button','input','textarea','select','label','details','summary']);
             const INTERACTIVE_ROLES = new Set(['button','link','checkbox','radio','textbox','combobox',
                 'listbox','option','menuitem','menuitemcheckbox','menuitemradio','tab','treeitem',
-                'slider','spinbutton','switch','searchbox','gridcell']);
+                'slider','spinbutton','switch','searchbox','gridcell',
+                'alertdialog','dialog','progressbar','tooltip','scrollbar','tree','menu']);
             const CONTENT_TAGS = new Set(['h1','h2','h3','h4','h5','h6','p','li','td','th','span','div','section','article','main','nav','header','footer']);
             const STRUCTURAL_ROLES = new Set(['generic','group','list','table','row','rowgroup',
                 'columnheader','rowheader','cell','grid','treegrid','toolbar','separator',
-                'presentation','none','directory','document','feed','figure','region']);
+                'presentation','none','directory','document','feed','figure','region',
+                'banner','contentinfo','complementary','form','search']);
 
             const interactiveOnly = {interactive_only_js};
             const cursorMode = {cursor_js};
@@ -467,12 +469,14 @@ pub async fn agent_snapshot(page: &Page, opts: &AgentSnapshotOptions) -> Result<
             }}
 
             function getDepth(el, root) {{
+                if (depthCache.has(el)) return depthCache.get(el);
                 let depth = 0;
                 let node = el;
                 while (node && node !== root) {{
                     depth++;
                     node = node.parentElement;
                 }}
+                depthCache.set(el, depth);
                 return depth;
             }}
 
@@ -483,6 +487,8 @@ pub async fn agent_snapshot(page: &Page, opts: &AgentSnapshotOptions) -> Result<
 
             const root = scopeSelector ? document.querySelector(scopeSelector) : document.body;
             if (!root) return {{ snapshot: '', refs: {{}}, total: 0 }};
+
+            const depthCache = new WeakMap();
 
             const allEls = Array.from(root.querySelectorAll('*'));
             const refs = {{}};

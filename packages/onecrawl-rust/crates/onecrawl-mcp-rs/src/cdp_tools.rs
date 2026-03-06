@@ -18,6 +18,7 @@ pub struct BrowserState {
     pub retry_queue: Option<onecrawl_cdp::RetryQueue>,
     pub safety: Option<onecrawl_cdp::SafetyState>,
     pub recording: Option<onecrawl_cdp::RecordingState>,
+    pub ios_client: Option<onecrawl_cdp::ios::IosClient>,
 }
 
 pub type SharedBrowser = Arc<Mutex<BrowserState>>;

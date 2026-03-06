@@ -65,6 +65,10 @@ pub fn diff_snapshots(before: &str, after: &str) -> AccessibilitySnapshotDiff {
 
 // ─── Myers diff internals ───────────────────────────────────────────
 
+/// Maximum combined line count before we skip the expensive Myers diff
+/// and fall back to a simple delete-all / insert-all result.
+const MAX_DIFF_SIZE: usize = 10_000;
+
 #[derive(Debug)]
 enum Edit<'a> {
     Equal(&'a str),
@@ -82,6 +86,18 @@ fn myers_diff<'a>(old: &[&'a str], new: &[&'a str]) -> Vec<Edit<'a>> {
         return Vec::new();
     }
 
+    // Early termination: fall back to trivial diff for very large inputs.
+    if max > MAX_DIFF_SIZE {
+        let mut edits = Vec::with_capacity(n + m);
+        for line in old {
+            edits.push(Edit::Delete(line));
+        }
+        for line in new {
+            edits.push(Edit::Insert(line));
+        }
+        return edits;
+    }
+
     // v[k] stores the furthest-reaching x on diagonal k.
     // Diagonal k = x - y. We index with offset `max` so k can be negative.
     let sz = 2 * max + 1;
@@ -90,7 +106,9 @@ fn myers_diff<'a>(old: &[&'a str], new: &[&'a str]) -> Vec<Edit<'a>> {
     let mut trace: Vec<Vec<usize>> = Vec::with_capacity(max + 1);
 
     'outer: for d in 0..=max {
-        trace.push(v.clone());
+        // Only clone when the vector will actually be needed for backtracking.
+        let snapshot = v.clone();
+        trace.push(snapshot);
         let d_i = d as isize;
         let mut k = -d_i;
         while k <= d_i {

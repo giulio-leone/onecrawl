@@ -71,6 +71,9 @@ impl OneCrawlMcp {
                 let selector_raw = cmd.args.get("selector")
                     .and_then(|v| v.as_str())
                     .ok_or("missing 'selector' argument")?;
+                if selector_raw.is_empty() {
+                    return Err("'selector' must not be empty".into());
+                }
                 let selector = onecrawl_cdp::accessibility::resolve_ref(selector_raw);
                 onecrawl_cdp::element::click(&page, &selector)
                     .await
@@ -81,6 +84,9 @@ impl OneCrawlMcp {
                 let selector_raw = cmd.args.get("selector")
                     .and_then(|v| v.as_str())
                     .ok_or("missing 'selector' argument")?;
+                if selector_raw.is_empty() {
+                    return Err("'selector' must not be empty".into());
+                }
                 let text = cmd.args.get("text")
                     .and_then(|v| v.as_str())
                     .ok_or("missing 'text' argument")?;
@@ -94,6 +100,9 @@ impl OneCrawlMcp {
                 let selector_raw = cmd.args.get("selector")
                     .and_then(|v| v.as_str())
                     .ok_or("missing 'selector' argument")?;
+                if selector_raw.is_empty() {
+                    return Err("'selector' must not be empty".into());
+                }
                 let timeout = cmd.args.get("timeout_ms")
                     .and_then(|v| v.as_u64())
                     .unwrap_or(30_000);
@@ -138,6 +147,9 @@ impl OneCrawlMcp {
                 let selector = cmd.args.get("selector")
                     .and_then(|v| v.as_str())
                     .ok_or("missing 'selector' argument")?;
+                if selector.is_empty() {
+                    return Err("'selector' must not be empty".into());
+                }
                 let result = onecrawl_cdp::selectors::css_select(&page, selector)
                     .await
                     .map_err(|e| e.to_string())?;
@@ -1165,7 +1177,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "agent.execute_chain",
-        description = "Execute multiple commands in sequence. Supports: navigation.goto, navigation.click, navigation.type, navigation.wait, navigation.evaluate, navigation.snapshot, scraping.css, scraping.text. Returns results array with success/error for each step."
+        description = "Execute multiple commands in sequence. Commands: navigation.goto, navigation.click, navigation.type, navigation.wait, navigation.evaluate, navigation.snapshot, scraping.css, scraping.text. Returns {results, completed, total}."
     )]
     async fn agent_execute_chain(
         &self,
@@ -1191,7 +1203,10 @@ impl OneCrawlMcp {
                     results.push(serde_json::json!({
                         "tool": cmd.tool,
                         "success": false,
-                        "error": err_msg
+                        "error": {
+                            "message": err_msg,
+                            "code": "CHAIN_STEP_FAILED"
+                        }
                     }));
                     if stop_on_error {
                         break;
@@ -1209,12 +1224,15 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "agent.element_screenshot",
-        description = "Take a screenshot of a specific element by CSS selector or @ref. Returns base64 PNG with element bounds."
+        description = "Take a screenshot of a specific element by CSS selector or @ref. Supports @ref notation (e.g. @e1 from navigation.snapshot). Returns base64 PNG with element bounds."
     )]
     async fn agent_element_screenshot(
         &self,
         Parameters(p): Parameters<ElementScreenshotParams>,
     ) -> Result<CallToolResult, McpError> {
+        if p.selector.is_empty() {
+            return Err(mcp_err("selector must not be empty"));
+        }
         let page = ensure_page(&self.browser).await?;
         let selector = onecrawl_cdp::accessibility::resolve_ref(&p.selector);
 
@@ -1286,22 +1304,22 @@ impl OneCrawlMcp {
             const origOpen = XMLHttpRequest.prototype.open;
             const origSend = XMLHttpRequest.prototype.send;
             XMLHttpRequest.prototype.open = function(method, url, ...rest) {
-                this.__oc_method = method;
-                this.__oc_url = url;
+                this.__onecrawl_entry = { type: 'xhr', method: (method || 'GET').toUpperCase(), url: url || '', status: null, contentType: null, timestamp: Date.now() };
                 return origOpen.call(this, method, url, ...rest);
             };
             XMLHttpRequest.prototype.send = function(...args) {
-                const xhr = this;
-                const entry = { type: 'xhr', method: (xhr.__oc_method || 'GET').toUpperCase(), url: xhr.__oc_url || '', status: null, contentType: null, timestamp: Date.now() };
-                xhr.addEventListener('load', function() {
-                    entry.status = xhr.status;
-                    entry.contentType = xhr.getResponseHeader('content-type');
-                    window.__onecrawl_api_log.push(entry);
-                });
-                xhr.addEventListener('error', function() {
-                    entry.error = 'network error';
-                    window.__onecrawl_api_log.push(entry);
-                });
+                const entry = this.__onecrawl_entry;
+                if (entry) {
+                    this.addEventListener('load', function() {
+                        entry.status = this.status;
+                        entry.contentType = this.getResponseHeader('content-type');
+                        window.__onecrawl_api_log.push(entry);
+                    });
+                    this.addEventListener('error', function() {
+                        entry.error = 'network error';
+                        window.__onecrawl_api_log.push(entry);
+                    });
+                }
                 return origSend.apply(this, args);
             };
 
@@ -1316,7 +1334,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "agent.api_capture_summary",
-        description = "Get a summary of all network API calls (fetch/XHR) captured since agent.api_capture_start. Returns method, URL, status, content-type for each request."
+        description = "Get a summary of all network API calls (fetch/XHR) captured since api_capture_start. Returns summary of XHR/fetch calls made since api_capture_start. Per-page, resets on navigation."
     )]
     async fn agent_api_capture_summary(
         &self,
@@ -1359,7 +1377,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "agent.iframe_snapshot",
-        description = "Take an accessibility snapshot inside a specific iframe by index. Returns refs scoped to that iframe for AI-driven automation."
+        description = "Take an accessibility snapshot inside a specific iframe by index. Index is 0-based. Use agent.iframe_list first to discover available iframes."
     )]
     async fn agent_iframe_snapshot(
         &self,
@@ -1434,11 +1452,15 @@ impl OneCrawlMcp {
             return Err(mcp_err("ws_url must start with ws:// or wss://"));
         }
 
-        // Connect to remote browser via chromiumoxide
+        // Connect to remote browser via chromiumoxide (with timeout)
         let (browser, mut handler) =
-            chromiumoxide::Browser::connect(&p.ws_url)
-                .await
-                .map_err(|e| mcp_err(format!("remote CDP connect failed: {e}")))?;
+            tokio::time::timeout(
+                std::time::Duration::from_secs(15),
+                chromiumoxide::Browser::connect(&p.ws_url),
+            )
+            .await
+            .map_err(|_| mcp_err("remote CDP connect timed out after 15s"))?
+            .map_err(|e| mcp_err(format!("remote CDP connect failed: {e}")))?;
 
         // Spawn the handler loop
         tokio::spawn(async move {
@@ -1563,7 +1585,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let opts = onecrawl_cdp::screencast::ScreencastOptions {
             format: p.format.unwrap_or_else(|| "jpeg".into()),
-            quality: p.quality.or(Some(60)),
+            quality: p.quality.map(|q| q.min(100)).or(Some(60)),
             max_width: p.max_width.or(Some(1280)),
             max_height: p.max_height.or(Some(720)),
             every_nth_frame: p.every_nth_frame.or(Some(1)),
@@ -1766,7 +1788,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "agent.ios_connect",
-        description = "Start an iOS Safari session via WebDriverAgent. Returns session ID on success."
+        description = "Start an iOS Safari session via WebDriverAgent. Requires WebDriverAgent running. Session persists for subsequent ios_* calls."
     )]
     async fn agent_ios_connect(
         &self,
@@ -1780,6 +1802,10 @@ impl OneCrawlMcp {
         let mut client = onecrawl_cdp::ios::IosClient::new(config);
         let session_id = client.create_session().await
             .map_err(|e| mcp_err(format!("iOS connect failed: {e}")))?;
+
+        let mut state = self.browser.lock().await;
+        state.ios_client = Some(client);
+
         json_ok(&serde_json::json!({
             "connected": true,
             "session_id": session_id
@@ -1794,8 +1820,9 @@ impl OneCrawlMcp {
         &self,
         Parameters(p): Parameters<IosNavigateParams>,
     ) -> Result<CallToolResult, McpError> {
-        let config = onecrawl_cdp::ios::IosSessionConfig::default();
-        let client = onecrawl_cdp::ios::IosClient::new(config);
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
         client.navigate(&p.url).await
             .map_err(|e| mcp_err(format!("iOS navigate failed: {e}")))?;
         json_ok(&serde_json::json!({
@@ -1806,14 +1833,15 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "agent.ios_tap",
-        description = "Tap at screen coordinates on the iOS device."
+        description = "Tap at screen coordinates on the iOS device. Requires an active iOS session (use agent.ios_connect first)."
     )]
     async fn agent_ios_tap(
         &self,
         Parameters(p): Parameters<IosTapParams>,
     ) -> Result<CallToolResult, McpError> {
-        let config = onecrawl_cdp::ios::IosSessionConfig::default();
-        let client = onecrawl_cdp::ios::IosClient::new(config);
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
         client.tap(p.x, p.y).await
             .map_err(|e| mcp_err(format!("iOS tap failed: {e}")))?;
         json_ok(&serde_json::json!({
@@ -1825,15 +1853,16 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "agent.ios_screenshot",
-        description = "Take a screenshot of the iOS device screen. Returns base64-encoded image data."
+        description = "Take a screenshot of the iOS device screen. Returns base64-encoded image data. Requires an active iOS session (use agent.ios_connect first)."
     )]
     async fn agent_ios_screenshot(
         &self,
         #[allow(unused_variables)]
         Parameters(_p): Parameters<IosScreenshotParams>,
     ) -> Result<CallToolResult, McpError> {
-        let config = onecrawl_cdp::ios::IosSessionConfig::default();
-        let client = onecrawl_cdp::ios::IosClient::new(config);
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
         let bytes = client.screenshot().await
             .map_err(|e| mcp_err(format!("iOS screenshot failed: {e}")))?;
         let b64 = B64.encode(&bytes);
