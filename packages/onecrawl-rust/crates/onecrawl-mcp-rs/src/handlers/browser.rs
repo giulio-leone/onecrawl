@@ -1921,4 +1921,295 @@ impl OneCrawlMcp {
         let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
         json_ok(&val)
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Self-Healing Selector Recovery
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn selector_heal(
+        &self,
+        p: SelectorHealParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let sel_js = json_escape(&p.selector);
+        let ctx_js = json_escape(p.context.as_deref().unwrap_or(""));
+        let js = format!(r#"(() => {{
+            const orig = {sel_js};
+            const ctx = {ctx_js};
+            const alternatives = [];
+            if (ctx) {{
+                const all = document.querySelectorAll('button, a, input, [role]');
+                for (const el of all) {{
+                    const t = (el.textContent || '').trim().toLowerCase();
+                    const a = (el.getAttribute('aria-label') || '').toLowerCase();
+                    if (t.includes(ctx.toLowerCase()) || a.includes(ctx.toLowerCase())) {{
+                        const tag = el.tagName.toLowerCase();
+                        const id = el.id ? '#' + el.id : '';
+                        const cls = el.className ? '.' + String(el.className).split(' ').filter(Boolean).join('.') : '';
+                        alternatives.push({{ selector: tag + id + cls, strategy: 'text_match', confidence: 0.7 }});
+                    }}
+                }}
+            }}
+            const ariaSel = document.querySelectorAll('[role][aria-label]');
+            for (const el of ariaSel) {{
+                const role = el.getAttribute('role');
+                const name = el.getAttribute('aria-label');
+                alternatives.push({{ selector: '[role="' + role + '"][aria-label="' + name + '"]', strategy: 'aria', confidence: 0.8 }});
+            }}
+            if (orig.startsWith('#')) {{
+                const partial = orig.slice(1);
+                const byId = document.querySelectorAll('[id*="' + partial + '"]');
+                for (const el of byId) {{
+                    alternatives.push({{ selector: '#' + el.id, strategy: 'partial_id', confidence: 0.6 }});
+                }}
+            }}
+            const healed = alternatives.length > 0;
+            return JSON.stringify({{
+                healed,
+                original: orig,
+                alternatives: alternatives.slice(0, 5),
+                recommended: healed ? alternatives[0].selector : null
+            }});
+        }})()"#);
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+
+        if let Some(alts) = val.get("alternatives").and_then(|a| a.as_array()) {
+            let cached: Vec<String> = alts.iter()
+                .filter_map(|a| a.get("selector").and_then(|s| s.as_str()).map(String::from))
+                .collect();
+            if !cached.is_empty() {
+                let mut state = self.browser.lock().await;
+                state.selector_cache.insert(p.selector, cached);
+            }
+        }
+        json_ok(&val)
+    }
+
+    pub(crate) async fn selector_alternatives(
+        &self,
+        p: SelectorAlternativesParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let max = p.max_alternatives.unwrap_or(5);
+        let sel_js = json_escape(&p.selector);
+        let js = format!(r#"(() => {{
+            const sel = {sel_js};
+            const el = document.querySelector(sel);
+            if (!el) return JSON.stringify({{ element: null, strategies: [] }});
+            const tag = el.tagName.toLowerCase();
+            const id = el.id || null;
+            const cls = el.className ? String(el.className) : '';
+            const text = (el.textContent || '').trim().slice(0, 50);
+            const strategies = [];
+            if (id) strategies.push({{ type: 'id', selector: '#' + id, specificity: 'high', fragility_score: 0.1 }});
+            if (cls) {{
+                const clsSel = tag + '.' + cls.split(' ').filter(Boolean).join('.');
+                strategies.push({{ type: 'class', selector: clsSel, specificity: 'medium', fragility_score: 0.4 }});
+            }}
+            const role = el.getAttribute('role');
+            const ariaLabel = el.getAttribute('aria-label');
+            if (role && ariaLabel) strategies.push({{ type: 'aria', selector: '[role="' + role + '"][aria-label="' + ariaLabel + '"]', specificity: 'high', fragility_score: 0.2 }});
+            if (text) strategies.push({{ type: 'text', selector: '//*[contains(text(),"' + text.slice(0,20) + '")]', specificity: 'low', fragility_score: 0.6 }});
+            const parent = el.parentElement;
+            if (parent) {{
+                const idx = Array.from(parent.children).indexOf(el);
+                strategies.push({{ type: 'nth_child', selector: tag + ':nth-child(' + (idx + 1) + ')', specificity: 'low', fragility_score: 0.7 }});
+            }}
+            return JSON.stringify({{
+                element: {{ tag, id, "class": cls, text }},
+                strategies: strategies.slice(0, {max})
+            }});
+        }})()"#);
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        json_ok(&val)
+    }
+
+    pub(crate) async fn selector_validate(
+        &self,
+        p: SelectorValidateParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let sel_js = json_escape(&p.selector);
+        let role_js = json_escape(p.expected_role.as_deref().unwrap_or(""));
+        let text_js = json_escape(p.expected_text.as_deref().unwrap_or(""));
+        let js = format!(r#"(() => {{
+            const sel = {sel_js};
+            const expectedRole = {role_js};
+            const expectedText = {text_js};
+            const els = document.querySelectorAll(sel);
+            const count = els.length;
+            if (count === 0) return JSON.stringify({{ valid: false, matches_count: 0, expected_role_match: false, expected_text_match: false, element_info: null }});
+            const el = els[0];
+            const role = el.getAttribute('role') || el.tagName.toLowerCase();
+            const text = (el.textContent || '').trim();
+            const roleMatch = !expectedRole || role === expectedRole;
+            const textMatch = !expectedText || text.includes(expectedText);
+            return JSON.stringify({{
+                valid: roleMatch && textMatch,
+                matches_count: count,
+                expected_role_match: roleMatch,
+                expected_text_match: textMatch,
+                element_info: {{ tag: el.tagName.toLowerCase(), role, text: text.slice(0, 100), id: el.id || null, "class": el.className ? String(el.className) : null }}
+            }});
+        }})()"#);
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        json_ok(&val)
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Event-Driven Reaction System
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn event_subscribe(
+        &self,
+        p: EventSubscribeParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let event_type = p.event_type.clone();
+        let type_js = json_escape(&event_type);
+
+        let js = format!(r#"(() => {{
+            if (!window.__onecrawl_events) window.__onecrawl_events = [];
+            const etype = {type_js};
+            if (etype === 'console') {{
+                ['log','warn','error','info'].forEach(level => {{
+                    const o = console[level];
+                    console[level] = function() {{
+                        window.__onecrawl_events.push({{ type: 'console', level, data: Array.from(arguments).map(String).join(' '), timestamp: Date.now() }});
+                        o.apply(console, arguments);
+                    }};
+                }});
+            }} else if (etype === 'error') {{
+                window.addEventListener('error', e => {{
+                    window.__onecrawl_events.push({{ type: 'error', data: e.message, source: e.filename, line: e.lineno, timestamp: Date.now() }});
+                }});
+            }} else if (etype === 'navigation') {{
+                const pushState = history.pushState;
+                history.pushState = function() {{
+                    window.__onecrawl_events.push({{ type: 'navigation', data: arguments[2], timestamp: Date.now() }});
+                    pushState.apply(history, arguments);
+                }};
+                window.addEventListener('popstate', () => {{
+                    window.__onecrawl_events.push({{ type: 'navigation', data: location.href, timestamp: Date.now() }});
+                }});
+            }} else if (etype === 'dom_change') {{
+                const observer = new MutationObserver(mutations => {{
+                    mutations.forEach(m => {{
+                        window.__onecrawl_events.push({{ type: 'dom_change', data: m.type, target: (m.target.tagName || '').toLowerCase(), timestamp: Date.now() }});
+                    }});
+                }});
+                observer.observe(document.body, {{ childList: true, subtree: true, attributes: true }});
+                window.__onecrawl_dom_observer = observer;
+            }} else if (etype === 'network') {{
+                const origFetch = window.fetch;
+                window.fetch = function() {{
+                    const url = typeof arguments[0] === 'string' ? arguments[0] : arguments[0]?.url || '';
+                    window.__onecrawl_events.push({{ type: 'network', data: url, method: arguments[1]?.method || 'GET', timestamp: Date.now() }});
+                    return origFetch.apply(window, arguments);
+                }};
+            }}
+            return 'subscribed';
+        }})()"#);
+        page.evaluate(js).await.mcp()?;
+
+        let mut state = self.browser.lock().await;
+        if !state.event_subscriptions.contains(&event_type) {
+            state.event_subscriptions.push(event_type.clone());
+        }
+        let subs = state.event_subscriptions.clone();
+        json_ok(&serde_json::json!({
+            "event_type": event_type,
+            "subscribed": true,
+            "active_subscriptions": subs
+        }))
+    }
+
+    pub(crate) async fn event_unsubscribe(
+        &self,
+        p: EventUnsubscribeParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let type_js = json_escape(&p.event_type);
+        let js = format!(r#"(() => {{
+            const etype = {type_js};
+            if (etype === 'dom_change' && window.__onecrawl_dom_observer) {{
+                window.__onecrawl_dom_observer.disconnect();
+                delete window.__onecrawl_dom_observer;
+            }}
+            return 'unsubscribed';
+        }})()"#);
+        page.evaluate(js).await.mcp()?;
+
+        let mut state = self.browser.lock().await;
+        state.event_subscriptions.retain(|s| s != &p.event_type);
+        let remaining = state.event_subscriptions.clone();
+        json_ok(&serde_json::json!({
+            "event_type": p.event_type,
+            "unsubscribed": true,
+            "remaining_subscriptions": remaining
+        }))
+    }
+
+    pub(crate) async fn event_poll(
+        &self,
+        p: EventPollParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let limit = p.limit.unwrap_or(50);
+        let clear = p.clear.unwrap_or(false);
+        let type_filter = json_escape(p.event_type.as_deref().unwrap_or(""));
+        let js = format!(r#"(() => {{
+            const events = window.__onecrawl_events || [];
+            const filter = {type_filter};
+            let filtered = filter ? events.filter(e => e.type === filter) : events;
+            const limited = filtered.slice(0, {limit});
+            if ({clear_val}) {{
+                if (filter) {{
+                    window.__onecrawl_events = events.filter(e => e.type !== filter);
+                }} else {{
+                    window.__onecrawl_events = events.slice({limit});
+                }}
+            }}
+            return JSON.stringify({{ events: limited, count: limited.length, has_more: filtered.length > {limit} }});
+        }})()"#, clear_val = if clear { "true" } else { "false" });
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+
+        if let Some(events) = val.get("events").and_then(|e| e.as_array()) {
+            let mut state = self.browser.lock().await;
+            state.event_buffer.extend(events.iter().cloned());
+        }
+        json_ok(&val)
+    }
+
+    pub(crate) async fn event_clear(
+        &self,
+        _v: serde_json::Value,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"(() => {
+            const count = (window.__onecrawl_events || []).length;
+            window.__onecrawl_events = [];
+            return JSON.stringify({ cleared_count: count });
+        })()"#;
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+
+        let mut state = self.browser.lock().await;
+        let local_cleared = state.event_buffer.len();
+        state.event_buffer.clear();
+
+        let page_cleared = val.get("cleared_count").and_then(|c| c.as_u64()).unwrap_or(0);
+        json_ok(&serde_json::json!({
+            "cleared_count": page_cleared + local_cleared as u64
+        }))
+    }
 }

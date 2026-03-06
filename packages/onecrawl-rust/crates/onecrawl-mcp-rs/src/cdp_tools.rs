@@ -38,6 +38,17 @@ pub struct BrowserState {
     pub page_context: HashMap<String, serde_json::Value>,
     // Error recovery history
     pub error_history: Vec<(String, String, String)>,
+    // Task plans (agent task decomposition)
+    pub task_plans: Vec<serde_json::Value>,
+    // Self-healing selector cache
+    pub selector_cache: HashMap<String, Vec<String>>,
+    // Session checkpoints
+    pub checkpoints: HashMap<String, serde_json::Value>,
+    // Workflow variables
+    pub workflow_variables: HashMap<String, serde_json::Value>,
+    // Event-driven reaction system
+    pub event_subscriptions: Vec<String>,
+    pub event_buffer: Vec<serde_json::Value>,
 }
 
 pub type SharedBrowser = Arc<Mutex<BrowserState>>;
@@ -1011,6 +1022,178 @@ pub struct RecoveryStrategyParams {
     pub error_type: String,
     #[schemars(description = "Additional context for generating recovery steps")]
     pub context: Option<serde_json::Value>,
+}
+
+// ──────────────── Task Decomposition Engine params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct TaskDecomposeParams {
+    #[schemars(description = "High-level goal to decompose into atomic subtasks")]
+    pub goal: String,
+    #[schemars(description = "Additional context about the goal")]
+    pub context: Option<String>,
+    #[schemars(description = "Maximum decomposition depth (default: 3)")]
+    pub max_depth: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct TaskPlanParams {
+    #[schemars(description = "List of task descriptions to plan")]
+    pub tasks: Vec<String>,
+    #[schemars(description = "Planning strategy: 'sequential' | 'parallel' | 'dependency'")]
+    pub strategy: Option<String>,
+}
+
+// ──────────────── Vision/LLM Observation Layer params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct VisionDescribeParams {
+    #[schemars(description = "CSS selector to scope description (whole page if absent)")]
+    pub selector: Option<String>,
+    #[schemars(description = "Output format: 'brief' | 'detailed' | 'structured'")]
+    pub format: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct VisionLocateParams {
+    #[schemars(description = "Natural language description of the element to find (e.g. 'blue submit button')")]
+    pub description: String,
+    #[schemars(description = "Search strategy: 'aria' | 'visual' | 'semantic'")]
+    pub strategy: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct VisionCompareParams {
+    #[schemars(description = "Baseline accessibility tree text or description")]
+    pub baseline: String,
+    #[schemars(description = "Current state to compare (if absent, captures current page state)")]
+    pub current: Option<String>,
+    #[schemars(description = "Similarity threshold 0.0–1.0 (default: 0.9)")]
+    pub threshold: Option<f64>,
+}
+
+// ──────────────── Self-Healing Selector Recovery params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SelectorHealParams {
+    #[schemars(description = "The broken CSS/XPath selector to heal")]
+    pub selector: String,
+    #[schemars(description = "What the element should be (e.g. 'login button')")]
+    pub context: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SelectorAlternativesParams {
+    #[schemars(description = "CSS selector of a currently working element")]
+    pub selector: String,
+    #[schemars(description = "Maximum number of alternative selectors to generate (default: 5)")]
+    pub max_alternatives: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SelectorValidateParams {
+    #[schemars(description = "CSS selector to validate")]
+    pub selector: String,
+    #[schemars(description = "Expected ARIA role of the matched element")]
+    pub expected_role: Option<String>,
+    #[schemars(description = "Expected visible text of the matched element")]
+    pub expected_text: Option<String>,
+}
+
+// ──────────────── Session Checkpoints/Resume params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct CheckpointSaveParams {
+    #[schemars(description = "Unique name for this checkpoint")]
+    pub name: String,
+    #[schemars(description = "Include cookies in checkpoint (default: true)")]
+    pub include_cookies: Option<bool>,
+    #[schemars(description = "Include localStorage/sessionStorage (default: true)")]
+    pub include_storage: Option<bool>,
+    #[schemars(description = "Include page context from BrowserState (default: true)")]
+    pub include_context: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct CheckpointRestoreParams {
+    #[schemars(description = "Name of the checkpoint to restore")]
+    pub name: String,
+    #[schemars(description = "Navigate to the saved URL (default: true)")]
+    pub restore_url: Option<bool>,
+    #[schemars(description = "Restore cookies (default: true)")]
+    pub restore_cookies: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct CheckpointDeleteParams {
+    #[schemars(description = "Name of the checkpoint to delete")]
+    pub name: String,
+}
+
+// ──────────────── Extended Workflow DSL params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct WorkflowWhileParams {
+    #[schemars(description = "JavaScript expression to evaluate as loop condition")]
+    pub condition: String,
+    #[schemars(description = "Actions to execute each iteration (ChainCommand objects)")]
+    pub actions: Vec<serde_json::Value>,
+    #[schemars(description = "Maximum iterations to prevent infinite loops (default: 100)")]
+    pub max_iterations: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct WorkflowForEachParams {
+    #[schemars(description = "JS expression returning an array, or a JSON array string")]
+    pub collection: String,
+    #[schemars(description = "Variable name for current item (default: 'item')")]
+    pub variable_name: Option<String>,
+    #[schemars(description = "Actions to execute for each item (ChainCommand objects)")]
+    pub actions: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct WorkflowIfParams {
+    #[schemars(description = "JavaScript expression to evaluate as condition")]
+    pub condition: String,
+    #[schemars(description = "Actions to execute if condition is truthy")]
+    pub then_actions: Vec<serde_json::Value>,
+    #[schemars(description = "Actions to execute if condition is falsy")]
+    pub else_actions: Option<Vec<serde_json::Value>>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct WorkflowVariableParams {
+    #[schemars(description = "Variable name")]
+    pub name: String,
+    #[schemars(description = "Value to set (omit to GET the current value)")]
+    pub value: Option<serde_json::Value>,
+}
+
+// ──────────────── Event-Driven Reaction System params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct EventSubscribeParams {
+    #[schemars(description = "Event type: 'navigation' | 'console' | 'dialog' | 'error' | 'network' | 'dom_change'")]
+    pub event_type: String,
+    #[schemars(description = "Optional filter pattern for events")]
+    pub filter: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct EventUnsubscribeParams {
+    #[schemars(description = "Event type to unsubscribe from")]
+    pub event_type: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct EventPollParams {
+    #[schemars(description = "Filter by event type (all types if absent)")]
+    pub event_type: Option<String>,
+    #[schemars(description = "Maximum events to return (default: 50)")]
+    pub limit: Option<u32>,
+    #[schemars(description = "Clear returned events from buffer (default: false)")]
+    pub clear: Option<bool>,
 }
 
 #[cfg(test)]

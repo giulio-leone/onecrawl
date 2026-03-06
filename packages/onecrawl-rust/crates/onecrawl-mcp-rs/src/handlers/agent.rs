@@ -3,7 +3,7 @@
 use futures::StreamExt;
 use rmcp::{ErrorData as McpError, model::*};
 use crate::cdp_tools::*;
-use crate::helpers::{mcp_err, ensure_page, json_ok, McpResult};
+use crate::helpers::{mcp_err, ensure_page, json_ok, json_escape, McpResult};
 use crate::types::*;
 use crate::OneCrawlMcp;
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
@@ -652,4 +652,288 @@ impl OneCrawlMcp {
 
     // ──────────────── Computer Use Protocol ─────────────────
 
+    // ════════════════════════════════════════════════════════════════
+    //  Task Decomposition Engine
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn task_decompose(
+        &self,
+        p: TaskDecomposeParams,
+    ) -> Result<CallToolResult, McpError> {
+        let goal = &p.goal;
+        let context = p.context.as_deref().unwrap_or("");
+        let max_depth = p.max_depth.unwrap_or(3);
+
+        // Analyze goal and decompose into atomic subtasks based on common patterns
+        let goal_lower = goal.to_lowercase();
+        let mut subtasks: Vec<serde_json::Value> = Vec::new();
+        let mut id = 1u32;
+
+        let patterns: &[(&str, &[&str])] = &[
+            ("navigate", &["navigate to target page"]),
+            ("login", &["navigate to login page", "find username field", "fill username", "find password field", "fill password", "click login button", "verify login success"]),
+            ("search", &["find search input", "type search query", "submit search", "wait for results", "extract results"]),
+            ("fill", &["find form fields", "fill form data", "validate form", "submit form"]),
+            ("click", &["find target element", "click element", "verify action result"]),
+            ("extract", &["navigate to page", "wait for content", "extract data", "format output"]),
+            ("scrape", &["navigate to page", "wait for content", "extract elements", "paginate if needed", "collect results"]),
+            ("test", &["navigate to page", "verify page loaded", "check elements", "validate behavior", "report results"]),
+            ("submit", &["find form", "fill required fields", "validate inputs", "click submit", "verify submission"]),
+            ("download", &["navigate to resource", "find download link", "initiate download", "wait for completion"]),
+        ];
+
+        let mut matched = false;
+        for (keyword, steps) in patterns {
+            if goal_lower.contains(keyword) {
+                for step in *steps {
+                    subtasks.push(serde_json::json!({
+                        "id": format!("task_{id}"),
+                        "description": step,
+                        "complexity": if step.contains("navigate") { "low" }
+                            else if step.contains("extract") || step.contains("verify") { "medium" }
+                            else { "low" },
+                        "depth": 1
+                    }));
+                    id += 1;
+                }
+                matched = true;
+                break;
+            }
+        }
+
+        if !matched {
+            subtasks.push(serde_json::json!({ "id": "task_1", "description": format!("analyze: {goal}"), "complexity": "medium", "depth": 1 }));
+            subtasks.push(serde_json::json!({ "id": "task_2", "description": "execute primary action", "complexity": "medium", "depth": 1 }));
+            subtasks.push(serde_json::json!({ "id": "task_3", "description": "verify result", "complexity": "low", "depth": 1 }));
+        }
+
+        json_ok(&serde_json::json!({
+            "goal": goal,
+            "context": context,
+            "max_depth": max_depth,
+            "subtasks": subtasks,
+            "total": subtasks.len()
+        }))
+    }
+
+    pub(crate) async fn task_plan(
+        &self,
+        p: TaskPlanParams,
+    ) -> Result<CallToolResult, McpError> {
+        let strategy = p.strategy.as_deref().unwrap_or("sequential");
+        let plan_id = format!("plan_{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis());
+
+        let steps: Vec<serde_json::Value> = p.tasks.iter().enumerate().map(|(i, task)| {
+            let deps = match strategy {
+                "sequential" if i > 0 => vec![format!("step_{}", i)],
+                "dependency" if i > 0 => vec![format!("step_{}", i)],
+                _ => vec![],
+            };
+            serde_json::json!({
+                "id": format!("step_{}", i + 1),
+                "task": task,
+                "dependencies": deps,
+                "status": "pending",
+                "order": i + 1
+            })
+        }).collect();
+
+        let plan = serde_json::json!({
+            "plan_id": plan_id,
+            "strategy": strategy,
+            "steps": steps,
+            "total_steps": steps.len(),
+            "status": "created"
+        });
+
+        let mut state = self.browser.lock().await;
+        state.task_plans.push(plan.clone());
+
+        json_ok(&plan)
+    }
+
+    pub(crate) async fn task_status(
+        &self,
+        _v: serde_json::Value,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let plans = &state.task_plans;
+        json_ok(&serde_json::json!({
+            "plans": plans,
+            "total": plans.len()
+        }))
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Vision/LLM Observation Layer
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn vision_describe(
+        &self,
+        p: VisionDescribeParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let format = p.format.as_deref().unwrap_or("structured");
+        let selector_js = json_escape(p.selector.as_deref().unwrap_or(""));
+        let js = format!(r#"(() => {{
+            const sel = {selector_js};
+            const root = sel ? document.querySelector(sel) : document.body;
+            if (!root) return JSON.stringify({{ error: 'element not found' }});
+            const title = document.title;
+            const url = location.href;
+            const elements = [];
+            const interactive = root.querySelectorAll('button, a, input, select, textarea, [role="button"], [role="link"], [tabindex]');
+            interactive.forEach((el, i) => {{
+                if (i >= 50) return;
+                const rect = el.getBoundingClientRect();
+                elements.push({{
+                    role: el.getAttribute('role') || el.tagName.toLowerCase(),
+                    name: el.getAttribute('aria-label') || el.textContent?.trim().slice(0, 60) || '',
+                    bounds: {{ x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) }},
+                    text: (el.textContent || '').trim().slice(0, 80)
+                }});
+            }});
+            const headings = [];
+            root.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h => {{
+                headings.push({{ level: parseInt(h.tagName[1]), text: h.textContent.trim().slice(0, 100) }});
+            }});
+            return JSON.stringify({{
+                page_title: title,
+                url: url,
+                visible_elements: elements,
+                headings: headings,
+                interactive_elements_count: interactive.length,
+                layout_summary: root.children.length + ' top-level children'
+            }});
+        }})()"#);
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let mut val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        if let Some(obj) = val.as_object_mut() {
+            obj.insert("format".into(), serde_json::json!(format));
+        }
+        json_ok(&val)
+    }
+
+    pub(crate) async fn vision_locate(
+        &self,
+        p: VisionLocateParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let desc_js = json_escape(&p.description);
+        let strategy = p.strategy.as_deref().unwrap_or("semantic");
+        let js = format!(r#"(() => {{
+            const desc = {desc_js}.toLowerCase();
+            const matches = [];
+            const candidates = document.querySelectorAll('button, a, input, select, textarea, [role], [aria-label], label, h1, h2, h3, h4, h5, h6');
+            candidates.forEach(el => {{
+                let confidence = 0;
+                const role = el.getAttribute('role') || el.tagName.toLowerCase();
+                const name = (el.getAttribute('aria-label') || el.textContent || '').trim().toLowerCase();
+                const placeholder = (el.getAttribute('placeholder') || '').toLowerCase();
+                const title = (el.getAttribute('title') || '').toLowerCase();
+                // Text matching
+                if (name.includes(desc)) confidence += 0.5;
+                if (placeholder.includes(desc)) confidence += 0.4;
+                if (title.includes(desc)) confidence += 0.3;
+                // Role matching
+                const words = desc.split(' ');
+                if (words.some(w => role.includes(w))) confidence += 0.3;
+                if (words.some(w => name.includes(w))) confidence += 0.2;
+                if (confidence > 0.2) {{
+                    const tag = el.tagName.toLowerCase();
+                    const id = el.id ? '#' + el.id : '';
+                    const cls = el.className ? '.' + String(el.className).split(' ').filter(Boolean).slice(0, 2).join('.') : '';
+                    matches.push({{
+                        selector: tag + id + cls,
+                        role,
+                        name: (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 60),
+                        confidence: Math.min(confidence, 1.0)
+                    }});
+                }}
+            }});
+            matches.sort((a, b) => b.confidence - a.confidence);
+            return JSON.stringify({{
+                found: matches.length > 0,
+                matches: matches.slice(0, 5)
+            }});
+        }})()"#);
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let mut val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        if let Some(obj) = val.as_object_mut() {
+            obj.insert("strategy".into(), serde_json::json!(strategy));
+        }
+        json_ok(&val)
+    }
+
+    pub(crate) async fn vision_compare(
+        &self,
+        p: VisionCompareParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let threshold = p.threshold.unwrap_or(0.9);
+
+        // Get current page state
+        let current_js = r#"(() => {
+            const elements = [];
+            document.querySelectorAll('*').forEach(el => {
+                if (el.children.length === 0 || el.tagName === 'A' || el.tagName === 'BUTTON') {
+                    const text = (el.textContent || '').trim();
+                    if (text.length > 0 && text.length < 200) {
+                        elements.push({
+                            tag: el.tagName.toLowerCase(),
+                            role: el.getAttribute('role') || '',
+                            text: text.slice(0, 100),
+                            id: el.id || ''
+                        });
+                    }
+                }
+            });
+            return JSON.stringify({ title: document.title, url: location.href, elements: elements.slice(0, 100) });
+        })()"#;
+        let result = page.evaluate(current_js).await.mcp()?;
+        let current_raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let current_state: serde_json::Value = serde_json::from_str(&current_raw).unwrap_or_default();
+
+        let current_text = p.current.as_deref()
+            .map(|s| serde_json::from_str(s).unwrap_or(serde_json::json!({"raw": s})))
+            .unwrap_or(current_state);
+        let baseline: serde_json::Value = serde_json::from_str(&p.baseline)
+            .unwrap_or(serde_json::json!({"raw": p.baseline}));
+
+        // Compare structures
+        let baseline_str = serde_json::to_string(&baseline).unwrap_or_default();
+        let current_str = serde_json::to_string(&current_text).unwrap_or_default();
+
+        // Simple similarity: count matching character sequences
+        let max_len = baseline_str.len().max(current_str.len()).max(1);
+        let common = baseline_str.chars().zip(current_str.chars())
+            .filter(|(a, b)| a == b)
+            .count();
+        let similarity = common as f64 / max_len as f64;
+
+        let mut changes = Vec::new();
+        if let (Some(b_els), Some(c_els)) = (
+            baseline.get("elements").and_then(|e| e.as_array()),
+            current_text.get("elements").and_then(|e| e.as_array()),
+        ) {
+            if b_els.len() != c_els.len() {
+                changes.push(serde_json::json!({
+                    "type": "count_change",
+                    "element": "total_elements",
+                    "before": b_els.len(),
+                    "after": c_els.len()
+                }));
+            }
+        }
+
+        json_ok(&serde_json::json!({
+            "visual_similarity": (similarity * 100.0).round() / 100.0,
+            "threshold": threshold,
+            "passed": similarity >= threshold,
+            "structural_changes": changes,
+            "summary": if similarity >= threshold { "Pages are similar" } else { "Significant differences detected" }
+        }))
+    }
 }

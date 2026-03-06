@@ -112,6 +112,15 @@ action_enum!(BrowserAction, "browser", [
     FormInfer => "form_infer",
     FormAutoFill => "form_auto_fill",
     FormValidate => "form_validate",
+    // Self-healing selector recovery
+    SelectorHeal => "selector_heal",
+    SelectorAlternatives => "selector_alternatives",
+    SelectorValidate => "selector_validate",
+    // Event-driven reaction system
+    EventSubscribe => "event_subscribe",
+    EventUnsubscribe => "event_unsubscribe",
+    EventPoll => "event_poll",
+    EventClear => "event_clear",
 ]);
 
 action_enum!(CrawlAction, "crawl", [
@@ -144,6 +153,14 @@ action_enum!(AgentAction, "agent", [
     IosNavigate => "ios_navigate",
     IosTap => "ios_tap",
     IosScreenshot => "ios_screenshot",
+    // Task decomposition engine
+    TaskDecompose => "task_decompose",
+    TaskPlan => "task_plan",
+    TaskStatus => "task_status",
+    // Vision/LLM observation layer
+    VisionDescribe => "vision_describe",
+    VisionLocate => "vision_locate",
+    VisionCompare => "vision_compare",
 ]);
 
 action_enum!(StealthAction, "stealth", [
@@ -216,6 +233,16 @@ action_enum!(AutomateAction, "automate", [
     ErrorClassify => "error_classify",
     RecoverySuggest => "recovery_suggest",
     ErrorHistory => "error_history",
+    // Session checkpoints/resume
+    CheckpointSave => "checkpoint_save",
+    CheckpointRestore => "checkpoint_restore",
+    CheckpointList => "checkpoint_list",
+    CheckpointDelete => "checkpoint_delete",
+    // Extended workflow DSL
+    WorkflowWhile => "workflow_while",
+    WorkflowForEach => "workflow_for_each",
+    WorkflowIf => "workflow_if",
+    WorkflowVariable => "workflow_variable",
 ]);
 
 action_enum!(PerfAction, "perf", [
@@ -302,8 +329,10 @@ mod tests {
             "shadow_query", "shadow_text", "deep_query",
             "context_set", "context_get", "context_list", "context_clear",
             "context_transfer", "form_infer", "form_auto_fill", "form_validate",
+            "selector_heal", "selector_alternatives", "selector_validate",
+            "event_subscribe", "event_unsubscribe", "event_poll", "event_clear",
         ];
-        assert_eq!(actions.len(), 77);
+        assert_eq!(actions.len(), 84);
         for a in &actions {
             assert!(BrowserAction::parse(a).is_ok(), "failed to parse: {a}");
         }

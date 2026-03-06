@@ -1,6 +1,7 @@
 //! Handler implementations for the `automate` super-tool.
 
 use rmcp::{ErrorData as McpError, model::*};
+use crate::cdp_tools::*;
 use crate::helpers::{mcp_err, ensure_page, json_ok, parse_json_str, json_escape, McpResult};
 use crate::types::*;
 use crate::OneCrawlMcp;
@@ -725,5 +726,371 @@ impl OneCrawlMcp {
             "errors": entries,
             "total": entries.len(),
         }))
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Session Checkpoints / Resume
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn checkpoint_save(
+        &self,
+        p: CheckpointSaveParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let include_cookies = p.include_cookies.unwrap_or(true);
+        let include_storage = p.include_storage.unwrap_or(true);
+        let include_context = p.include_context.unwrap_or(true);
+
+        // Capture URL
+        let url_js = "location.href";
+        let url_result = page.evaluate(url_js).await.mcp()?;
+        let url = url_result.into_value::<String>().unwrap_or_else(|_| "about:blank".into());
+
+        // Capture cookies via JS
+        let cookies = if include_cookies {
+            let cookie_result = page.evaluate("document.cookie").await.mcp()?;
+            cookie_result.into_value::<String>().ok()
+        } else {
+            None
+        };
+
+        // Capture storage via JS
+        let storage = if include_storage {
+            let storage_js = r#"(() => {
+                const ls = {};
+                for (let i = 0; i < localStorage.length; i++) {
+                    const k = localStorage.key(i);
+                    ls[k] = localStorage.getItem(k);
+                }
+                const ss = {};
+                for (let i = 0; i < sessionStorage.length; i++) {
+                    const k = sessionStorage.key(i);
+                    ss[k] = sessionStorage.getItem(k);
+                }
+                return JSON.stringify({ localStorage: ls, sessionStorage: ss });
+            })()"#;
+            let result = page.evaluate(storage_js).await.mcp()?;
+            let raw = result.into_value::<String>().ok();
+            raw.and_then(|r| serde_json::from_str(&r).ok())
+        } else {
+            None::<serde_json::Value>
+        };
+
+        // Capture page context
+        let context = if include_context {
+            let state = self.browser.lock().await;
+            Some(serde_json::to_value(&state.page_context).unwrap_or_default())
+        } else {
+            None
+        };
+
+        let now = {
+            let d = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+            format!("{}s", d.as_secs())
+        };
+        let checkpoint = serde_json::json!({
+            "url": url,
+            "cookies": cookies,
+            "storage": storage,
+            "context": context,
+            "saved_at": now,
+        });
+
+        let size_bytes = serde_json::to_string(&checkpoint).unwrap_or_default().len();
+
+        let mut state = self.browser.lock().await;
+        state.checkpoints.insert(p.name.clone(), checkpoint);
+
+        json_ok(&serde_json::json!({
+            "name": p.name,
+            "saved_at": now,
+            "url": url,
+            "has_cookies": cookies.is_some(),
+            "has_storage": storage.is_some(),
+            "has_context": context.is_some(),
+            "size_bytes": size_bytes
+        }))
+    }
+
+    pub(crate) async fn checkpoint_restore(
+        &self,
+        p: CheckpointRestoreParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let restore_url = p.restore_url.unwrap_or(true);
+        let restore_cookies = p.restore_cookies.unwrap_or(true);
+
+        let checkpoint = {
+            let state = self.browser.lock().await;
+            state.checkpoints.get(&p.name).cloned()
+                .ok_or_else(|| mcp_err(format!("checkpoint '{}' not found", p.name)))?
+        };
+
+        let url = checkpoint.get("url").and_then(|u| u.as_str()).unwrap_or("about:blank");
+        let mut url_restored = false;
+        let mut cookies_restored = false;
+        let mut storage_restored = false;
+        let mut context_restored = false;
+
+        // Restore URL
+        if restore_url {
+            let nav_js = format!("location.href = {}", json_escape(url));
+            let _ = page.evaluate(nav_js).await;
+            url_restored = true;
+            // Small wait for navigation
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
+
+        // Restore cookies
+        if restore_cookies {
+            if let Some(cookie_str) = checkpoint.get("cookies").and_then(|c| c.as_str()) {
+                if !cookie_str.is_empty() {
+                    let cookie_js = format!("document.cookie = {}", json_escape(cookie_str));
+                    let _ = page.evaluate(cookie_js).await;
+                    cookies_restored = true;
+                }
+            }
+        }
+
+        // Restore storage
+        if let Some(storage) = checkpoint.get("storage") {
+            let storage_str = serde_json::to_string(storage).unwrap_or_else(|_| "{}".into());
+            let restore_js = format!(r#"(() => {{
+                const data = JSON.parse({storage_json});
+                if (data.localStorage) {{
+                    Object.entries(data.localStorage).forEach(([k,v]) => localStorage.setItem(k,v));
+                }}
+                if (data.sessionStorage) {{
+                    Object.entries(data.sessionStorage).forEach(([k,v]) => sessionStorage.setItem(k,v));
+                }}
+                return 'restored';
+            }})()"#, storage_json = json_escape(&storage_str));
+            let _ = page.evaluate(restore_js).await;
+            storage_restored = true;
+        }
+
+        // Restore context
+        if let Some(context) = checkpoint.get("context") {
+            if let Some(ctx_obj) = context.as_object() {
+                let mut state = self.browser.lock().await;
+                for (k, v) in ctx_obj {
+                    state.page_context.insert(k.clone(), v.clone());
+                }
+                context_restored = true;
+            }
+        }
+
+        let now = {
+            let d = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+            format!("{}s", d.as_secs())
+        };
+        json_ok(&serde_json::json!({
+            "name": p.name,
+            "restored_at": now,
+            "url": url,
+            "url_restored": url_restored,
+            "cookies_restored": cookies_restored,
+            "storage_restored": storage_restored,
+            "context_restored": context_restored
+        }))
+    }
+
+    pub(crate) async fn checkpoint_list(
+        &self,
+        _v: serde_json::Value,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let checkpoints: Vec<serde_json::Value> = state.checkpoints.iter().map(|(name, data)| {
+            let url = data.get("url").and_then(|u| u.as_str()).unwrap_or("");
+            let saved_at = data.get("saved_at").and_then(|s| s.as_str()).unwrap_or("");
+            let size = serde_json::to_string(data).unwrap_or_default().len();
+            serde_json::json!({
+                "name": name,
+                "saved_at": saved_at,
+                "url": url,
+                "size_bytes": size
+            })
+        }).collect();
+        let count = checkpoints.len();
+        json_ok(&serde_json::json!({
+            "checkpoints": checkpoints,
+            "count": count
+        }))
+    }
+
+    pub(crate) async fn checkpoint_delete(
+        &self,
+        p: CheckpointDeleteParams,
+    ) -> Result<CallToolResult, McpError> {
+        let mut state = self.browser.lock().await;
+        let existed = state.checkpoints.remove(&p.name).is_some();
+        json_ok(&serde_json::json!({
+            "name": p.name,
+            "deleted": existed
+        }))
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Extended Workflow DSL
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn workflow_while(
+        &self,
+        p: WorkflowWhileParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let max_iter = p.max_iterations.unwrap_or(100) as usize;
+        let mut iterations = 0usize;
+        let mut all_results: Vec<serde_json::Value> = Vec::new();
+
+        loop {
+            if iterations >= max_iter { break; }
+            // Evaluate condition
+            let cond_result = page.evaluate(p.condition.as_str()).await.mcp()?;
+            let cond_val = cond_result.into_value::<serde_json::Value>()
+                .unwrap_or(serde_json::Value::Bool(false));
+            let is_truthy = match &cond_val {
+                serde_json::Value::Bool(b) => *b,
+                serde_json::Value::Null => false,
+                serde_json::Value::Number(n) => n.as_f64().map(|f| f != 0.0).unwrap_or(false),
+                serde_json::Value::String(s) => !s.is_empty(),
+                _ => true,
+            };
+            if !is_truthy { break; }
+
+            let mut iter_results = Vec::new();
+            for action_val in &p.actions {
+                let cmd: ChainCommand = serde_json::from_value(action_val.clone())
+                    .map_err(|e| mcp_err(format!("invalid action in workflow_while: {e}")))?;
+                match self.dispatch_chain_command(&cmd).await {
+                    Ok(r) => iter_results.push(r),
+                    Err(e) => iter_results.push(serde_json::json!({"error": e})),
+                }
+            }
+            all_results.push(serde_json::json!(iter_results));
+            iterations += 1;
+        }
+
+        json_ok(&serde_json::json!({
+            "iterations_executed": iterations,
+            "results_per_iteration": all_results,
+            "max_iterations": max_iter
+        }))
+    }
+
+    pub(crate) async fn workflow_for_each(
+        &self,
+        p: WorkflowForEachParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let var_name = p.variable_name.as_deref().unwrap_or("item");
+
+        // Try to parse collection as JSON first, else evaluate as JS
+        let items: Vec<serde_json::Value> = if let Ok(arr) = serde_json::from_str::<Vec<serde_json::Value>>(&p.collection) {
+            arr
+        } else {
+            let js_result = page.evaluate(p.collection.as_str()).await.mcp()?;
+            let raw = js_result.into_value::<serde_json::Value>().unwrap_or_default();
+            match raw {
+                serde_json::Value::Array(arr) => arr,
+                other => vec![other],
+            }
+        };
+
+        let mut results: Vec<serde_json::Value> = Vec::new();
+        for item in &items {
+            // Set workflow variable for current item
+            {
+                let mut state = self.browser.lock().await;
+                state.workflow_variables.insert(var_name.to_string(), item.clone());
+            }
+
+            let mut iter_results = Vec::new();
+            for action_val in &p.actions {
+                let cmd: ChainCommand = serde_json::from_value(action_val.clone())
+                    .map_err(|e| mcp_err(format!("invalid action in workflow_for_each: {e}")))?;
+                match self.dispatch_chain_command(&cmd).await {
+                    Ok(r) => iter_results.push(r),
+                    Err(e) => iter_results.push(serde_json::json!({"error": e})),
+                }
+            }
+            results.push(serde_json::json!(iter_results));
+        }
+
+        json_ok(&serde_json::json!({
+            "items_processed": items.len(),
+            "results": results
+        }))
+    }
+
+    pub(crate) async fn workflow_if(
+        &self,
+        p: WorkflowIfParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+
+        let cond_result = page.evaluate(p.condition.as_str()).await.mcp()?;
+        let cond_val = cond_result.into_value::<serde_json::Value>()
+            .unwrap_or(serde_json::Value::Bool(false));
+        let is_truthy = match &cond_val {
+            serde_json::Value::Bool(b) => *b,
+            serde_json::Value::Null => false,
+            serde_json::Value::Number(n) => n.as_f64().map(|f| f != 0.0).unwrap_or(false),
+            serde_json::Value::String(s) => !s.is_empty(),
+            _ => true,
+        };
+
+        let actions = if is_truthy {
+            &p.then_actions
+        } else {
+            match &p.else_actions {
+                Some(acts) => acts,
+                None => return json_ok(&serde_json::json!({
+                    "condition_value": cond_val,
+                    "branch_taken": "else",
+                    "results": []
+                })),
+            }
+        };
+
+        let branch = if is_truthy { "then" } else { "else" };
+        let mut results = Vec::new();
+        for action_val in actions {
+            let cmd: ChainCommand = serde_json::from_value(action_val.clone())
+                .map_err(|e| mcp_err(format!("invalid action in workflow_if: {e}")))?;
+            match self.dispatch_chain_command(&cmd).await {
+                Ok(r) => results.push(r),
+                Err(e) => results.push(serde_json::json!({"error": e})),
+            }
+        }
+
+        json_ok(&serde_json::json!({
+            "condition_value": cond_val,
+            "branch_taken": branch,
+            "results": results
+        }))
+    }
+
+    pub(crate) async fn workflow_variable(
+        &self,
+        p: WorkflowVariableParams,
+    ) -> Result<CallToolResult, McpError> {
+        let mut state = self.browser.lock().await;
+        if let Some(value) = p.value {
+            state.workflow_variables.insert(p.name.clone(), value.clone());
+            json_ok(&serde_json::json!({
+                "name": p.name,
+                "value": value,
+                "action": "set"
+            }))
+        } else {
+            let value = state.workflow_variables.get(&p.name).cloned()
+                .unwrap_or(serde_json::Value::Null);
+            json_ok(&serde_json::json!({
+                "name": p.name,
+                "value": value,
+                "action": "get"
+            }))
+        }
     }
 }
