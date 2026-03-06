@@ -34,6 +34,10 @@ pub struct BrowserState {
     pub last_dialog: Option<DialogInfo>,
     pub dialog_auto_response: Option<DialogAutoResponse>,
     pub page_errors: Vec<PageError>,
+    // Page context (shared across tabs)
+    pub page_context: HashMap<String, serde_json::Value>,
+    // Error recovery history
+    pub error_history: Vec<(String, String, String)>,
 }
 
 pub type SharedBrowser = Arc<Mutex<BrowserState>>;
@@ -929,6 +933,84 @@ pub struct ShadowQueryParams {
 pub struct DeepQueryParams {
     #[schemars(description = "CSS selector using >>> for shadow-piercing (e.g. 'my-element >>> .inner')")]
     pub selector: String,
+}
+
+// ──────────────── Page Context params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct PageContextSetParams {
+    #[schemars(description = "Context key to set")]
+    pub key: String,
+    #[schemars(description = "Context value (any JSON)")]
+    pub value: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct PageContextGetParams {
+    #[schemars(description = "Context key to retrieve")]
+    pub key: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct PageContextTransferParams {
+    #[schemars(description = "Source tab index")]
+    pub from_tab: usize,
+    #[schemars(description = "Target tab index")]
+    pub to_tab: usize,
+    #[schemars(description = "Keys to transfer (None = all)")]
+    pub keys: Option<Vec<String>>,
+}
+
+// ──────────────── Smart Form Mapping params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct FormInferParams {
+    #[schemars(description = "CSS selector of the form (default: 'form')")]
+    pub selector: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct FormAutoFillParams {
+    #[schemars(description = "Data to fill as JSON object (e.g. {\"email\":\"test@x.com\"})")]
+    pub data: serde_json::Value,
+    #[schemars(description = "CSS selector of the form (default: 'form')")]
+    pub selector: Option<String>,
+    #[schemars(description = "Minimum match confidence 0.0-1.0 (default: 0.5)")]
+    pub confidence_threshold: Option<f64>,
+}
+
+// ──────────────── Error Recovery params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct RetryAdaptParams {
+    #[schemars(description = "Action name to retry")]
+    pub action: String,
+    #[schemars(description = "Parameters for the action")]
+    pub params: serde_json::Value,
+    #[schemars(description = "Maximum retries (default: 3)")]
+    pub max_retries: Option<u32>,
+    #[schemars(description = "Retry strategy: 'exponential' | 'linear' | 'immediate'")]
+    pub strategy: Option<String>,
+    #[schemars(description = "Error handling: 'retry' | 'skip' | 'alternative'")]
+    pub on_error: Option<String>,
+    #[schemars(description = "Alternative action name if on_error='alternative'")]
+    pub alternative_action: Option<String>,
+    #[schemars(description = "Alternative action params")]
+    pub alternative_params: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ErrorClassifyParams {
+    #[schemars(description = "Error message to classify")]
+    pub error_message: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct RecoveryStrategyParams {
+    #[schemars(description = "Error type: 'selector_not_found' | 'timeout' | 'navigation' | 'network'")]
+    pub error_type: String,
+    #[schemars(description = "Additional context for generating recovery steps")]
+    pub context: Option<serde_json::Value>,
 }
 
 #[cfg(test)]

@@ -176,7 +176,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "browser",
-        description = "Browser navigation, interaction, extraction, multi-tab, DOM events, session, network interception, console/dialog, device emulation, drag/drop, file upload, shadow DOM.\n\nActions:\n- goto {url} — Navigate to URL\n- click {selector} — Click element\n- type {selector, text} — Type into input\n- screenshot {selector?, full_page?} — Screenshot\n- pdf {landscape?} — Export PDF\n- back / forward / reload — Navigation\n- wait {selector, timeout_ms?} — Wait for element\n- evaluate {js} — Execute JavaScript\n- snapshot {interactive_only?, compact?, depth?} — A11y snapshot\n- css / xpath / find_text — Query elements\n- text / html / markdown / structured — Extract content\n- stream — Paginated extraction\n- detect_forms / fill_form — Forms\n- snapshot_diff — Diff snapshots\n- parse_a11y / parse_selector / parse_text / parse_links — Offline\n- new_tab / list_tabs / switch_tab / close_tab — Multi-tab\n- observe_mutations / get_mutations / stop_mutations / wait_for_event — DOM\n- cookies_get / cookies_set / cookies_clear — Cookies\n- storage_get / storage_set / export_session / import_session — Storage\n- intercept_enable / intercept_add_rule / intercept_remove_rule / intercept_list / intercept_disable / block_requests — Network\n- console_start / console_get / console_clear / dialog_handle / dialog_get / errors_get — Debug\n- emulate_device / emulate_geolocation / emulate_timezone / emulate_media / emulate_network — Emulation\n- drag {source, target} — Drag and drop\n- hover {selector} — Mouse hover\n- keyboard {keys, selector?} — Keyboard shortcuts\n- select {selector, value?, text?, index?} — Select dropdown option\n- upload {selector, file_path} — File upload\n- download_wait / download_list / download_set_dir — Downloads\n- shadow_query / shadow_text {host_selector, inner_selector} — Shadow DOM\n- deep_query {selector} — Pierce shadow DOM with >>>"
+        description = "Browser navigation, interaction, extraction, multi-tab, DOM events, session, network interception, console/dialog, device emulation, drag/drop, file upload, shadow DOM.\n\nActions:\n- goto {url} — Navigate to URL\n- click {selector} — Click element\n- type {selector, text} — Type into input\n- screenshot {selector?, full_page?} — Screenshot\n- pdf {landscape?} — Export PDF\n- back / forward / reload — Navigation\n- wait {selector, timeout_ms?} — Wait for element\n- evaluate {js} — Execute JavaScript\n- snapshot {interactive_only?, compact?, depth?} — A11y snapshot\n- css / xpath / find_text — Query elements\n- text / html / markdown / structured — Extract content\n- stream — Paginated extraction\n- detect_forms / fill_form — Forms\n- snapshot_diff — Diff snapshots\n- parse_a11y / parse_selector / parse_text / parse_links — Offline\n- new_tab / list_tabs / switch_tab / close_tab — Multi-tab\n- observe_mutations / get_mutations / stop_mutations / wait_for_event — DOM\n- cookies_get / cookies_set / cookies_clear — Cookies\n- storage_get / storage_set / export_session / import_session — Storage\n- intercept_enable / intercept_add_rule / intercept_remove_rule / intercept_list / intercept_disable / block_requests — Network\n- console_start / console_get / console_clear / dialog_handle / dialog_get / errors_get — Debug\n- emulate_device / emulate_geolocation / emulate_timezone / emulate_media / emulate_network — Emulation\n- drag {source, target} — Drag and drop\n- hover {selector} — Mouse hover\n- keyboard {keys, selector?} — Keyboard shortcuts\n- select {selector, value?, text?, index?} — Select dropdown option\n- upload {selector, file_path} — File upload\n- download_wait / download_list / download_set_dir — Downloads\n- shadow_query / shadow_text {host_selector, inner_selector} — Shadow DOM\n- deep_query {selector} — Pierce shadow DOM with >>>\n- context_set {key, value} / context_get {key} / context_list / context_clear / context_transfer {from_tab, to_tab, keys?} — Page context\n- form_infer {selector?} / form_auto_fill {data, selector?, confidence_threshold?} / form_validate — Smart form mapping"
     )]
     async fn tool_browser(
         &self,
@@ -429,6 +429,31 @@ impl OneCrawlMcp {
                 let params: DeepQueryParams = parse_params(v, "deep_query")?;
                 self.deep_query(params).await
             }
+            // Page Context
+            BrowserAction::ContextSet => {
+                let params: PageContextSetParams = parse_params(v, "context_set")?;
+                self.context_set(params).await
+            }
+            BrowserAction::ContextGet => {
+                let params: PageContextGetParams = parse_params(v, "context_get")?;
+                self.context_get(params).await
+            }
+            BrowserAction::ContextList => self.context_list(v).await,
+            BrowserAction::ContextClear => self.context_clear(v).await,
+            BrowserAction::ContextTransfer => {
+                let params: PageContextTransferParams = parse_params(v, "context_transfer")?;
+                self.context_transfer(params).await
+            }
+            // Smart Form Mapping
+            BrowserAction::FormInfer => {
+                let params: FormInferParams = parse_params(v, "form_infer")?;
+                self.form_infer(params).await
+            }
+            BrowserAction::FormAutoFill => {
+                let params: FormAutoFillParams = parse_params(v, "form_auto_fill")?;
+                self.form_auto_fill(params).await
+            }
+            BrowserAction::FormValidate => self.form_validate(v).await,
         }
     }
 
@@ -805,7 +830,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "automate",
-        description = "Workflow automation, AI task planning, and execution control.\n\nActions:\n- workflow_validate {workflow} — Validate a workflow definition\n- workflow_run {workflow} — Execute a workflow\n- plan {goal, context?} — Generate automation plan from goal\n- execute {plan, max_retries?} — Execute a generated plan\n- patterns — List available automation patterns\n- rate_limit {action?, max_per_minute?} — Check/configure rate limiter\n- retry {url?, operation?, reason?} — Enqueue retry with backoff"
+        description = "Workflow automation, AI task planning, and execution control.\n\nActions:\n- workflow_validate {workflow} — Validate a workflow definition\n- workflow_run {workflow} — Execute a workflow\n- plan {goal, context?} — Generate automation plan from goal\n- execute {plan, max_retries?} — Execute a generated plan\n- patterns — List available automation patterns\n- rate_limit {action?, max_per_minute?} — Check/configure rate limiter\n- retry {url?, operation?, reason?} — Enqueue retry with backoff\n- retry_adapt {action, params, max_retries?, strategy?} — Smart retry with adaptive strategy\n- error_classify {error_message} — Classify error into categories\n- recovery_suggest {error_type, context?} — Suggest recovery steps\n- error_history — List recent error history"
     )]
     async fn tool_automate(
         &self,
@@ -843,6 +868,20 @@ impl OneCrawlMcp {
                 let params: RetryEnqueueParams = parse_params(v, "retry")?;
                 self.automation_retry(params).await
             }
+            // Error Recovery
+            AutomateAction::RetryAdapt => {
+                let params: RetryAdaptParams = parse_params(v, "retry_adapt")?;
+                self.retry_adapt(params).await
+            }
+            AutomateAction::ErrorClassify => {
+                let params: ErrorClassifyParams = parse_params(v, "error_classify")?;
+                self.error_classify(params).await
+            }
+            AutomateAction::RecoverySuggest => {
+                let params: RecoveryStrategyParams = parse_params(v, "recovery_suggest")?;
+                self.recovery_suggest(params).await
+            }
+            AutomateAction::ErrorHistory => self.error_history(v).await,
         }
     }
 

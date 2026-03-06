@@ -1662,4 +1662,263 @@ impl OneCrawlMcp {
         let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
         json_ok(&val)
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Page Context (shared across tabs)
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn context_set(
+        &self,
+        p: PageContextSetParams,
+    ) -> Result<CallToolResult, McpError> {
+        let mut state = self.browser.lock().await;
+        state.page_context.insert(p.key.clone(), p.value.clone());
+        json_ok(&serde_json::json!({
+            "set": p.key,
+            "value": p.value,
+            "total_keys": state.page_context.len()
+        }))
+    }
+
+    pub(crate) async fn context_get(
+        &self,
+        p: PageContextGetParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        match state.page_context.get(&p.key) {
+            Some(val) => json_ok(&serde_json::json!({
+                "key": p.key,
+                "value": val,
+                "found": true
+            })),
+            None => json_ok(&serde_json::json!({
+                "key": p.key,
+                "found": false
+            })),
+        }
+    }
+
+    pub(crate) async fn context_list(
+        &self,
+        _v: serde_json::Value,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let entries: serde_json::Map<String, serde_json::Value> = state
+            .page_context
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        json_ok(&serde_json::json!({
+            "context": entries,
+            "total_keys": entries.len()
+        }))
+    }
+
+    pub(crate) async fn context_clear(
+        &self,
+        _v: serde_json::Value,
+    ) -> Result<CallToolResult, McpError> {
+        let mut state = self.browser.lock().await;
+        let count = state.page_context.len();
+        state.page_context.clear();
+        json_ok(&serde_json::json!({
+            "cleared": count,
+            "total_keys": 0
+        }))
+    }
+
+    pub(crate) async fn context_transfer(
+        &self,
+        p: PageContextTransferParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let tab_count = state.tabs.len();
+        if p.from_tab >= tab_count {
+            return Err(mcp_err(format!(
+                "from_tab {} out of range (have {} tabs)", p.from_tab, tab_count
+            )));
+        }
+        if p.to_tab >= tab_count {
+            return Err(mcp_err(format!(
+                "to_tab {} out of range (have {} tabs)", p.to_tab, tab_count
+            )));
+        }
+
+        let snapshot: HashMap<String, serde_json::Value> = match &p.keys {
+            Some(keys) => state
+                .page_context
+                .iter()
+                .filter(|(k, _)| keys.contains(k))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+            None => state.page_context.clone(),
+        };
+
+        let transferred = snapshot.len();
+        json_ok(&serde_json::json!({
+            "from_tab": p.from_tab,
+            "to_tab": p.to_tab,
+            "transferred_keys": transferred,
+            "keys": snapshot.keys().collect::<Vec<_>>()
+        }))
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Smart Form Mapping
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn form_infer(
+        &self,
+        p: FormInferParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let sel = p.selector.as_deref().unwrap_or("form");
+        let js = format!(
+            r##"(() => {{
+                const form = document.querySelector({sel});
+                if (!form) return JSON.stringify({{error: 'form not found'}});
+                const fields = [];
+                const inputs = form.querySelectorAll('input, select, textarea');
+                inputs.forEach(el => {{
+                    const name = el.name || '';
+                    const id = el.id || '';
+                    const type = el.type || el.tagName.toLowerCase();
+                    const placeholder = el.placeholder || '';
+                    const required = el.required || false;
+                    const labelEl = el.id ? document.querySelector('label[for="' + el.id + '"]') : null;
+                    const label = labelEl ? labelEl.textContent.trim() : '';
+                    const ariaLabel = el.getAttribute('aria-label') || '';
+                    let purpose = 'unknown';
+                    const hints = (name + ' ' + id + ' ' + label + ' ' + placeholder + ' ' + ariaLabel).toLowerCase();
+                    if (/e[-_]?mail|correo/.test(hints)) purpose = 'email';
+                    else if (/pass(word)?|pwd|contraseña/.test(hints)) purpose = 'password';
+                    else if (/first[-_]?name|fname|nombre/.test(hints)) purpose = 'first_name';
+                    else if (/last[-_]?name|lname|apellido|surname/.test(hints)) purpose = 'last_name';
+                    else if (/^name$|full[-_]?name|your[-_]?name/.test(hints)) purpose = 'name';
+                    else if (/phone|tel|móvil|celular/.test(hints)) purpose = 'phone';
+                    else if (/address|dirección|street|calle/.test(hints)) purpose = 'address';
+                    else if (/city|ciudad|town/.test(hints)) purpose = 'city';
+                    else if (/state|estado|province|provincia/.test(hints)) purpose = 'state';
+                    else if (/zip|postal|código/.test(hints)) purpose = 'zip';
+                    else if (/country|país/.test(hints)) purpose = 'country';
+                    else if (/company|org|empresa/.test(hints)) purpose = 'company';
+                    else if (/url|website|sitio/.test(hints)) purpose = 'url';
+                    else if (/search|buscar/.test(hints)) purpose = 'search';
+                    else if (/message|comment|mensaje|comentario/.test(hints)) purpose = 'message';
+                    else if (/subject|asunto/.test(hints)) purpose = 'subject';
+                    fields.push({{ name, id, type, placeholder, label, ariaLabel, required, purpose }});
+                }});
+                return JSON.stringify({{ fields, count: fields.length, selector: {selStr} }});
+            }})()"##,
+            sel = json_escape(sel),
+            selStr = json_escape(sel)
+        );
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        json_ok(&val)
+    }
+
+    pub(crate) async fn form_auto_fill(
+        &self,
+        p: FormAutoFillParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let sel = p.selector.as_deref().unwrap_or("form");
+        let threshold = p.confidence_threshold.unwrap_or(0.5);
+        let data_json = serde_json::to_string(&p.data)
+            .unwrap_or_else(|_| "{}".into());
+        let js = format!(
+            r##"(() => {{
+                const form = document.querySelector({sel});
+                if (!form) return JSON.stringify({{error: 'form not found'}});
+                const data = {data};
+                const threshold = {threshold};
+                const filled = [];
+                const skipped = [];
+                const inputs = form.querySelectorAll('input, select, textarea');
+                for (const [dataKey, dataVal] of Object.entries(data)) {{
+                    let bestMatch = null;
+                    let bestScore = 0;
+                    inputs.forEach(el => {{
+                        const hints = [
+                            el.name || '', el.id || '', el.placeholder || '',
+                            el.getAttribute('aria-label') || '',
+                            (el.id ? (document.querySelector('label[for="' + el.id + '"]') || {{}}).textContent : '') || ''
+                        ].map(s => s.toLowerCase());
+                        const dk = dataKey.toLowerCase().replace(/[-_]/g, '');
+                        let score = 0;
+                        for (const h of hints) {{
+                            const hn = h.replace(/[-_\\s]/g, '');
+                            if (hn === dk) {{ score = Math.max(score, 1.0); break; }}
+                            if (hn.includes(dk) || dk.includes(hn)) score = Math.max(score, 0.7);
+                        }}
+                        if (score > bestScore) {{ bestScore = score; bestMatch = el; }}
+                    }});
+                    if (bestMatch && bestScore >= threshold) {{
+                        if (bestMatch.tagName === 'SELECT') {{
+                            bestMatch.value = String(dataVal);
+                            bestMatch.dispatchEvent(new Event('change', {{bubbles:true}}));
+                        }} else {{
+                            bestMatch.value = String(dataVal);
+                            bestMatch.dispatchEvent(new Event('input', {{bubbles:true}}));
+                            bestMatch.dispatchEvent(new Event('change', {{bubbles:true}}));
+                        }}
+                        filled.push({{ key: dataKey, selector: bestMatch.name || bestMatch.id, confidence: bestScore }});
+                    }} else {{
+                        skipped.push({{ key: dataKey, reason: bestMatch ? 'low confidence (' + bestScore.toFixed(2) + ')' : 'no match' }});
+                    }}
+                }}
+                return JSON.stringify({{ filled, skipped, total_filled: filled.length, total_skipped: skipped.length }});
+            }})()"##,
+            sel = json_escape(sel),
+            data = data_json,
+            threshold = threshold
+        );
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        json_ok(&val)
+    }
+
+    pub(crate) async fn form_validate(
+        &self,
+        _v: serde_json::Value,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"(() => {
+            const forms = document.querySelectorAll('form');
+            if (forms.length === 0) return JSON.stringify({error: 'no forms found'});
+            const results = [];
+            forms.forEach((form, fi) => {
+                const fields = [];
+                const inputs = form.querySelectorAll('input, select, textarea');
+                let valid = true;
+                inputs.forEach(el => {
+                    const v = el.checkValidity();
+                    if (!v) valid = false;
+                    fields.push({
+                        name: el.name || el.id || el.tagName.toLowerCase(),
+                        type: el.type || el.tagName.toLowerCase(),
+                        valid: v,
+                        message: el.validationMessage || '',
+                        value_length: (el.value || '').length
+                    });
+                });
+                results.push({
+                    form_index: fi,
+                    action: form.action || '',
+                    method: form.method || 'get',
+                    valid: valid,
+                    fields: fields,
+                    field_count: fields.length
+                });
+            });
+            return JSON.stringify({ forms: results, total: results.length });
+        })()"#;
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        json_ok(&val)
+    }
 }

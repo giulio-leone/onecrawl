@@ -102,6 +102,16 @@ action_enum!(BrowserAction, "browser", [
     ShadowQuery => "shadow_query",
     ShadowText => "shadow_text",
     DeepQuery => "deep_query",
+    // Page context
+    ContextSet => "context_set",
+    ContextGet => "context_get",
+    ContextList => "context_list",
+    ContextClear => "context_clear",
+    ContextTransfer => "context_transfer",
+    // Smart form mapping
+    FormInfer => "form_infer",
+    FormAutoFill => "form_auto_fill",
+    FormValidate => "form_validate",
 ]);
 
 action_enum!(CrawlAction, "crawl", [
@@ -201,6 +211,11 @@ action_enum!(AutomateAction, "automate", [
     Patterns => "patterns",
     RateLimit => "rate_limit",
     Retry => "retry",
+    // Error recovery
+    RetryAdapt => "retry_adapt",
+    ErrorClassify => "error_classify",
+    RecoverySuggest => "recovery_suggest",
+    ErrorHistory => "error_history",
 ]);
 
 action_enum!(PerfAction, "perf", [
@@ -251,6 +266,10 @@ mod tests {
         assert_eq!(ComputerAction::parse("act").unwrap(), ComputerAction::Act);
         assert_eq!(MemoryAction::parse("store").unwrap(), MemoryAction::Store);
         assert_eq!(AutomateAction::parse("plan").unwrap(), AutomateAction::Plan);
+        assert_eq!(AutomateAction::parse("retry_adapt").unwrap(), AutomateAction::RetryAdapt);
+        assert_eq!(AutomateAction::parse("error_classify").unwrap(), AutomateAction::ErrorClassify);
+        assert_eq!(AutomateAction::parse("recovery_suggest").unwrap(), AutomateAction::RecoverySuggest);
+        assert_eq!(AutomateAction::parse("error_history").unwrap(), AutomateAction::ErrorHistory);
         assert_eq!(PerfAction::parse("audit").unwrap(), PerfAction::Audit);
     }
 
@@ -281,8 +300,10 @@ mod tests {
             "drag", "hover", "keyboard", "select",
             "upload", "download_wait", "download_list", "download_set_dir",
             "shadow_query", "shadow_text", "deep_query",
+            "context_set", "context_get", "context_list", "context_clear",
+            "context_transfer", "form_infer", "form_auto_fill", "form_validate",
         ];
-        assert_eq!(actions.len(), 69);
+        assert_eq!(actions.len(), 77);
         for a in &actions {
             assert!(BrowserAction::parse(a).is_ok(), "failed to parse: {a}");
         }

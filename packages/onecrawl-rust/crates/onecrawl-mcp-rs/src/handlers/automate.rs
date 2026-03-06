@@ -545,4 +545,185 @@ impl OneCrawlMcp {
             }
         }
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Intelligent Error Recovery
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn retry_adapt(
+        &self,
+        p: crate::cdp_tools::RetryAdaptParams,
+    ) -> Result<CallToolResult, McpError> {
+        let max_retries = p.max_retries.unwrap_or(3);
+        let strategy = p.strategy.as_deref().unwrap_or("exponential");
+        let on_error = p.on_error.as_deref().unwrap_or("retry");
+
+        let delays: Vec<u64> = match strategy {
+            "linear" => (1..=max_retries).map(|i| i as u64 * 1000).collect(),
+            "immediate" => vec![0; max_retries as usize],
+            _ => (0..max_retries).map(|i| 2u64.pow(i) * 1000).collect(),
+        };
+
+        json_ok(&serde_json::json!({
+            "action": p.action,
+            "params": p.params,
+            "strategy": {
+                "type": strategy,
+                "max_retries": max_retries,
+                "delays_ms": delays,
+                "on_error": on_error,
+            },
+            "alternative": if on_error == "alternative" {
+                serde_json::json!({
+                    "action": p.alternative_action,
+                    "params": p.alternative_params,
+                })
+            } else {
+                serde_json::Value::Null
+            },
+            "instructions": format!(
+                "Execute '{}' with {} strategy (max {} retries). On error: {}.",
+                p.action, strategy, max_retries, on_error
+            )
+        }))
+    }
+
+    pub(crate) async fn error_classify(
+        &self,
+        p: crate::cdp_tools::ErrorClassifyParams,
+    ) -> Result<CallToolResult, McpError> {
+        let msg = p.error_message.to_lowercase();
+
+        let (category, severity, retryable) = if msg.contains("not found") || msg.contains("no such element")
+            || msg.contains("queryselector") || msg.contains("null reference")
+        {
+            ("selector_not_found", "medium", true)
+        } else if msg.contains("timeout") || msg.contains("timed out")
+            || msg.contains("deadline exceeded")
+        {
+            ("timeout", "medium", true)
+        } else if msg.contains("net::err") || msg.contains("network")
+            || msg.contains("fetch failed") || msg.contains("econnrefused")
+            || msg.contains("dns")
+        {
+            ("network", "high", true)
+        } else if msg.contains("navigation") || msg.contains("navigat")
+            || msg.contains("net::err_aborted")
+        {
+            ("navigation", "medium", true)
+        } else if msg.contains("permission") || msg.contains("denied")
+            || msg.contains("forbidden") || msg.contains("403")
+        {
+            ("permission", "high", false)
+        } else if msg.contains("crash") || msg.contains("oom")
+            || msg.contains("out of memory")
+        {
+            ("crash", "critical", false)
+        } else if msg.contains("syntax") || msg.contains("parse")
+            || msg.contains("unexpected token")
+        {
+            ("syntax", "low", false)
+        } else if msg.contains("stale") || msg.contains("detached") {
+            ("stale_element", "medium", true)
+        } else {
+            ("unknown", "medium", false)
+        };
+
+        // Record in error history
+        {
+            let mut state = self.browser.lock().await;
+            let ts = {
+                let dur = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default();
+                format!("{}s", dur.as_secs())
+            };
+            state.error_history.push((ts, category.to_string(), p.error_message.clone()));
+            if state.error_history.len() > 100 {
+                state.error_history.remove(0);
+            }
+        }
+
+        json_ok(&serde_json::json!({
+            "category": category,
+            "severity": severity,
+            "retryable": retryable,
+            "original_message": p.error_message,
+        }))
+    }
+
+    pub(crate) async fn recovery_suggest(
+        &self,
+        p: crate::cdp_tools::RecoveryStrategyParams,
+    ) -> Result<CallToolResult, McpError> {
+        let steps: Vec<serde_json::Value> = match p.error_type.as_str() {
+            "selector_not_found" => vec![
+                serde_json::json!({"step": 1, "action": "snapshot", "description": "Take accessibility snapshot to find correct selectors"}),
+                serde_json::json!({"step": 2, "action": "wait", "description": "Wait for element with increased timeout (5000ms)"}),
+                serde_json::json!({"step": 3, "action": "evaluate", "description": "Use document.querySelectorAll to check if element exists in DOM"}),
+                serde_json::json!({"step": 4, "action": "css", "description": "Try broader CSS selector or use text-based matching"}),
+            ],
+            "timeout" => vec![
+                serde_json::json!({"step": 1, "action": "wait", "description": "Increase timeout to 30000ms and retry"}),
+                serde_json::json!({"step": 2, "action": "reload", "description": "Reload page and retry the action"}),
+                serde_json::json!({"step": 3, "action": "emulate_network", "description": "Check if network throttling is active"}),
+                serde_json::json!({"step": 4, "action": "errors_get", "description": "Check for JavaScript errors blocking execution"}),
+            ],
+            "navigation" => vec![
+                serde_json::json!({"step": 1, "action": "goto", "description": "Retry navigation with full URL"}),
+                serde_json::json!({"step": 2, "action": "evaluate", "description": "Check window.location to verify current page"}),
+                serde_json::json!({"step": 3, "action": "back", "description": "Go back and retry navigation"}),
+                serde_json::json!({"step": 4, "action": "cookies_clear", "description": "Clear cookies and retry (auth redirect issue)"}),
+            ],
+            "network" => vec![
+                serde_json::json!({"step": 1, "action": "wait", "description": "Wait 5 seconds for network recovery"}),
+                serde_json::json!({"step": 2, "action": "reload", "description": "Reload page to retry network requests"}),
+                serde_json::json!({"step": 3, "action": "intercept_list", "description": "Check if interception rules are blocking requests"}),
+                serde_json::json!({"step": 4, "action": "goto", "description": "Navigate to a known-good URL to test connectivity"}),
+            ],
+            "permission" => vec![
+                serde_json::json!({"step": 1, "action": "cookies_get", "description": "Check authentication cookies"}),
+                serde_json::json!({"step": 2, "action": "storage_get", "description": "Check stored auth tokens"}),
+                serde_json::json!({"step": 3, "action": "goto", "description": "Navigate to login page"}),
+            ],
+            "stale_element" => vec![
+                serde_json::json!({"step": 1, "action": "wait", "description": "Wait for DOM to stabilize after navigation/mutation"}),
+                serde_json::json!({"step": 2, "action": "snapshot", "description": "Take fresh snapshot to get updated selectors"}),
+                serde_json::json!({"step": 3, "action": "css", "description": "Re-query the element with same selector"}),
+            ],
+            _ => vec![
+                serde_json::json!({"step": 1, "action": "screenshot", "description": "Take screenshot to assess current state"}),
+                serde_json::json!({"step": 2, "action": "errors_get", "description": "Check for page errors"}),
+                serde_json::json!({"step": 3, "action": "console_get", "description": "Check console messages for clues"}),
+            ],
+        };
+
+        json_ok(&serde_json::json!({
+            "error_type": p.error_type,
+            "recovery_steps": steps,
+            "context": p.context,
+        }))
+    }
+
+    pub(crate) async fn error_history(
+        &self,
+        _v: serde_json::Value,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let entries: Vec<serde_json::Value> = state
+            .error_history
+            .iter()
+            .map(|(ts, cat, msg)| {
+                serde_json::json!({
+                    "timestamp": ts,
+                    "category": cat,
+                    "message": msg,
+                })
+            })
+            .collect();
+        json_ok(&serde_json::json!({
+            "errors": entries,
+            "total": entries.len(),
+        }))
+    }
 }
