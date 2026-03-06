@@ -1,2474 +1,2229 @@
 # OneCrawl MCP API Reference
 
-> **108 tools across 20 namespaces** for browser automation, web scraping, anti-detection, and AI-driven computer use.
+> **10 consolidated tools • 108 actions • Action-based dispatch**
+
+All browser automation, crawling, scraping, security, and AI orchestration capabilities are accessed through 10 super-tools. Each tool accepts a uniform `{ action, params }` interface.
 
 ---
 
-## Quick Start
+## Quick Reference
 
-OneCrawl exposes an MCP (Model Context Protocol) server over **stdio**. Connect via any MCP-compatible client:
+| Tool | Actions | Description |
+|------|:-------:|-------------|
+| [`browser`](#1-browser) | 26 | Navigation, interaction, scraping, content extraction, offline HTML parsing |
+| [`crawl`](#2-crawl) | 5 | Web crawling, robots.txt, sitemaps, DOM snapshots |
+| [`agent`](#3-agent) | 21 | Command chains, API capture, iframes, remote CDP, safety, screencast, recording, iOS |
+| [`stealth`](#4-stealth) | 5 | Anti-detection patches, fingerprinting, CAPTCHA detection |
+| [`data`](#5-data) | 10 | Data pipelines, HTTP client, link graphs, network intelligence |
+| [`secure`](#6-secure) | 13 | Encryption, PKCE, TOTP, encrypted KV store, WebAuthn passkeys |
+| [`computer`](#7-computer) | 8 | AI computer-use protocol, smart element resolution, browser pool |
+| [`memory`](#8-memory) | 6 | Persistent agent memory across sessions |
+| [`automate`](#9-automate) | 7 | Workflow DSL, AI task planning, rate limiting, retry queues |
+| [`perf`](#10-perf) | 7 | Performance audits, budgets, regression detection, visual regression testing |
+
+---
+
+## Universal Interface
+
+Every tool call uses the same structure:
 
 ```json
 {
-  "mcpServers": {
-    "onecrawl": {
-      "command": "onecrawl-mcp",
-      "args": [],
-      "env": {
-        "ONECRAWL_STORE_PATH": "./store.db",
-        "ONECRAWL_STORE_PASSWORD": "your-secret"
-      }
-    }
-  }
+  "action": "<action_name>",
+  "params": { /* action-specific parameters */ }
 }
 ```
 
-A headless Chromium browser is launched automatically on the first CDP tool call. All tools return JSON via MCP `CallToolResult`.
+- **`action`** *(string, required)* — The operation to perform. See each tool's action table.
+- **`params`** *(object, optional)* — Action-specific parameters. Omit or pass `{}` for parameterless actions.
+
+**Error format:** If an unknown action is provided, the tool returns an error listing all available actions.
 
 ---
 
-## Tool Namespaces
+## Tools
 
-| Namespace | Tools | Description |
-|-----------|-------|-------------|
-| [computer.*](#computer) | 3 | AI Computer Use Protocol — act, observe, batch |
-| [smart.*](#smart) | 3 | Self-Healing Element Resolution — fuzzy find, click, fill |
-| [navigation.*](#navigation) | 11 | Browser Control — goto, click, type, screenshot, snapshot… |
-| [agent.*](#agent) | 21 | Agentic Capabilities — chains, iframes, recording, iOS, safety… |
-| [scraping.*](#scraping) | 11 | Data Extraction — CSS, XPath, text, markdown, forms, streaming… |
-| [pool.*](#pool) | 2 | Multi-Browser Orchestration — list, status |
-| [stealth.*](#stealth) | 5 | Anti-Detection — patches, fingerprint, domain blocking, CAPTCHA |
-| [crawling.*](#crawling) | 5 | Web Crawling — spider, robots.txt, sitemap, DOM snapshots |
-| [data.*](#data) | 5 | Data Pipeline — HTTP, link graph, pipeline transforms |
-| [crypto.*](#crypto) | 4 | Encryption & TOTP — AES-256-GCM, PKCE, TOTP |
-| [parser.*](#parser) | 4 | HTML Parsing — a11y tree, selectors, text, links |
-| [storage.*](#storage) | 3 | Encrypted Key-Value Storage |
-| [auth.*](#auth) | 6 | WebAuthn / Passkeys — virtual authenticator simulation |
-| [automation.*](#automation) | 2 | Rate Limiting & Retry Queues |
-| [memory.*](#memory) | 6 | Agent Memory — persistent cross-session memory, domain strategies |
-| [workflow.*](#workflow) | 2 | Workflow DSL — JSON workflow definitions with steps, conditionals, loops |
-| [net.*](#net) | 5 | Network Intelligence — API discovery, SDK generation, mock servers |
-| [vrt.*](#vrt) | 3 | Visual Regression Testing — screenshot comparison, baseline management |
-| [planner.*](#planner) | 3 | AI Task Planner — goal→plan generation, step execution, pattern library |
-| [perf.*](#perf) | 4 | Performance Monitor — Core Web Vitals, budgets, regression detection |
+### 1. `browser`
 
----
+Browser navigation, interaction, and content extraction. All browser operations in one tool.
 
-<a id="computer"></a>
-## computer.* — AI Computer Use Protocol
+A headless Chromium browser is launched automatically on the first call that requires a live page. Actions prefixed with `parse_` operate offline on raw HTML strings and do not require a browser.
 
-The computer-use protocol lets AI agents interact with web pages through a unified act → observe loop.
+#### Actions
 
----
+| Action | Params | Description |
+|--------|--------|-------------|
+| `goto` | `{url}` | Navigate to URL |
+| `click` | `{selector}` | Click element |
+| `type` | `{selector, text}` | Type into input |
+| `screenshot` | `{selector?, full_page?}` | Capture screenshot as PNG |
+| `pdf` | `{print_background?, format?, landscape?}` | Export page as PDF |
+| `back` | — | Navigate back |
+| `forward` | — | Navigate forward |
+| `reload` | — | Reload page |
+| `wait` | `{selector, timeout_ms?}` | Wait for element |
+| `evaluate` | `{js}` | Execute JavaScript |
+| `snapshot` | `{interactive_only?, cursor?, compact?, depth?, selector?}` | Accessibility tree with @refs |
+| `css` | `{selector}` | CSS query on live DOM |
+| `xpath` | `{expression}` | XPath query on live DOM |
+| `find_text` | `{text, tag?}` | Find element by visible text |
+| `text` | `{selector?}` | Extract visible text |
+| `html` | `{selector?}` | Extract raw HTML |
+| `markdown` | `{selector?}` | Extract as Markdown |
+| `structured` | — | Extract JSON-LD, OpenGraph, etc. |
+| `stream` | `{item_selector, fields, pagination?}` | Paginated data extraction |
+| `detect_forms` | — | Detect forms and fields |
+| `fill_form` | `{form_selector, data, submit?}` | Fill and optionally submit form |
+| `snapshot_diff` | `{before, after}` | Diff two accessibility snapshots |
+| `parse_a11y` | `{html}` | Parse HTML into accessibility tree (offline) |
+| `parse_selector` | `{html, selector}` | CSS query on HTML string (offline) |
+| `parse_text` | `{html}` | Extract text from HTML (offline) |
+| `parse_links` | `{html}` | Extract links from HTML (offline) |
 
-### computer.act
+#### Action Details
 
-Execute a browser action and return the page observation.
+<details>
+<summary><strong><code>goto</code></strong> — Navigate to URL</summary>
 
-**Parameters:**
+Navigate the browser to a URL. Launches headless browser on first call.
+
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `action` | object | ✅ | Action to perform. JSON object with a `"type"` field. |
-| `include_screenshot` | boolean | | Include screenshot in observation (default: false) |
-
-**Action Types:**
-
-| Type | Fields | Description |
-|------|--------|-------------|
-| `click` | `x`, `y` / `selector` / `ref` | Click by coordinates, CSS selector, or `@ref` |
-| `type` | `text` | Type text into focused element |
-| `key` | `key` | Press a key (e.g. `"Enter"`, `"Tab"`) |
-| `scroll` | `x`, `y`, `delta_x`, `delta_y` | Scroll the page |
-| `navigate` | `url` | Navigate to a URL |
-| `wait` | `ms` | Wait for a duration |
-| `screenshot` | — | Take a screenshot |
-| `observe` | `include_screenshot` | Get page observation without action |
-| `evaluate` | `expression` | Evaluate JavaScript expression |
-| `fill` | `selector`, `value` | Fill an input by selector |
-| `select` | `selector`, `value` | Select a dropdown option |
-| `drag` | `from_x`, `from_y`, `to_x`, `to_y` | Drag from one point to another |
-| `done` | `result` | Signal task completion |
-| `fail` | `reason` | Signal task failure |
-
-**Returns:**
-```json
-{
-  "success": true,
-  "observation": {
-    "url": "https://example.com",
-    "title": "Example Page",
-    "snapshot": "[e1] button \"Submit\"\n[e2] input[type=text] @e2 \"Search\"",
-    "interactive_count": 12,
-    "screenshot": "base64...",
-    "viewport": { "width": 1280, "height": 720 }
-  },
-  "elapsed_ms": 145
-}
-```
-
-**Example — Login flow:**
-```json
-{
-  "action": { "type": "navigate", "url": "https://app.example.com/login" }
-}
-```
-```json
-{
-  "action": { "type": "fill", "selector": "#email", "value": "user@example.com" }
-}
-```
-```json
-{
-  "action": { "type": "fill", "selector": "#password", "value": "secret" }
-}
-```
-```json
-{
-  "action": { "type": "click", "selector": "button[type=submit]" }
-}
-```
-
----
-
-### computer.observe
-
-Observe current browser state without taking any action. Pure observation for AI planning.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `include_screenshot` | boolean | | Include base64 screenshot in observation |
-
-**Returns:**
-```json
-{
-  "url": "https://example.com",
-  "title": "Example Page",
-  "snapshot": "[e1] button \"Submit\"...",
-  "interactive_count": 8,
-  "viewport": { "width": 1280, "height": 720 }
-}
-```
-
----
-
-### computer.batch
-
-Execute a sequence of browser actions and return observations after each step. Efficient for multi-step workflows.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `actions` | array\<object\> | ✅ | List of actions. Each is a JSON object with a `"type"` field. |
-| `include_screenshots` | boolean | | Include screenshots between actions (default: false) |
-| `stop_on_error` | boolean | | Stop on first error (default: true) |
-
-**Returns:**
-```json
-{
-  "total": 3,
-  "executed": 3,
-  "results": [
-    { "success": true, "observation": { "url": "...", "title": "..." } },
-    { "success": true, "observation": { "url": "...", "title": "..." } },
-    { "success": true, "observation": { "url": "...", "title": "..." } }
-  ]
-}
-```
-
----
-
-<a id="smart"></a>
-## smart.* — Self-Healing Element Resolution
-
-Smart tools use fuzzy matching, ARIA roles, and multiple strategies to find elements — resilient to DOM changes.
-
----
-
-### smart.find
-
-Find elements using fuzzy text, ARIA roles, attributes, or CSS selectors. Returns ranked matches with confidence scores.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `query` | string | ✅ | Fuzzy text, CSS selector, or element description to search for |
-
-**Returns:**
-```json
-{
-  "query": "submit button",
-  "matches": [
-    { "selector": "button.submit-btn", "confidence": 0.95, "strategy": "aria-label" },
-    { "selector": "input[type=submit]", "confidence": 0.78, "strategy": "text-content" }
-  ],
-  "count": 2
-}
-```
-
-**Example — Find a search box:**
-```json
-{ "query": "search input" }
-```
-
----
-
-### smart.click
-
-Find the best matching element using fuzzy text, ARIA roles, or CSS selectors, then click it.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `query` | string | ✅ | Fuzzy text, CSS selector, or element description to click |
-
-**Returns:**
-```json
-{
-  "clicked": "button.submit-btn",
-  "confidence": 0.95,
-  "strategy": "aria-label"
-}
-```
-
----
-
-### smart.fill
-
-Find an input element using fuzzy text, placeholder, or CSS selector, then type the given value into it.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `query` | string | ✅ | Fuzzy text, CSS selector, or element description of the input to fill |
-| `value` | string | ✅ | Value to type into the matched input |
-
-**Returns:**
-```json
-{
-  "filled": "input#email",
-  "value_length": 16,
-  "confidence": 0.92,
-  "strategy": "placeholder"
-}
-```
-
----
-
-<a id="navigation"></a>
-## navigation.* — Browser Control
-
-Core browser control tools. A headless browser is launched automatically on first call.
-
----
-
-### navigation.goto
-
-Navigate the browser to a URL. Launches a headless browser on first call.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `url` | string | ✅ | URL to navigate to |
 
-**Returns:** `"navigated to https://example.com — title: Example"`
+**Response:** `"navigated to <url> — title: <title>"`
+</details>
 
----
+<details>
+<summary><strong><code>click</code></strong> — Click element</summary>
 
-### navigation.click
+Click a DOM element by CSS selector or accessibility ref.
 
-Click an element on the page by CSS selector or `@ref` (e.g. `@e1` from snapshot).
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `selector` | string | ✅ | CSS selector of element to click |
-
-> **Tip:** Use `@ref` notation from `navigation.snapshot` (e.g. `@e1`) for stable element targeting.
-
-**Returns:** `"clicked @e1"`
-
----
-
-### navigation.type
-
-Type text into an input element identified by CSS selector or `@ref`.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
+| `selector` | string | ✅ | CSS selector or `@ref` (e.g. `@e1`) of element to click |
+
+**Response:** `"clicked <selector>"`
+</details>
+
+<details>
+<summary><strong><code>type</code></strong> — Type into input</summary>
+
+Type text into an input element.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
 | `selector` | string | ✅ | CSS selector of target input element |
 | `text` | string | ✅ | Text to type |
 
-**Returns:** `"typed 12 chars into #search"`
+**Response:** `"typed <N> chars into <selector>"`
+</details>
 
----
+<details>
+<summary><strong><code>screenshot</code></strong> — Capture screenshot</summary>
 
-### navigation.screenshot
+Take a screenshot of the viewport, full page, or a specific element.
 
-Take a screenshot of the current page as base64-encoded PNG. Optionally target a specific element or capture the full scrollable page.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `selector` | string | | CSS selector for element screenshot (omit for viewport) |
-| `full_page` | boolean | | If true, capture the full scrollable page |
+| `full_page` | boolean | | If `true`, capture the full scrollable page |
 
-**Returns:** Base64 PNG image content (`Content::image`).
+**Response:** PNG image as base64 (returned as `image/png` content).
+</details>
 
----
+<details>
+<summary><strong><code>pdf</code></strong> — Export page as PDF</summary>
 
-### navigation.pdf
+Export the current page as a PDF document.
 
-Export the current page as a PDF document. Returns base64-encoded PDF data.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `print_background` | boolean | | Print background graphics (default: false) |
-| `format` | string | | Paper format: `"A4"`, `"Letter"`, etc. (default: `"A4"`) |
-| `landscape` | boolean | | Landscape orientation (default: false) |
+|------|------|:--------:|-------------|
+| `print_background` | boolean | | Print background graphics (default `false`) |
+| `format` | string | | Paper format: `A4`, `Letter`, etc. (default `A4`) |
+| `landscape` | boolean | | Landscape orientation (default `false`) |
 
-**Returns:** `"pdf exported (45230 bytes, base64 length 60308)"`
+**Response:** `"pdf exported (<bytes> bytes, base64 length <len>)"`
+</details>
 
----
+<details>
+<summary><strong><code>back</code></strong> — Navigate back</summary>
 
-### navigation.back
+Navigate to the previous page in browser history.
 
-Navigate back in browser history.
+**Params:** None
 
-**Parameters:** None
+**Response:** `"navigated back"`
+</details>
 
-**Returns:** `"navigated back"`
+<details>
+<summary><strong><code>forward</code></strong> — Navigate forward</summary>
 
----
+Navigate to the next page in browser history.
 
-### navigation.forward
+**Params:** None
 
-Navigate forward in browser history.
+**Response:** `"navigated forward"`
+</details>
 
-**Parameters:** None
-
-**Returns:** `"navigated forward"`
-
----
-
-### navigation.reload
+<details>
+<summary><strong><code>reload</code></strong> — Reload page</summary>
 
 Reload the current page.
 
-**Parameters:** None
+**Params:** None
 
-**Returns:** `"page reloaded"`
+**Response:** `"page reloaded"`
+</details>
 
----
+<details>
+<summary><strong><code>wait</code></strong> — Wait for element</summary>
 
-### navigation.wait
+Wait until a CSS selector appears on the page.
 
-Wait for a CSS selector or `@ref` to appear in the DOM within an optional timeout.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `selector` | string | ✅ | CSS selector to wait for |
-| `timeout_ms` | integer | | Timeout in milliseconds (default: 30000) |
+| `timeout_ms` | integer | | Timeout in milliseconds (default `30000`) |
 
-**Returns:** `"selector .loaded found"`
+**Response:** `"selector <selector> found"`
+</details>
 
----
+<details>
+<summary><strong><code>evaluate</code></strong> — Execute JavaScript</summary>
 
-### navigation.evaluate
+Evaluate arbitrary JavaScript in the page context and return the result.
 
-Evaluate arbitrary JavaScript in the browser page context. Returns the result as JSON.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `js` | string | ✅ | JavaScript code to evaluate in the page context |
 
-**Returns:** JSON result of the evaluated expression.
+**Response:** JSON — the serialized return value of the expression.
+</details>
 
-**Example:**
-```json
-{ "js": "document.querySelectorAll('a').length" }
-```
+<details>
+<summary><strong><code>snapshot</code></strong> — Accessibility snapshot</summary>
 
----
+Generate an accessibility tree snapshot of the current page. Returns element refs (`@e1`, `@e2`, …) that can be used in place of CSS selectors for `click`, `type`, `wait`, etc.
 
-### navigation.snapshot
-
-Take an AI-optimized accessibility snapshot of the page. Returns element refs (`@e1`, `@e2`…) that can be used with click, fill, type commands.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `interactive_only` | boolean | | Only include interactive elements (buttons, links, inputs) |
-| `cursor` | boolean | | Include cursor-interactive elements (cursor:pointer, onclick, tabindex) |
+| `cursor` | boolean | | Include cursor-interactive elements (`cursor:pointer`, `onclick`, `tabindex`) |
 | `compact` | boolean | | Remove empty structural elements for minimal output |
 | `depth` | integer | | Max DOM depth to include |
 | `selector` | string | | CSS selector to scope snapshot to a subtree |
 
-**Returns:**
+**Response:**
 ```json
 {
-  "snapshot": "html\n  body\n    nav\n      a @e1 \"Home\"\n      a @e2 \"About\"\n    main\n      h1 \"Welcome\"\n      button @e3 \"Sign In\"",
-  "refs": { "e1": "a.nav-home", "e2": "a.nav-about", "e3": "button.sign-in" },
+  "snapshot": "<text tree>",
+  "refs": { "@e1": "button#submit", ... },
   "total": 42,
   "stats": {
-    "lines": 15,
-    "chars": 420,
-    "estimated_tokens": 105,
+    "lines": 120,
+    "chars": 3500,
+    "estimated_tokens": 875,
     "total_refs": 42,
-    "interactive_refs": 8
+    "interactive_refs": 18
   }
 }
 ```
+</details>
 
-> **Tip:** Use `interactive_only: true` to get a focused snapshot of only actionable elements, drastically reducing token usage.
+<details>
+<summary><strong><code>css</code></strong> — CSS query on live DOM</summary>
+
+Execute a CSS selector query against the live page DOM. Supports `::text` and `::attr(name)` pseudo-elements.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | ✅ | CSS selector (supports `::text`, `::attr(name)` pseudo-elements) |
+
+**Response:** JSON array of matched elements.
+</details>
+
+<details>
+<summary><strong><code>xpath</code></strong> — XPath query on live DOM</summary>
+
+Execute an XPath expression against the live page DOM.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `expression` | string | ✅ | XPath expression to evaluate |
+
+**Response:** JSON array of matched elements.
+</details>
+
+<details>
+<summary><strong><code>find_text</code></strong> — Find by visible text</summary>
+
+Find elements by their visible text content.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `text` | string | ✅ | Text content to search for |
+| `tag` | string | | Optional HTML tag to constrain search (e.g. `a`, `button`) |
+
+**Response:** JSON array of matching elements.
+</details>
+
+<details>
+<summary><strong><code>text</code></strong> — Extract visible text</summary>
+
+Extract visible text content from the page or a specific element.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | | CSS selector (default `body`) |
+
+**Response:** JSON — extracted text content.
+</details>
+
+<details>
+<summary><strong><code>html</code></strong> — Extract raw HTML</summary>
+
+Extract raw HTML from the page or a specific element.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | | CSS selector (default `body`) |
+
+**Response:** JSON — extracted HTML string.
+</details>
+
+<details>
+<summary><strong><code>markdown</code></strong> — Extract as Markdown</summary>
+
+Extract page content as Markdown.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | | CSS selector (default `body`) |
+
+**Response:** JSON — extracted Markdown content.
+</details>
+
+<details>
+<summary><strong><code>structured</code></strong> — Extract structured data</summary>
+
+Extract JSON-LD, OpenGraph, Twitter Card, and other structured data from the current page.
+
+**Params:** None
+
+**Response:** JSON object with all structured data found on the page.
+</details>
+
+<details>
+<summary><strong><code>stream</code></strong> — Paginated data extraction</summary>
+
+Extract repeating data items from the page, with optional pagination support.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `item_selector` | string | ✅ | CSS selector for repeating item container |
+| `fields` | string | ✅ | Field extraction rules as JSON array: `[{"name":"title","selector":"h2","extract":"text"}]` |
+| `pagination` | string | | Pagination config as JSON: `{"next_selector":".next","max_pages":5,"delay_ms":1000}` |
+
+**Response:** JSON array of extracted items. With pagination, includes items from all pages.
+</details>
+
+<details>
+<summary><strong><code>detect_forms</code></strong> — Detect forms</summary>
+
+Detect all forms and their fields on the current page.
+
+**Params:** None
+
+**Response:** JSON array of detected forms with field metadata.
+</details>
+
+<details>
+<summary><strong><code>fill_form</code></strong> — Fill and submit form</summary>
+
+Fill form fields with values and optionally submit.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `form_selector` | string | ✅ | CSS selector of the form element |
+| `data` | string | ✅ | JSON object mapping field selectors to values, e.g. `{"#email":"a@b.com"}` |
+| `submit` | boolean | | If `true`, submit the form after filling |
+
+**Response:** JSON — fill result. If `submit` is true, the form is submitted after filling.
+</details>
+
+<details>
+<summary><strong><code>snapshot_diff</code></strong> — Diff two snapshots</summary>
+
+Compare two accessibility snapshot text outputs (from `snapshot` action) and report differences.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `before` | string | ✅ | Accessibility snapshot text before |
+| `after` | string | ✅ | Accessibility snapshot text after |
+
+**Response:** JSON diff of the two snapshots.
+</details>
+
+<details>
+<summary><strong><code>parse_a11y</code></strong> — Parse HTML to accessibility tree (offline)</summary>
+
+Parse raw HTML into an accessibility tree. Does not require a browser.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `html` | string | ✅ | Raw HTML string |
+
+**Response:** Text rendering of the accessibility tree.
+</details>
+
+<details>
+<summary><strong><code>parse_selector</code></strong> — CSS query on HTML string (offline)</summary>
+
+Run a CSS selector query against a raw HTML string. Does not require a browser.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `html` | string | ✅ | Raw HTML string |
+| `selector` | string | ✅ | CSS selector to query |
+
+**Response:** JSON array of matched elements.
+</details>
+
+<details>
+<summary><strong><code>parse_text</code></strong> — Extract text from HTML (offline)</summary>
+
+Extract visible text from a raw HTML string. Does not require a browser.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `html` | string | ✅ | Raw HTML string |
+
+**Response:** Extracted text, lines joined by `\n`.
+</details>
+
+<details>
+<summary><strong><code>parse_links</code></strong> — Extract links from HTML (offline)</summary>
+
+Extract all links from a raw HTML string. Does not require a browser.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `html` | string | ✅ | Raw HTML string |
+
+**Response:** JSON array of `{ "href", "text", "is_external" }` objects.
+</details>
 
 ---
 
-<a id="agent"></a>
-## agent.* — Agentic Capabilities
+### 2. `crawl`
 
-Advanced agent tools for chaining, screencasting, iframe handling, remote browsers, iOS automation, and session safety.
+Web crawling, robots.txt parsing, sitemap generation, and DOM snapshot management.
+
+#### Actions
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `spider` | `{start_urls, max_depth?, max_pages?, same_domain_only?, url_patterns?, exclude_patterns?, delay_ms?}` | Crawl a website |
+| `robots` | `{base_url, path?, user_agent?}` | Parse robots.txt |
+| `sitemap` | `{base_url, entries, default_changefreq?}` | Generate XML sitemap |
+| `dom_snapshot` | `{label}` | Take labeled DOM snapshot |
+| `dom_compare` | `{before, after}` | Compare two DOM snapshots |
+
+#### Action Details
+
+<details>
+<summary><strong><code>spider</code></strong> — Crawl website</summary>
+
+Crawl a website starting from one or more URLs, following links up to a configurable depth and page limit.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `start_urls` | string[] | ✅ | Starting URL(s) to crawl |
+| `max_depth` | integer | | Maximum link depth (default `2`) |
+| `max_pages` | integer | | Maximum pages to visit (default `50`) |
+| `same_domain_only` | boolean | | Stay on the same domain only (default `true`) |
+| `url_patterns` | string[] | | URL patterns to include (regex) |
+| `exclude_patterns` | string[] | | URL patterns to exclude (regex) |
+| `delay_ms` | integer | | Delay between requests in ms (default `500`) |
+
+**Response:**
+```json
+{
+  "summary": { /* crawl summary stats */ },
+  "pages_crawled": 23
+}
+```
+</details>
+
+<details>
+<summary><strong><code>robots</code></strong> — Parse robots.txt</summary>
+
+Fetch and parse a site's robots.txt. Optionally check if a specific path is allowed.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `base_url` | string | ✅ | Base URL to fetch robots.txt from |
+| `path` | string | | Path to check (e.g. `/admin`) |
+| `user_agent` | string | | User-agent string (default `*`) |
+
+**Response:**
+```json
+{
+  "sitemaps": ["https://example.com/sitemap.xml"],
+  "crawl_delay": 1.0,
+  "path_allowed": true
+}
+```
+</details>
+
+<details>
+<summary><strong><code>sitemap</code></strong> — Generate XML sitemap</summary>
+
+Generate an XML sitemap from a list of URL entries.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `base_url` | string | ✅ | Base URL for the sitemap |
+| `entries` | string | ✅ | URLs as JSON array: `[{"url":"...","priority":0.8}]` |
+| `default_changefreq` | string | | Default change frequency (e.g. `weekly`) |
+
+**Response:** XML sitemap string.
+</details>
+
+<details>
+<summary><strong><code>dom_snapshot</code></strong> — Take DOM snapshot</summary>
+
+Capture a labeled DOM snapshot of the current page for later comparison.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `label` | string | ✅ | Label to identify this snapshot |
+
+**Response:** `"snapshot '<label>' saved"`
+</details>
+
+<details>
+<summary><strong><code>dom_compare</code></strong> — Compare DOM snapshots</summary>
+
+Compare two previously taken DOM snapshots by label.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `before` | string | ✅ | Label of the "before" snapshot |
+| `after` | string | ✅ | Label of the "after" snapshot |
+
+**Response:** JSON diff of the two snapshots.
+</details>
 
 ---
 
-### agent.execute_chain
+### 3. `agent`
 
-Execute multiple commands in sequence. Supported commands: `navigation.goto`, `navigation.click`, `navigation.type`, `navigation.wait`, `navigation.evaluate`, `navigation.snapshot`, `scraping.css`, `scraping.text`.
+AI agent orchestration — command chains, element screenshots, API capture, iframes, remote CDP, safety policies, skills, screencast, recording, and iOS automation.
 
-**Parameters:**
+#### Actions
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `execute_chain` | `{commands, stop_on_error?}` | Execute multiple commands sequentially |
+| `element_screenshot` | `{selector}` | Screenshot a specific element |
+| `api_capture_start` | — | Start capturing API calls (fetch/XHR) |
+| `api_capture_summary` | `{clear?}` | Get captured API call summary |
+| `iframe_list` | — | List all iframes on page |
+| `iframe_snapshot` | `{index, interactive_only?, compact?}` | Accessibility snapshot of an iframe |
+| `connect_remote` | `{ws_url, headers?}` | Connect to remote CDP browser |
+| `safety_set` | `{allowed_domains?, blocked_domains?, ...}` | Set safety policy |
+| `safety_status` | — | Get current safety policy status |
+| `skills_list` | — | List available built-in skills |
+| `screencast_start` | `{format?, quality?, max_width?, max_height?, every_nth_frame?}` | Start screencast |
+| `screencast_stop` | — | Stop screencast |
+| `screencast_frame` | `{format?, quality?}` | Get latest screencast frame |
+| `recording_start` | `{output?, fps?}` | Start video recording |
+| `recording_stop` | — | Stop recording and save |
+| `recording_status` | — | Get recording status |
+| `ios_devices` | — | List iOS devices |
+| `ios_connect` | `{wda_url?, udid?, bundle_id?}` | Connect to iOS device |
+| `ios_navigate` | `{url}` | Navigate iOS Safari |
+| `ios_tap` | `{x, y}` | Tap on iOS screen |
+| `ios_screenshot` | — | Take iOS screenshot |
+
+#### Action Details
+
+<details>
+<summary><strong><code>execute_chain</code></strong> — Execute command chain</summary>
+
+Execute multiple tool commands in sequence. Each command references a tool and arguments. Results are collected and returned together.
+
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `commands` | array\<ChainCommand\> | ✅ | List of commands to execute in sequence |
-| `stop_on_error` | boolean | | Stop on first error (default: true) |
+|------|------|:--------:|-------------|
+| `commands` | array | ✅ | List of commands. Each: `{ "tool": "navigation.click", "args": { "selector": "#btn" } }` |
+| `stop_on_error` | boolean | | Stop on first error (default `true`) |
 
-**ChainCommand schema:**
+**Command object:**
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `tool` | string | ✅ | Tool name to execute (e.g. `"navigation.click"`) |
-| `args` | object | ✅ | Arguments as JSON object |
+| Field | Type | Description |
+|-------|------|-------------|
+| `tool` | string | Tool name (e.g. `navigation.goto`, `navigation.click`, `navigation.type`) |
+| `args` | object | Arguments as JSON object |
 
-**Returns:**
+**Response:**
 ```json
 {
   "results": [
     { "tool": "navigation.goto", "success": true, "data": { "url": "...", "title": "..." } },
-    { "tool": "navigation.click", "success": true, "data": { "clicked": "@e3" } }
+    { "tool": "navigation.click", "success": true, "data": { "clicked": "#btn" } }
   ],
   "completed": 2,
   "total": 2
 }
 ```
+</details>
 
-**Example — Navigate and extract:**
-```json
-{
-  "commands": [
-    { "tool": "navigation.goto", "args": { "url": "https://example.com" } },
-    { "tool": "navigation.snapshot", "args": { "interactive_only": true } },
-    { "tool": "scraping.text", "args": { "selector": "main" } }
-  ]
-}
-```
+<details>
+<summary><strong><code>element_screenshot</code></strong> — Element screenshot</summary>
 
----
+Take a screenshot of a specific element, returning both the image and the element's bounding box.
 
-### agent.element_screenshot
-
-Take a screenshot of a specific element by CSS selector or `@ref`. Returns base64 PNG with element bounds.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `selector` | string | ✅ | CSS selector or `@ref` (e.g. `@e1`) of the element to screenshot |
+|------|------|:--------:|-------------|
+| `selector` | string | ✅ | CSS selector or `@ref` (e.g. `@e1`) of the element |
 
-**Returns:**
+**Response:**
 ```json
 {
-  "image": "base64...",
-  "bounds": { "x": 100, "y": 200, "width": 300, "height": 50 }
+  "image": "<base64 PNG>",
+  "bounds": { "x": 10, "y": 20, "width": 200, "height": 50 }
 }
 ```
+</details>
 
----
+<details>
+<summary><strong><code>api_capture_start</code></strong> — Start API capture</summary>
 
-### agent.api_capture_start
+Inject interceptors for `fetch` and `XMLHttpRequest` to capture all API calls made by the page.
 
-Inject a fetch/XHR interceptor to capture all API calls made by the page. Call `agent.api_capture_summary` to read the log.
+**Params:** None
 
-**Parameters:** None
-
-**Returns:**
+**Response:**
 ```json
 { "active": true, "entries": 0 }
 ```
+</details>
 
----
+<details>
+<summary><strong><code>api_capture_summary</code></strong> — Get API capture summary</summary>
 
-### agent.api_capture_summary
+Retrieve all captured API calls since the last start/clear.
 
-Get a summary of all network API calls (fetch/XHR) captured since `api_capture_start`. Per-page, resets on navigation.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `clear` | boolean | | Clear the captured log after reading (default: false) |
+|------|------|:--------:|-------------|
+| `clear` | boolean | | Clear the captured log after reading (default `false`) |
 
-**Returns:**
+**Response:**
 ```json
 {
   "total": 5,
   "requests": [
-    { "type": "fetch", "method": "GET", "url": "/api/users", "status": 200, "contentType": "application/json", "timestamp": 1700000000 }
+    { "type": "fetch", "method": "GET", "url": "...", "status": 200, "contentType": "application/json" }
   ]
 }
 ```
+</details>
 
----
+<details>
+<summary><strong><code>iframe_list</code></strong> — List iframes</summary>
 
-### agent.iframe_list
+List all iframes on the current page.
 
-List all iframes on the current page with metadata (src, name, id, dimensions, sandbox).
+**Params:** None
 
-**Parameters:** None
-
-**Returns:**
+**Response:**
 ```json
-{
-  "total": 2,
-  "iframes": [
-    { "src": "https://widget.example.com", "name": "payment", "id": "payment-frame", "width": 400, "height": 300 }
-  ]
-}
+{ "total": 2, "iframes": [ /* iframe metadata */ ] }
 ```
+</details>
 
----
+<details>
+<summary><strong><code>iframe_snapshot</code></strong> — Iframe accessibility snapshot</summary>
 
-### agent.iframe_snapshot
+Generate an accessibility snapshot inside a specific iframe.
 
-Take an accessibility snapshot inside a specific iframe by index. Use `agent.iframe_list` first to discover available iframes.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `index` | integer | ✅ | Zero-based index of the iframe to snapshot |
+|------|------|:--------:|-------------|
+| `index` | integer | ✅ | Zero-based index of the iframe |
 | `interactive_only` | boolean | | Only include interactive elements |
-| `compact` | boolean | | Remove empty structural elements for minimal output |
+| `compact` | boolean | | Remove empty structural elements |
 
-**Returns:**
-```json
-{
-  "snapshot": "body\n  input @f0e1 \"Card number\"...",
-  "refs": { "f0e1": "input#card-number" },
-  "total": 6,
-  "iframe_index": 0
-}
-```
+**Response:** JSON with `snapshot`, `refs`, `total`, `iframe_index`.
+</details>
 
----
+<details>
+<summary><strong><code>connect_remote</code></strong> — Connect to remote CDP</summary>
 
-### agent.connect_remote
+Connect to a remote Chrome DevTools Protocol endpoint, replacing the local browser session.
 
-Connect to a remote CDP WebSocket endpoint (e.g. Browserbase, BrowserCloud). Subsequent tools will use the remote browser.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `ws_url` | string | ✅ | WebSocket URL of the remote CDP endpoint (e.g. `ws://127.0.0.1:9222/devtools/browser/...`) |
-| `headers` | object | | Optional HTTP headers for the WebSocket handshake |
+|------|------|:--------:|-------------|
+| `ws_url` | string | ✅ | WebSocket URL (e.g. `ws://127.0.0.1:9222/devtools/browser/...`) |
+| `headers` | object | | Optional HTTP headers for WebSocket handshake |
 
-**Returns:**
+**Response:**
 ```json
 {
   "connected": true,
-  "ws_url": "wss://connect.browserbase.com/...",
+  "ws_url": "ws://...",
   "info": "Remote browser connected. Subsequent tools will use this session."
 }
 ```
+</details>
 
----
+<details>
+<summary><strong><code>safety_set</code></strong> — Set safety policy</summary>
 
-### agent.safety_policy_set
+Configure a safety policy to restrict browser automation actions.
 
-Set or update the safety policy for this session. Controls allowed/blocked domains, URL patterns, commands, rate limits, and confirmation requirements.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `allowed_domains` | array\<string\> | | Allowed domains (if empty, all domains allowed) |
-| `blocked_domains` | array\<string\> | | Blocked domains |
-| `blocked_url_patterns` | array\<string\> | | Blocked URL patterns (glob-style with `*` wildcards) |
-| `max_actions` | integer | | Maximum actions per session (0 = unlimited) |
+|------|------|:--------:|-------------|
+| `allowed_domains` | string[] | | Allowed domains (empty = all allowed) |
+| `blocked_domains` | string[] | | Blocked domains |
+| `blocked_url_patterns` | string[] | | Blocked URL patterns (glob with `*`) |
+| `max_actions` | integer | | Max actions per session (`0` = unlimited) |
 | `confirm_form_submit` | boolean | | Require confirmation for form submissions |
 | `confirm_file_upload` | boolean | | Require confirmation for file uploads |
-| `blocked_commands` | array\<string\> | | Blocked commands |
-| `allowed_commands` | array\<string\> | | Allowed commands (if empty, all non-blocked allowed) |
-| `rate_limit_per_minute` | integer | | Rate limit: max actions per minute (0 = unlimited) |
-| `policy_file` | string | | Path to a JSON policy file to load (overrides other fields) |
+| `blocked_commands` | string[] | | Blocked commands |
+| `allowed_commands` | string[] | | Allowed commands (empty = all non-blocked) |
+| `rate_limit_per_minute` | integer | | Max actions per minute (`0` = unlimited) |
+| `policy_file` | string | | Path to a JSON policy file (overrides other fields) |
 
-**Returns:**
-```json
-{
-  "status": "policy_set",
-  "policy": { "allowed_domains": ["example.com"], "max_actions": 100, "..." : "..." }
-}
-```
+**Response:** `{ "status": "policy_set", "policy": { ... } }`
+</details>
 
----
+<details>
+<summary><strong><code>safety_status</code></strong> — Safety policy status</summary>
 
-### agent.safety_status
+Get the current safety policy configuration and enforcement stats.
 
-Get current safety state: active policy, action counts, rate limit window, and all constraints.
+**Params:** None
 
-**Parameters:** None
+**Response:** JSON with policy stats, or `{ "status": "no_policy" }` if none is set.
+</details>
 
-**Returns:**
-```json
-{
-  "status": "active",
-  "actions_taken": 12,
-  "max_actions": 100,
-  "rate_limit_per_minute": 30,
-  "allowed_domains": ["example.com"]
-}
-```
+<details>
+<summary><strong><code>skills_list</code></strong> — List available skills</summary>
 
----
+List all built-in skill packages and their tools.
 
-### agent.skills_list
+**Params:** None
 
-List all available skill packages (built-in and discovered). Returns name, version, description, and tool list for each skill.
+**Response:** JSON array of skill objects with `name`, `version`, `description`, `tools`.
+</details>
 
-**Parameters:** None
+<details>
+<summary><strong><code>screencast_start</code></strong> — Start screencast</summary>
 
-**Returns:**
-```json
-[
-  {
-    "name": "linkedin-auth",
-    "version": "1.0.0",
-    "description": "LinkedIn authentication and session management",
-    "tools": [{ "name": "login", "description": "Login to LinkedIn" }],
-    "requires": [],
-    "author": "onecrawl",
-    "source": "built-in"
-  }
-]
-```
+Start a live screencast stream from the browser.
 
----
-
-### agent.screencast_start
-
-Start live browser screencast via CDP `Page.startScreencast`. Configure format, quality, resolution, and frame rate.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `format` | string | | Image format: `"jpeg"` or `"png"` |
-| `quality` | integer | | Compression quality 0–100 (jpeg only) |
-| `max_width` | integer | | Maximum width in pixels |
-| `max_height` | integer | | Maximum height in pixels |
-| `every_nth_frame` | integer | | Capture every N-th frame |
+|------|------|:--------:|-------------|
+| `format` | string | | Image format: `jpeg` or `png` (default `jpeg`) |
+| `quality` | integer | | Compression quality 0–100 (default `60`) |
+| `max_width` | integer | | Maximum width in pixels (default `1280`) |
+| `max_height` | integer | | Maximum height in pixels (default `720`) |
+| `every_nth_frame` | integer | | Capture every N-th frame (default `1`) |
 
-**Returns:**
-```json
-{
-  "status": "started",
-  "format": "jpeg",
-  "quality": 60,
-  "max_width": 1280,
-  "max_height": 720,
-  "every_nth_frame": 1
-}
-```
+**Response:** `{ "status": "started", "format": "jpeg", "quality": 60, ... }`
+</details>
 
----
+<details>
+<summary><strong><code>screencast_stop</code></strong> — Stop screencast</summary>
 
-### agent.screencast_stop
+Stop the active screencast.
 
-Stop the active browser screencast.
+**Params:** None
 
-**Parameters:** None
+**Response:** `{ "status": "stopped" }`
+</details>
 
-**Returns:**
-```json
-{ "status": "stopped" }
-```
+<details>
+<summary><strong><code>screencast_frame</code></strong> — Get screencast frame</summary>
 
----
+Capture and return a single screencast frame.
 
-### agent.screencast_frame
-
-Capture a single screencast frame as base64-encoded image data.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `format` | string | | Image format: `"jpeg"` or `"png"` (default: `"jpeg"`) |
-| `quality` | integer | | Compression quality 0–100 |
+|------|------|:--------:|-------------|
+| `format` | string | | Image format: `jpeg` or `png` (default `jpeg`) |
+| `quality` | integer | | Compression quality 0–100 (default `80`) |
 
-**Returns:**
-```json
-{
-  "image": "base64...",
-  "format": "jpeg",
-  "size": 24576
-}
-```
+**Response:** `{ "image": "<base64>", "format": "jpeg", "size": 12345 }`
+</details>
 
----
+<details>
+<summary><strong><code>recording_start</code></strong> — Start video recording</summary>
 
-### agent.recording_start
+Start recording browser interactions as a sequence of frames.
 
-Start recording the browser session. Frames are captured and stored in memory until stopped.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `output` | string | | Output file path (e.g. `"recording.webm"`) |
-| `fps` | integer | | Frames per second |
+|------|------|:--------:|-------------|
+| `output` | string | | Output file path (default `recording.webm`) |
+| `fps` | integer | | Frames per second (default `5`) |
 
-**Returns:**
-```json
-{
-  "status": "recording",
-  "output": "recording.webm",
-  "fps": 5
-}
-```
+**Response:** `{ "status": "recording", "output": "recording.webm", "fps": 5 }`
+</details>
 
----
+<details>
+<summary><strong><code>recording_stop</code></strong> — Stop recording</summary>
 
-### agent.recording_stop
+Stop the active recording and save frames to disk.
 
-Stop recording, save frames as image sequence, and return the output path.
+**Params:** None
 
-**Parameters:** None
+**Response:** `{ "status": "saved", "frames": 42, "path": "recording.webm" }`
+</details>
 
-**Returns:**
-```json
-{
-  "status": "saved",
-  "frames": 42,
-  "path": "/tmp/recording-frames/"
-}
-```
+<details>
+<summary><strong><code>recording_status</code></strong> — Recording status</summary>
 
----
+Get current recording status.
 
-### agent.recording_status
+**Params:** None
 
-Get the current recording state (idle, recording, or stopped) with frame count.
+**Response:** `{ "status": "recording|stopped|idle", "frames": 42, "fps": 5, "output": "..." }`
+</details>
 
-**Parameters:** None
+<details>
+<summary><strong><code>ios_devices</code></strong> — List iOS devices</summary>
 
-**Returns:**
-```json
-{
-  "status": "recording",
-  "frames": 15,
-  "fps": 5,
-  "output": "recording.webm"
-}
-```
+List connected iOS devices.
 
----
+**Params:** None
 
-### agent.ios_devices
+**Response:** `{ "devices": [...], "count": 1 }`
+</details>
 
-List available iOS simulator devices (via `xcrun simctl`). Returns device name, UDID, platform, and version.
+<details>
+<summary><strong><code>ios_connect</code></strong> — Connect to iOS device</summary>
 
-**Parameters:** None
+Connect to an iOS device via WebDriverAgent for Mobile Safari automation.
 
-**Returns:**
-```json
-{
-  "devices": [
-    { "name": "iPhone 15 Pro", "udid": "A1B2C3...", "platform": "iOS", "version": "17.2" }
-  ],
-  "count": 3
-}
-```
-
----
-
-### agent.ios_connect
-
-Start an iOS Safari session via WebDriverAgent. Session persists for subsequent `ios_*` calls.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `wda_url` | string | | WebDriverAgent URL (default: `http://localhost:8100`) |
+|------|------|:--------:|-------------|
+| `wda_url` | string | | WebDriverAgent URL (default `http://localhost:8100`) |
 | `udid` | string | | Device UDID (auto-detect if omitted) |
-| `bundle_id` | string | | Bundle ID to automate (default: `com.apple.mobilesafari`) |
+| `bundle_id` | string | | Bundle ID to automate (default `com.apple.mobilesafari`) |
 
-**Returns:**
-```json
-{ "connected": true, "session_id": "abc-123" }
-```
+**Response:** `{ "connected": true, "session_id": "..." }`
+</details>
 
----
+<details>
+<summary><strong><code>ios_navigate</code></strong> — Navigate iOS Safari</summary>
 
-### agent.ios_navigate
+Navigate Mobile Safari to a URL.
 
-Navigate Mobile Safari to a URL. Requires an active iOS session.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `url` | string | ✅ | URL to navigate to in Mobile Safari |
+|------|------|:--------:|-------------|
+| `url` | string | ✅ | URL to navigate to |
 
-**Returns:**
-```json
-{ "navigated": true, "url": "https://example.com" }
-```
+**Response:** `{ "navigated": true, "url": "..." }`
+</details>
 
----
+<details>
+<summary><strong><code>ios_tap</code></strong> — Tap on iOS screen</summary>
 
-### agent.ios_tap
+Tap at specific coordinates on the iOS device screen.
 
-Tap at screen coordinates on the iOS device. Requires an active iOS session.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `x` | number | ✅ | X coordinate |
 | `y` | number | ✅ | Y coordinate |
 
-**Returns:**
+**Response:** `{ "tapped": true, "x": 100, "y": 200 }`
+</details>
+
+<details>
+<summary><strong><code>ios_screenshot</code></strong> — iOS screenshot</summary>
+
+Take a screenshot of the iOS device screen.
+
+**Params:** None
+
+**Response:** `{ "format": "png", "size": 54321, "data": "<base64>" }`
+</details>
+
+---
+
+### 4. `stealth`
+
+Anti-detection and bot evasion — stealth patches, fingerprinting, domain blocking, CAPTCHA detection.
+
+#### Actions
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `inject` | — | Inject stealth patches into page |
+| `test` | — | Test if current page detects bot |
+| `fingerprint` | `{user_agent?}` | Generate and apply browser fingerprint |
+| `block_domains` | `{domains?, category?}` | Block tracking/ad domains |
+| `detect_captcha` | — | Detect CAPTCHAs on page |
+
+#### Action Details
+
+<details>
+<summary><strong><code>inject</code></strong> — Inject stealth patches</summary>
+
+Apply all stealth patches to the browser page to avoid bot detection. Patches navigator, WebGL, WebRTC, and other browser fingerprinting vectors.
+
+**Params:** None
+
+**Response:**
 ```json
-{ "tapped": true, "x": 195.0, "y": 400.0 }
+{ "patches_applied": 12, "patches": ["navigator.webdriver", "chrome.runtime", ...] }
 ```
+</details>
 
----
+<details>
+<summary><strong><code>test</code></strong> — Bot detection test</summary>
 
-### agent.ios_screenshot
+Run bot detection tests on the current page to see if the browser is identified as automated.
 
-Take a screenshot of the iOS device screen. Returns base64-encoded image data. Requires an active iOS session.
+**Params:** None
 
-**Parameters:** None
+**Response:** JSON with detection test results.
+</details>
 
-**Returns:**
-```json
-{
-  "format": "png",
-  "size": 102400,
-  "data": "base64..."
-}
-```
+<details>
+<summary><strong><code>fingerprint</code></strong> — Apply fingerprint</summary>
 
----
+Generate a realistic browser fingerprint and apply it to the current page.
 
-<a id="scraping"></a>
-## scraping.* — Data Extraction
-
-Extract data from live browser pages using CSS, XPath, text search, structured data, and streaming schemas.
-
----
-
-### scraping.css
-
-Query the live DOM with a CSS selector. Supports `::text` and `::attr(name)` pseudo-elements. Returns JSON array of matching elements.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `selector` | string | ✅ | CSS selector to query (supports `::text`, `::attr(name)` pseudo-elements) |
-
-**Example selectors:**
-- `h1::text` — extract text from all `<h1>` elements
-- `a::attr(href)` — extract `href` attribute from all links
-- `.product .price::text` — scoped text extraction
-
-**Returns:** JSON array of matched elements/values.
-
----
-
-### scraping.xpath
-
-Query the live DOM with an XPath expression. Returns JSON array of matching elements.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `expression` | string | ✅ | XPath expression to evaluate |
-
-**Returns:** JSON array of matched elements.
-
----
-
-### scraping.find_text
-
-Find elements by visible text content. Optionally restrict search to a specific HTML tag.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `text` | string | ✅ | Text content to search for |
-| `tag` | string | | Optional HTML tag to constrain search (e.g. `"a"`, `"button"`) |
-
-**Returns:** JSON array of matched elements.
-
----
-
-### scraping.text
-
-Extract visible text content from the live page, optionally scoped to a CSS selector.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `selector` | string | | CSS selector (default: `"body"`) |
-
-**Returns:** JSON with extracted text content.
-
----
-
-### scraping.html
-
-Extract raw HTML from the live page, optionally scoped to a CSS selector.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `selector` | string | | CSS selector (default: `"body"`) |
-
-**Returns:** JSON with extracted HTML content.
-
----
-
-### scraping.markdown
-
-Extract page content as clean Markdown, optionally scoped to a CSS selector.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `selector` | string | | CSS selector (default: `"body"`) |
-
-**Returns:** JSON with Markdown content.
-
----
-
-### scraping.structured
-
-Extract structured data from the page including JSON-LD, OpenGraph, Twitter Card, and meta tags.
-
-**Parameters:** None
-
-**Returns:**
-```json
-{
-  "json_ld": [{ "@type": "Product", "name": "Widget" }],
-  "opengraph": { "og:title": "Example", "og:image": "..." },
-  "twitter_card": { "twitter:card": "summary" },
-  "meta": { "description": "..." }
-}
-```
-
----
-
-### scraping.stream
-
-Schema-based extraction of repeating items using field rules with optional pagination support.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `item_selector` | string | ✅ | CSS selector for repeating item container |
-| `fields` | string | ✅ | Field extraction rules as JSON array: `[{"name":"title","selector":"h2","extract":"text"}]` |
-| `pagination` | string | | Optional pagination config: `{"next_selector":".next","max_pages":5,"delay_ms":1000}` |
-
-**Example:**
-```json
-{
-  "item_selector": ".product-card",
-  "fields": "[{\"name\":\"title\",\"selector\":\"h2\",\"extract\":\"text\"},{\"name\":\"price\",\"selector\":\".price\",\"extract\":\"text\"},{\"name\":\"url\",\"selector\":\"a\",\"extract\":\"attr:href\"}]",
-  "pagination": "{\"next_selector\":\".next-page\",\"max_pages\":3,\"delay_ms\":1000}"
-}
-```
-
-**Returns:** JSON array of extracted items.
-
----
-
-### scraping.detect_forms
-
-Detect all forms on the current page and enumerate their fields, types, and attributes.
-
-**Parameters:** None
-
-**Returns:** JSON array of form descriptors with field metadata.
-
----
-
-### scraping.fill_form
-
-Fill form fields by selector-to-value mapping and optionally submit the form.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `form_selector` | string | ✅ | CSS selector of the form element |
-| `data` | string | ✅ | JSON object mapping field selectors to values, e.g. `{"#email":"a@b.com"}` |
-| `submit` | boolean | | If true, submit the form after filling |
-
-**Returns:** JSON with fill results.
-
----
-
-### scraping.snapshot_diff
-
-Compute a line-level unified diff between two accessibility snapshot texts. Returns additions, removals, unchanged count, and the unified diff output.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `before` | string | ✅ | Accessibility snapshot text before (from `navigation.snapshot`) |
-| `after` | string | ✅ | Accessibility snapshot text after (from `navigation.snapshot`) |
-
-**Returns:**
-```json
-{
-  "additions": 3,
-  "removals": 1,
-  "unchanged": 28,
-  "diff": "--- before\n+++ after\n@@ -5,3 +5,5 @@..."
-}
-```
-
----
-
-<a id="pool"></a>
-## pool.* — Multi-Browser Orchestration
-
-Manage a pool of browser instances for parallel crawling and testing.
-
----
-
-### pool.list
-
-List all browser instances in the pool with their ID, status, current URL, and creation time.
-
-**Parameters:** None
-
-**Returns:**
-```json
-{
-  "instances": [
-    { "id": "b1", "status": "idle", "url": "about:blank", "created_at": "..." }
-  ],
-  "count": 2
-}
-```
-
----
-
-### pool.status
-
-Get pool statistics: current size, max size, idle count, and busy count.
-
-**Parameters:** None
-
-**Returns:**
-```json
-{
-  "size": 3,
-  "max_size": 10,
-  "idle": 2,
-  "busy": 1
-}
-```
-
----
-
-<a id="stealth"></a>
-## stealth.* — Anti-Detection
-
-Bypass bot detection with stealth patches, fingerprint spoofing, domain blocking, and CAPTCHA detection.
-
----
-
-### stealth.inject
-
-Inject comprehensive stealth anti-bot patches into the browser page. Returns list of applied patches.
-
-**Parameters:** None
-
-**Returns:**
-```json
-{
-  "patches_applied": 12,
-  "patches": [
-    "navigator.webdriver",
-    "chrome.runtime",
-    "permissions.query",
-    "plugins.length",
-    "languages",
-    "platform",
-    "hardwareConcurrency",
-    "deviceMemory",
-    "webgl.vendor",
-    "webgl.renderer",
-    "canvas.fingerprint",
-    "audio.fingerprint"
-  ]
-}
-```
-
----
-
-### stealth.test
-
-Run bot detection tests on the current page. Returns a detection score and detailed test results.
-
-**Parameters:** None
-
-**Returns:** JSON with detection score (0–100, lower = more human-like) and detailed test results.
-
----
-
-### stealth.fingerprint
-
-Generate and apply a realistic browser fingerprint with configurable user-agent to evade bot detection.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `user_agent` | string | | Optional user-agent override |
 
-**Returns:**
+**Response:**
 ```json
-{
-  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)...",
-  "platform": "Win32"
-}
+{ "user_agent": "Mozilla/5.0 ...", "platform": "Win32" }
 ```
+</details>
 
----
+<details>
+<summary><strong><code>block_domains</code></strong> — Block domains</summary>
 
-### stealth.block_domains
+Block network requests to specified domains or a built-in category.
 
-Block network requests to specified domains or a built-in category such as ads, trackers, or social widgets.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `domains` | array\<string\> | | List of domains to block |
-| `category` | string | | Block an entire built-in category: `"ads"`, `"trackers"`, `"social"` |
-
-> **Note:** Provide either `domains` or `category`, not both.
-
-**Returns:** `"42 domains blocked"`
-
----
-
-### stealth.detect_captcha
-
-Detect CAPTCHAs on the current page. Returns the CAPTCHA type, provider, and confidence score.
-
-**Parameters:** None
-
-**Returns:**
-```json
-{
-  "detected": true,
-  "type": "recaptcha_v2",
-  "provider": "Google",
-  "confidence": 0.98,
-  "selector": ".g-recaptcha"
-}
-```
-
----
-
-<a id="crawling"></a>
-## crawling.* — Web Crawling
-
-Crawl websites, check robots.txt, generate sitemaps, and compare DOM snapshots.
-
----
-
-### crawling.spider
-
-Crawl a website starting from one or more seed URLs. Follows links with configurable depth, domain, and pattern filters.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `start_urls` | array\<string\> | ✅ | Starting URL(s) to crawl |
-| `max_depth` | integer | | Maximum link depth (default: 2) |
-| `max_pages` | integer | | Maximum pages to visit (default: 50) |
-| `same_domain_only` | boolean | | Stay on the same domain only (default: true) |
-| `url_patterns` | array\<string\> | | URL patterns to include (regex) |
-| `exclude_patterns` | array\<string\> | | URL patterns to exclude (regex) |
-| `delay_ms` | integer | | Delay between requests in ms (default: 500) |
+|------|------|:--------:|-------------|
+| `domains` | string[] | | List of domains to block |
+| `category` | string | | Built-in category: `ads`, `trackers`, `social` |
 
-**Returns:**
-```json
-{
-  "summary": {
-    "total_pages": 23,
-    "total_links": 156,
-    "errors": 1,
-    "domains": ["example.com"]
-  },
-  "pages_crawled": 23
-}
-```
+> Provide either `domains` or `category` (at least one required).
+
+**Response:** `"<N> domains blocked"`
+</details>
+
+<details>
+<summary><strong><code>detect_captcha</code></strong> — Detect CAPTCHAs</summary>
+
+Detect the presence of CAPTCHAs (reCAPTCHA, hCaptcha, etc.) on the current page.
+
+**Params:** None
+
+**Response:** JSON with CAPTCHA detection results (type, location, confidence).
+</details>
 
 ---
 
-### crawling.robots
+### 5. `data`
 
-Fetch and parse robots.txt for a domain. Optionally test if a specific path is allowed for a given user-agent.
+Data processing, HTTP requests, link analysis, and network intelligence.
 
-**Parameters:**
+#### Actions
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `pipeline` | `{name, steps, input}` | Multi-step data pipeline |
+| `http_get` | `{url, headers?}` | HTTP GET request |
+| `http_post` | `{url, body, headers?}` | HTTP POST request |
+| `links` | `{base_url}` | Extract link graph from page |
+| `graph` | `{edges}` | Analyze link graph |
+| `net_capture` | `{duration_seconds?, api_only?}` | Capture network traffic |
+| `net_analyze` | `{capture}` | Analyze captured API traffic |
+| `net_sdk` | `{schema, language?}` | Generate API SDK code |
+| `net_mock` | `{endpoints, port?}` | Generate mock server config |
+| `net_replay` | `{endpoints, name?}` | Generate replay sequence |
+
+#### Action Details
+
+<details>
+<summary><strong><code>pipeline</code></strong> — Data processing pipeline</summary>
+
+Execute a multi-step data transformation pipeline on input data. Steps can filter, transform, deduplicate, and reshape data.
+
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `base_url` | string | ✅ | Base URL to fetch robots.txt from |
-| `path` | string | | Path to check (e.g. `"/admin"`) |
-| `user_agent` | string | | User-agent string (default: `"*"`) |
-
-**Returns:**
-```json
-{
-  "sitemaps": ["https://example.com/sitemap.xml"],
-  "crawl_delay": 2.0,
-  "path_allowed": false
-}
-```
-
----
-
-### crawling.sitemap
-
-Generate a standards-compliant XML sitemap from a list of URL entries with priority and changefreq.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `base_url` | string | ✅ | Base URL for the sitemap |
-| `entries` | string | ✅ | URLs to include as JSON array: `[{"url":"...","priority":0.8}]` |
-| `default_changefreq` | string | | Default change frequency (e.g. `"weekly"`) |
-
-**Returns:** XML sitemap string.
-
----
-
-### crawling.snapshot
-
-Take a labeled DOM snapshot of the current page for later comparison with `crawling.compare`.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `label` | string | ✅ | Label to identify this snapshot for later comparison |
-
-**Returns:** `"snapshot 'before' saved"`
-
----
-
-### crawling.compare
-
-Compare two previously taken DOM snapshots by label and return a structured diff report.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `before` | string | ✅ | Label of the "before" snapshot |
-| `after` | string | ✅ | Label of the "after" snapshot |
-
-**Returns:** JSON structured diff report with additions, removals, and changes.
-
----
-
-<a id="data"></a>
-## data.* — Data Pipeline
-
-Transform, analyze, and transport data with pipelines, HTTP requests, and link graph analysis.
-
----
-
-### data.pipeline
-
-Execute a multi-step data pipeline with filter, transform, sort, and deduplicate operations on JSON input.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `name` | string | ✅ | Pipeline name |
 | `steps` | string | ✅ | Pipeline steps as JSON array (see docs for step types) |
 | `input` | string | ✅ | Input data as a JSON array of objects with string values |
 
-**Returns:** JSON array of transformed items.
+**Response:** JSON — transformed output data.
+</details>
 
----
+<details>
+<summary><strong><code>http_get</code></strong> — HTTP GET request</summary>
 
-### data.http_get
+Perform an HTTP GET request via the browser context.
 
-Perform an HTTP GET request through the browser session. Returns status code, headers, and response body.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `url` | string | ✅ | URL to fetch |
 | `headers` | string | | Optional headers as JSON object |
 
-**Returns:**
-```json
-{
-  "status": 200,
-  "headers": { "content-type": "application/json" },
-  "body": "..."
-}
-```
+**Response:** JSON — response body, status, headers.
+</details>
 
----
+<details>
+<summary><strong><code>http_post</code></strong> — HTTP POST request</summary>
 
-### data.http_post
+Perform an HTTP POST request via the browser context.
 
-Perform an HTTP POST request through the browser session. Returns status code, headers, and response body.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `url` | string | ✅ | URL to post to |
 | `body` | string | ✅ | Request body (string) |
 | `headers` | string | | Optional headers as JSON object |
 
-**Returns:**
-```json
-{
-  "status": 201,
-  "headers": { "content-type": "application/json" },
-  "body": "..."
-}
-```
+**Response:** JSON — response body, status, headers.
+</details>
 
----
+<details>
+<summary><strong><code>links</code></strong> — Extract link graph</summary>
 
-### data.links
+Extract all links from the current page and build a link graph.
 
-Extract all links from the live page and return as directed edges suitable for graph analysis.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `base_url` | string | ✅ | Base URL for resolving relative links |
 
-**Returns:** JSON array of `{ "source": "...", "target": "..." }` link edges.
+**Response:** JSON array of link edges.
+</details>
 
----
+<details>
+<summary><strong><code>graph</code></strong> — Analyze link graph</summary>
 
-### data.graph
+Analyze a link graph for structure, connectivity, and statistics.
 
-Analyze a link graph to compute stats, find orphan pages, identify hubs, and detect broken links.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `edges` | string | ✅ | Link edges as JSON array: `[{"source":"...","target":"..."}]` |
 
-**Returns:**
-```json
-{
-  "total_nodes": 45,
-  "total_edges": 156,
-  "orphans": ["https://example.com/old-page"],
-  "hubs": [{ "url": "https://example.com", "outgoing": 23 }]
-}
-```
+**Response:** JSON — graph analysis with node counts, clusters, PageRank-like stats.
+</details>
 
----
+<details>
+<summary><strong><code>net_capture</code></strong> — Capture network traffic</summary>
 
-<a id="crypto"></a>
-## crypto.* — Encryption & TOTP
+Inject interceptors and capture all network traffic (fetch + XHR) for a specified duration.
 
-AES-256-GCM encryption, PKCE challenge generation, and TOTP code generation.
-
----
-
-### crypto.encrypt
-
-Encrypt text with AES-256-GCM. Returns base64-encoded ciphertext (salt + nonce + ct).
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
+| `duration_seconds` | integer | | Capture duration in seconds (default `10`) |
+| `api_only` | boolean | | Only capture API calls, exclude static assets (default `true`) |
+
+**Response:**
+```json
+{ "endpoints": [ /* ApiEndpoint objects */ ], "count": 15, "duration_seconds": 10 }
+```
+</details>
+
+<details>
+<summary><strong><code>net_analyze</code></strong> — Analyze API traffic</summary>
+
+Analyze captured API endpoints to infer schemas, auth patterns, and endpoint templates.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `capture` | string | ✅ | Network capture data JSON (from `net_capture` output) |
+
+**Response:** JSON `ApiSchema` with `base_url`, `endpoints[]`, `auth_pattern`, `total_requests`, `unique_endpoints`.
+</details>
+
+<details>
+<summary><strong><code>net_sdk</code></strong> — Generate API SDK</summary>
+
+Generate a typed API client SDK from an analyzed API schema.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `schema` | string | ✅ | API schema JSON (from `net_analyze` output) |
+| `language` | string | | Target language: `typescript` or `python` (default `typescript`) |
+
+**Response:** `{ "language": "typescript", "code": "...", "endpoints_covered": 8 }`
+</details>
+
+<details>
+<summary><strong><code>net_mock</code></strong> — Generate mock server</summary>
+
+Generate a mock server configuration from captured endpoints.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `endpoints` | string | ✅ | Captured endpoints JSON (from `net_capture`) |
+| `port` | integer | | Port for mock server (default `3001`) |
+
+**Response:** JSON mock server configuration.
+</details>
+
+<details>
+<summary><strong><code>net_replay</code></strong> — Replay captured requests</summary>
+
+Generate a replay sequence from captured network requests.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `endpoints` | string | ✅ | Captured endpoints JSON (from `net_capture`) |
+| `name` | string | | Name for the replay sequence (default `replay_sequence`) |
+
+**Response:** JSON replay sequence definition.
+</details>
+
+---
+
+### 6. `secure`
+
+Cryptography, encrypted storage, and WebAuthn passkey management.
+
+#### Actions
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `encrypt` | `{plaintext, password}` | AES-256-GCM encryption |
+| `decrypt` | `{ciphertext, password}` | AES-256-GCM decryption |
+| `pkce` | — | Generate PKCE S256 challenge pair |
+| `totp` | `{secret}` | Generate 6-digit TOTP code |
+| `kv_set` | `{key, value}` | Store encrypted key-value pair |
+| `kv_get` | `{key}` | Retrieve value by key |
+| `kv_list` | — | List all stored keys |
+| `passkey_enable` | `{protocol?, transport?}` | Enable virtual WebAuthn authenticator |
+| `passkey_add` | `{credential_id, rp_id, user_handle?}` | Add passkey credential |
+| `passkey_list` | — | List stored passkeys |
+| `passkey_log` | — | Get WebAuthn operation log |
+| `passkey_disable` | — | Disable authenticator |
+| `passkey_remove` | `{credential_id}` | Remove passkey by ID |
+
+#### Action Details
+
+<details>
+<summary><strong><code>encrypt</code></strong> — AES-256-GCM encryption</summary>
+
+Encrypt a plaintext string using AES-256-GCM with PBKDF2 key derivation.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
 | `plaintext` | string | ✅ | Plaintext string to encrypt |
 | `password` | string | ✅ | Password for key derivation |
 
-**Returns:** Base64-encoded string (16-byte salt + 12-byte nonce + ciphertext).
+**Response:** Base64-encoded ciphertext (salt + nonce + ciphertext).
+</details>
 
----
+<details>
+<summary><strong><code>decrypt</code></strong> — AES-256-GCM decryption</summary>
 
-### crypto.decrypt
+Decrypt a previously encrypted ciphertext.
 
-Decrypt base64-encoded AES-256-GCM ciphertext (salt + nonce + ct).
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `ciphertext` | string | ✅ | Base64-encoded ciphertext (salt + nonce + ciphertext) |
 | `password` | string | ✅ | Password for key derivation |
 
-**Returns:** Decrypted plaintext string.
+**Response:** Decrypted plaintext string.
+</details>
 
----
+<details>
+<summary><strong><code>pkce</code></strong> — Generate PKCE challenge</summary>
 
-### crypto.generate_pkce
+Generate a PKCE S256 code verifier and code challenge pair for OAuth flows.
 
-Generate a PKCE S256 challenge pair (code_verifier + code_challenge).
+**Params:** None
 
-**Parameters:** None
-
-**Returns:**
+**Response:**
 ```json
-{
-  "code_verifier": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-  "code_challenge": "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
-}
+{ "code_verifier": "...", "code_challenge": "..." }
 ```
+</details>
 
----
+<details>
+<summary><strong><code>totp</code></strong> — Generate TOTP code</summary>
 
-### crypto.generate_totp
+Generate a 6-digit TOTP code from a Base32-encoded secret.
 
-Generate a 6-digit TOTP code from a base32 secret.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `secret` | string | ✅ | Base32-encoded TOTP secret |
 
-**Returns:** 6-digit TOTP code string (e.g. `"482913"`).
+**Response:** 6-digit TOTP code string.
+</details>
 
----
+<details>
+<summary><strong><code>kv_set</code></strong> — Store encrypted value</summary>
 
-<a id="parser"></a>
-## parser.* — HTML Parsing
+Store a key-value pair in the encrypted store.
 
-Parse raw HTML strings without a browser — lightweight and fast.
-
----
-
-### parser.parse_a11y_tree
-
-Parse HTML into an accessibility tree (text representation).
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `html` | string | ✅ | Raw HTML string |
-
-**Returns:** Text representation of the accessibility tree.
-
----
-
-### parser.query_selector
-
-Query HTML with a CSS selector. Returns JSON array of matching elements.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `html` | string | ✅ | Raw HTML string |
-| `selector` | string | ✅ | CSS selector to query |
-
-**Returns:** JSON array of matching elements.
-
----
-
-### parser.extract_text
-
-Extract visible text from HTML.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `html` | string | ✅ | Raw HTML string |
-
-**Returns:** Extracted text lines joined by newlines.
-
----
-
-### parser.extract_links
-
-Extract all links from HTML. Returns JSON array with href, text, is_external.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `html` | string | ✅ | Raw HTML string |
-
-**Returns:**
-```json
-[
-  { "href": "https://example.com", "text": "Example", "is_external": true },
-  { "href": "/about", "text": "About Us", "is_external": false }
-]
-```
-
----
-
-<a id="storage"></a>
-## storage.* — Encrypted Key-Value Storage
-
-Persistent AES-encrypted key-value store backed by a local database file.
-
----
-
-### storage.set
-
-Store a key-value pair in encrypted storage.
-
-**Parameters:**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `key` | string | ✅ | Storage key |
 | `value` | string | ✅ | Value to store |
 
-**Returns:** `"stored key \"session_token\""`
+**Response:** `"stored key \"<key>\""`
+</details>
 
----
+<details>
+<summary><strong><code>kv_get</code></strong> — Retrieve value</summary>
 
-### storage.get
+Retrieve a value from the encrypted store by key.
 
-Retrieve a value from encrypted storage by key.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `key` | string | ✅ | Storage key to retrieve |
 
-**Returns:** The stored value string, or `"key \"x\" not found"` if missing.
+**Response:** The stored value string, or `"key \"<key>\" not found"`.
+</details>
 
----
+<details>
+<summary><strong><code>kv_list</code></strong> — List all keys</summary>
 
-### storage.list_keys
+List all keys in the encrypted store.
 
-List all keys in encrypted storage.
+**Params:** None
 
-**Parameters:** None
+**Response:** JSON array of key strings.
+</details>
 
-**Returns:** JSON array of key strings.
+<details>
+<summary><strong><code>passkey_enable</code></strong> — Enable WebAuthn authenticator</summary>
 
----
+Enable a virtual WebAuthn authenticator in the browser for passkey testing.
 
-<a id="auth"></a>
-## auth.* — WebAuthn / Passkeys
-
-Simulate WebAuthn/FIDO2 passkey flows with a virtual authenticator for testing.
-
----
-
-### auth.passkey_enable
-
-Enable a virtual WebAuthn authenticator for passkey simulation.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `protocol` | string | | Protocol: `"ctap2"` or `"u2f"` (default: `"ctap2"`) |
-| `transport` | string | | Transport: `"internal"`, `"usb"`, `"nfc"`, `"ble"` (default: `"internal"`) |
+|------|------|:--------:|-------------|
+| `protocol` | string | | Protocol: `ctap2` or `u2f` (default `ctap2`) |
+| `transport` | string | | Transport: `internal`, `usb`, `nfc`, `ble` (default `internal`) |
 
-**Returns:** `"Virtual authenticator enabled"`
+**Response:** `"Virtual authenticator enabled"`
+</details>
 
----
+<details>
+<summary><strong><code>passkey_add</code></strong> — Add passkey credential</summary>
 
-### auth.passkey_add
+Add a virtual passkey credential to the authenticator.
 
-Add a passkey credential to the virtual authenticator.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `credential_id` | string | ✅ | Base64url-encoded credential ID |
-| `rp_id` | string | ✅ | Relying party domain (e.g. `"example.com"`) |
+| `rp_id` | string | ✅ | Relying party domain (e.g. `example.com`) |
 | `user_handle` | string | | Optional base64url-encoded user handle |
 
-**Returns:** `"Credential added"`
+**Response:** `"Credential added"`
+</details>
 
----
+<details>
+<summary><strong><code>passkey_list</code></strong> — List passkeys</summary>
 
-### auth.passkey_list
+List all virtual passkey credentials.
 
-List all stored passkey credentials.
+**Params:** None
 
-**Parameters:** None
+**Response:** JSON array of credential objects.
+</details>
 
-**Returns:** JSON array of credential objects.
+<details>
+<summary><strong><code>passkey_log</code></strong> — WebAuthn operation log</summary>
 
----
+Get the log of WebAuthn operations (registrations, authentications).
 
-### auth.passkey_log
+**Params:** None
 
-Get the WebAuthn operation log.
+**Response:** JSON array of WebAuthn log entries.
+</details>
 
-**Parameters:** None
-
-**Returns:** JSON array of WebAuthn operations.
-
----
-
-### auth.passkey_disable
+<details>
+<summary><strong><code>passkey_disable</code></strong> — Disable authenticator</summary>
 
 Disable the virtual WebAuthn authenticator.
 
-**Parameters:** None
+**Params:** None
 
-**Returns:** `"Virtual authenticator disabled"`
+**Response:** `"Virtual authenticator disabled"`
+</details>
 
----
+<details>
+<summary><strong><code>passkey_remove</code></strong> — Remove passkey</summary>
 
-### auth.passkey_remove
+Remove a specific virtual passkey credential by ID.
 
-Remove a passkey credential by ID.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
+|------|------|:--------:|-------------|
 | `credential_id` | string | ✅ | Credential ID to remove |
 
-**Returns:**
-```json
-{ "removed": true }
-```
+**Response:** `{ "removed": true }`
+</details>
 
 ---
 
-<a id="automation"></a>
-## automation.* — Rate Limiting & Retry Queues
+### 7. `computer`
 
-Manage request rate limits and retry queues for resilient automation.
+AI computer-use protocol, smart element resolution, and browser pool management.
 
----
+This tool implements the Anthropic Computer Use protocol for AI agent interactions, plus smart fuzzy element finding and a browser pool for multi-instance management.
 
-### automation.rate_limit
+#### Actions
 
-Check rate limiter status and whether new requests can proceed. Initializes the limiter on first call.
+| Action | Params | Description |
+|--------|--------|-------------|
+| `act` | `{action, include_screenshot?}` | Perform a computer-use action |
+| `observe` | `{include_screenshot?}` | Observe screen state |
+| `batch` | `{actions, include_screenshots?, stop_on_error?}` | Execute multiple actions in sequence |
+| `smart_find` | `{query}` | Find element by fuzzy description |
+| `smart_click` | `{query}` | Click element by fuzzy description |
+| `smart_fill` | `{query, value}` | Fill input by fuzzy description |
+| `pool_list` | — | List browser pool instances |
+| `pool_status` | — | Get pool status and stats |
 
-**Parameters:**
+#### Action Details
+
+<details>
+<summary><strong><code>act</code></strong> — Perform computer-use action</summary>
+
+Execute a single computer-use action. The `action` param is a JSON object with a `type` field.
+
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `max_per_second` | number | | Max requests per second (default: 2.0) |
-| `max_per_minute` | number | | Max requests per minute (default: 60.0) |
+|------|------|:--------:|-------------|
+| `action` | object | ✅ | Action object with `type` field. Types: `click` (x,y / selector / ref), `type` (text), `key` (key name), `scroll` (x, y, delta_x, delta_y), `navigate` (url), `wait` (ms), `screenshot`, `observe`, `evaluate` (expression), `fill` (selector, value), `select` (selector, value), `drag` (from_x, from_y, to_x, to_y), `done` (result), `fail` (reason) |
+| `include_screenshot` | boolean | | Include screenshot in observation (default `false`) |
 
-**Returns:**
-```json
-{
-  "can_proceed": true,
-  "stats": {
-    "requests_this_second": 1,
-    "requests_this_minute": 23,
-    "total_requests": 156
-  }
-}
-```
+**Response:** JSON `ActionResult` with `success`, `data`, and optional `screenshot`.
+</details>
 
----
+<details>
+<summary><strong><code>observe</code></strong> — Observe screen state</summary>
 
-### automation.retry
+Get the current screen observation (page structure, interactive elements, URL, title).
 
-Enqueue a failed URL or operation into the retry queue with exponential backoff and jitter.
-
-**Parameters:**
+**Params:**
 
 | Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `url` | string | ✅ | URL to retry |
-| `operation` | string | ✅ | Operation label (e.g. `"navigate"`, `"extract"`) |
-| `payload` | string | | Optional payload string |
+|------|------|:--------:|-------------|
+| `include_screenshot` | boolean | | Include base64 screenshot in observation (default `false`) |
 
-**Returns:**
+**Response:** JSON observation with page state, elements, and optional screenshot.
+</details>
+
+<details>
+<summary><strong><code>batch</code></strong> — Batch computer-use actions</summary>
+
+Execute multiple computer-use actions in sequence.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `actions` | array | ✅ | List of action objects (each with a `type` field) |
+| `include_screenshots` | boolean | | Include screenshots between actions (default `false`) |
+| `stop_on_error` | boolean | | Stop on first error (default `true`) |
+
+**Response:**
 ```json
-{
-  "id": "retry-abc123",
-  "queue_stats": {
-    "pending": 3,
-    "completed": 12,
-    "failed": 1,
-    "total": 16
-  }
-}
+{ "total": 5, "executed": 5, "results": [ /* ActionResult[] */ ] }
 ```
+</details>
+
+<details>
+<summary><strong><code>smart_find</code></strong> — Find element by description</summary>
+
+Find an element using fuzzy text matching, CSS selectors, or natural language descriptions.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `query` | string | ✅ | Fuzzy text, CSS selector, or element description to search for |
+
+**Response:**
+```json
+{ "query": "Login button", "matches": [ /* element matches */ ], "count": 2 }
+```
+</details>
+
+<details>
+<summary><strong><code>smart_click</code></strong> — Click by description</summary>
+
+Find and click an element using fuzzy matching.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `query` | string | ✅ | Fuzzy text, CSS selector, or element description to click |
+
+**Response:**
+```json
+{ "clicked": "button#login", "confidence": 0.95, "strategy": "aria-label" }
+```
+</details>
+
+<details>
+<summary><strong><code>smart_fill</code></strong> — Fill input by description</summary>
+
+Find an input by description and type a value into it.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `query` | string | ✅ | Fuzzy text, CSS selector, or description of the input |
+| `value` | string | ✅ | Value to type into the matched input |
+
+**Response:**
+```json
+{ "filled": "input#email", "value_length": 15, "confidence": 0.92, "strategy": "placeholder" }
+```
+</details>
+
+<details>
+<summary><strong><code>pool_list</code></strong> — List browser pool instances</summary>
+
+List all browser instances in the pool.
+
+**Params:** None
+
+**Response:** `{ "instances": [...], "count": 3 }`
+</details>
+
+<details>
+<summary><strong><code>pool_status</code></strong> — Pool status</summary>
+
+Get browser pool utilization stats.
+
+**Params:** None
+
+**Response:**
+```json
+{ "size": 5, "max_size": 10, "idle": 3, "busy": 2 }
+```
+</details>
 
 ---
 
-## Common Patterns
+### 8. `memory`
 
-### Pattern 1: Login Flow with computer.act
+Persistent agent memory — store, recall, and search knowledge across sessions.
 
-```
-1. computer.act  → { "type": "navigate", "url": "https://app.example.com/login" }
-2. computer.observe  → get snapshot, find email field @e3
-3. computer.act  → { "type": "fill", "selector": "@e3", "value": "user@example.com" }
-4. computer.act  → { "type": "fill", "selector": "@e5", "value": "password123" }
-5. computer.act  → { "type": "click", "selector": "@e7" }  // submit button
-6. computer.observe  → verify redirect to dashboard
-```
+Memory is persisted to `~/.onecrawl/agent_memory.json` and survives across sessions.
 
-### Pattern 2: Scraping with Snapshot + Smart Click
+#### Actions
 
-```
-1. navigation.goto     → navigate to target page
-2. stealth.inject      → apply anti-bot patches
-3. navigation.snapshot → get page structure with @refs
-4. smart.click         → query: "Accept cookies" (fuzzy match)
-5. scraping.stream     → extract product data with field schema
-6. scraping.structured → get JSON-LD/OpenGraph metadata
-```
+| Action | Params | Description |
+|--------|--------|-------------|
+| `store` | `{key, value, category?, domain?}` | Store a memory entry |
+| `recall` | `{key}` | Recall a memory by key |
+| `search` | `{query, category?, domain?}` | Search memories |
+| `forget` | `{key?, domain?}` | Delete memory entries |
+| `domain_strategy` | `{domain, strategy?}` | Store or recall domain-specific strategy |
+| `stats` | — | Get memory statistics |
 
-### Pattern 3: Visual Regression with Snapshot Diff
+#### Action Details
 
-```
-1. navigation.goto     → navigate to page
-2. crawling.snapshot   → label: "before"
-3. // ... perform actions that change the page ...
-4. crawling.snapshot   → label: "after"
-5. crawling.compare    → before: "before", after: "after"
-```
+<details>
+<summary><strong><code>store</code></strong> — Store a memory</summary>
 
-Or with accessibility snapshots:
-```
-1. navigation.snapshot → save snapshot text as "before"
-2. // ... perform actions ...
-3. navigation.snapshot → save snapshot text as "after"
-4. scraping.snapshot_diff → compare the two snapshot texts
-```
+Store a key-value memory entry with optional categorization and domain association.
 
-### Pattern 4: Multi-Step Chain Execution
+**Params:**
 
-```json
-{
-  "commands": [
-    { "tool": "navigation.goto", "args": { "url": "https://example.com" } },
-    { "tool": "navigation.wait", "args": { "selector": ".content", "timeout_ms": 5000 } },
-    { "tool": "navigation.snapshot", "args": { "interactive_only": true, "compact": true } },
-    { "tool": "scraping.css", "args": { "selector": "h1::text" } }
-  ],
-  "stop_on_error": true
-}
-```
-
-### Pattern 5: Safe Crawling with Rate Limiting
-
-```
-1. agent.safety_policy_set → allowed_domains: ["example.com"], max_actions: 200
-2. automation.rate_limit   → max_per_second: 1.0, max_per_minute: 30
-3. crawling.spider         → start_urls: ["https://example.com"], max_depth: 3
-4. // On failure:
-5. automation.retry         → enqueue failed URL with backoff
-```
-
-### Pattern 6: iOS Mobile Safari Testing
-
-```
-1. agent.ios_devices    → list available simulators
-2. agent.ios_connect    → connect to iPhone 15 Pro simulator
-3. agent.ios_navigate   → url: "https://m.example.com"
-4. agent.ios_screenshot → capture mobile rendering
-5. agent.ios_tap        → x: 195, y: 400
-```
-
-### Pattern 7: API Monitoring During Interaction
-
-```
-1. navigation.goto           → navigate to SPA
-2. agent.api_capture_start   → start intercepting fetch/XHR
-3. smart.click               → "Load more" button
-4. navigation.wait           → wait for ".results" selector
-5. agent.api_capture_summary → review all API calls made
-```
-
-### Pattern 8: Remote Browser (Browserbase/BrowserCloud)
-
-```
-1. agent.connect_remote → ws_url: "wss://connect.browserbase.com/session/..."
-2. navigation.goto      → all subsequent commands use the remote browser
-3. navigation.snapshot  → works exactly as local
-4. scraping.text        → extract from remote page
-```
-
----
-
-## Memory
-
-Agent Memory tools for persistent cross-session knowledge. Data is stored in `~/.onecrawl/agent_memory.json` and persists across sessions. Agents use memory to learn domain-specific patterns, selectors, strategies, and improve over time.
-
-### `memory.store`
-
-Store a memory entry — persists data across sessions.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
 | `key` | string | ✅ | Unique key for this memory entry |
 | `value` | any | ✅ | JSON value to store |
-| `category` | string | — | Category: `page_visit`, `element_pattern`, `domain_strategy`, `retry_knowledge`, `user_preference`, `selector_mapping`, `error_pattern`, `custom` |
-| `domain` | string | — | Domain this memory is associated with (e.g. `example.com`) |
+| `category` | string | | Category: `page_visit`, `element_pattern`, `domain_strategy`, `retry_knowledge`, `user_preference`, `selector_mapping`, `error_pattern`, `custom` |
+| `domain` | string | | Domain this memory is associated with (e.g. `example.com`) |
 
-**Returns:**
-```json
-{
-  "stored": "login:google",
-  "category": "Some(SelectorMapping)"
-}
-```
+**Response:** `{ "stored": "<key>", "category": "Custom" }`
+</details>
 
-### `memory.recall`
+<details>
+<summary><strong><code>recall</code></strong> — Recall a memory</summary>
 
-Recall a specific memory entry by key.
+Retrieve a specific memory entry by key.
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
 | `key` | string | ✅ | Key of the memory entry to recall |
 
-**Returns:**
+**Response:**
 ```json
 {
-  "key": "login:google",
-  "value": {"selector": "#login-btn"},
+  "key": "login-form-selectors",
+  "value": { ... },
   "category": "SelectorMapping",
-  "domain": "google.com",
-  "access_count": 5,
-  "created_at": 1700000000,
-  "accessed_at": 1700001000
-}
-```
-
-### `memory.search`
-
-Search agent memory by query text with optional filters.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `query` | string | ✅ | Search query (matches against keys and values) |
-| `category` | string | — | Filter by category |
-| `domain` | string | — | Filter by domain |
-
-**Returns:**
-```json
-{
-  "query": "login",
-  "count": 3,
-  "results": [
-    { "key": "login:google", "value": {...}, "category": "SelectorMapping", "domain": "google.com", "access_count": 5 }
-  ]
-}
-```
-
-### `memory.forget`
-
-Forget a specific memory entry by key, or clear all memories for a domain.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `key` | string | — | Key to forget |
-| `domain` | string | — | Domain to clear all memories for |
-
-If neither `key` nor `domain` is provided, clears **all** memory.
-
-**Returns:**
-```json
-{ "removed": 3, "domain": "example.com" }
-```
-
-### `memory.domain_strategy`
-
-Store or recall domain-specific strategies (login selectors, navigation patterns, popup handlers, rate limits).
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `domain` | string | ✅ | Domain to store/recall strategy for |
-| `strategy` | object | — | Strategy data as JSON. Omit to recall existing. |
-
-**Strategy format:**
-```json
-{
   "domain": "example.com",
-  "login_selectors": {
-    "username_selector": "#user",
-    "password_selector": "#pass",
-    "submit_selector": "#submit",
-    "success_indicator": ".dashboard"
-  },
-  "navigation_patterns": [],
-  "known_popups": [
-    { "trigger": "page_load", "dismiss_selector": ".cookie-accept", "frequency": "always" }
-  ],
-  "rate_limit_info": { "max_requests_per_minute": 60, "retry_after_seconds": 30, "backoff_strategy": "exponential" },
-  "anti_bot_level": "medium"
+  "access_count": 5,
+  "created_at": "...",
+  "accessed_at": "..."
 }
 ```
+Or `{ "key": "...", "found": false }` if not found.
+</details>
 
-### `memory.stats`
+<details>
+<summary><strong><code>search</code></strong> — Search memories</summary>
 
-Get memory utilization statistics.
+Search memory entries by query string, optionally filtered by category and domain.
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| — | — | — | No parameters |
+**Params:**
 
-**Returns:**
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `query` | string | ✅ | Search query (matches against keys and values) |
+| `category` | string | | Filter by category |
+| `domain` | string | | Filter by domain |
+
+**Response:**
+```json
+{ "query": "login", "count": 3, "results": [ /* memory entries */ ] }
+```
+</details>
+
+<details>
+<summary><strong><code>forget</code></strong> — Delete memories</summary>
+
+Delete memory entries by key, by domain, or clear all.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `key` | string | | Key to forget |
+| `domain` | string | | Domain to clear all memories for |
+
+> If both are omitted, clears **all** memories.
+
+**Response:** `{ "removed": true, "key": "..." }` or `{ "removed": 5, "domain": "..." }` or `{ "removed": 42, "cleared": "all" }`
+</details>
+
+<details>
+<summary><strong><code>domain_strategy</code></strong> — Domain strategy</summary>
+
+Store or recall a domain-specific automation strategy (login selectors, navigation patterns, anti-bot level, etc.).
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `domain` | string | ✅ | Domain to store/recall strategy for |
+| `strategy` | object | | Strategy data as JSON (omit to recall existing) |
+
+**Response:** When storing: `{ "stored": true, "domain": "..." }`. When recalling: the strategy object, or `{ "domain": "...", "found": false }`.
+</details>
+
+<details>
+<summary><strong><code>stats</code></strong> — Memory statistics</summary>
+
+Get memory usage statistics.
+
+**Params:** None
+
+**Response:**
 ```json
 {
   "total_entries": 42,
   "max_entries": 10000,
-  "categories": { "SelectorMapping": 15, "PageVisit": 20, "DomainStrategy": 7 },
-  "domains": { "google.com": 10, "github.com": 8 },
+  "categories": { "SelectorMapping": 15, "PageVisit": 20, ... },
+  "domains": { "example.com": 8, ... },
   "utilization": "0.4%"
 }
 ```
+</details>
 
 ---
 
-## Workflow
+### 9. `automate`
 
-Workflow DSL tools for defining and executing browser automation as JSON recipes. Supports 17 action types: `navigate`, `click`, `type`, `wait_for_selector`, `screenshot`, `evaluate`, `extract`, `smart_click`, `smart_fill`, `sleep`, `set_variable`, `log`, `assert`, `loop`, `conditional`, `sub_workflow`, `http_request`, `snapshot`.
+Workflow automation, AI task planning, and execution control.
 
-### `workflow.validate`
+#### Actions
 
-Validate a workflow definition before execution.
+| Action | Params | Description |
+|--------|--------|-------------|
+| `workflow_validate` | `{workflow}` | Validate a workflow definition |
+| `workflow_run` | `{workflow, variables?}` | Execute a workflow |
+| `plan` | `{goal, context?}` | Generate automation plan from natural language |
+| `execute` | `{plan, context?, max_retries?}` | Execute a generated plan |
+| `patterns` | — | List available automation patterns |
+| `rate_limit` | `{max_per_second?, max_per_minute?}` | Check/configure rate limiter |
+| `retry` | `{url, operation, payload?}` | Enqueue a retry with exponential backoff |
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
+#### Action Details
+
+<details>
+<summary><strong><code>workflow_validate</code></strong> — Validate workflow</summary>
+
+Parse and validate a workflow definition without executing it.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
 | `workflow` | string | ✅ | Workflow definition as JSON string |
 
-**Returns:**
+**Response:**
 ```json
-{
-  "valid": true,
-  "name": "Login Flow",
-  "steps": 5,
-  "variables": ["base_url", "username"]
-}
+{ "valid": true, "name": "my-workflow", "steps": 5, "variables": ["url", "username"] }
 ```
+Or `{ "valid": false, "errors": ["..."] }` on validation failure.
+</details>
 
-### `workflow.run`
+<details>
+<summary><strong><code>workflow_run</code></strong> — Execute workflow</summary>
 
-Execute a complete workflow. Supports variable interpolation (`{{var_name}}`), conditionals, loops, error handling, and step chaining.
+Execute a workflow definition. Supports variable interpolation, conditional steps, loops, error handling, and sub-workflows.
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `workflow` | string | ✅ | Workflow JSON string or file path |
-| `variables` | object | — | Override variables as key-value pairs |
+**Params:**
 
-**Example workflow:**
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `workflow` | string | ✅ | Workflow JSON string, or file path to workflow JSON |
+| `variables` | object | | Override variables as key-value pairs |
+
+**Response:**
 ```json
 {
-  "name": "Login Flow",
-  "variables": { "base_url": "https://example.com", "username": "user@test.com" },
-  "steps": [
-    { "name": "Navigate", "action": { "type": "navigate", "url": "{{base_url}}/login" } },
-    { "name": "Type username", "action": { "type": "type", "selector": "#email", "text": "{{username}}" } },
-    { "name": "Type password", "action": { "type": "type", "selector": "#password", "text": "secret123" } },
-    { "name": "Submit", "action": { "type": "click", "selector": "#submit" } },
-    { "name": "Verify", "action": { "type": "wait_for_selector", "selector": ".dashboard" } },
-    { "name": "Take screenshot", "action": { "type": "screenshot", "path": "result.png" } }
-  ],
-  "on_error": { "action": "stop", "screenshot": true, "log": true }
-}
-```
-
-**Returns:**
-```json
-{
-  "name": "Login Flow",
+  "name": "login-flow",
   "status": "success",
-  "total_duration_ms": 3200,
-  "steps_succeeded": 6,
+  "total_duration_ms": 4500,
+  "steps_succeeded": 5,
   "steps_failed": 0,
-  "steps_skipped": 0,
-  "steps": [...],
-  "variables": { "base_url": "https://example.com", "username": "user@test.com" }
+  "steps_skipped": 1,
+  "steps": [ /* StepResult[] */ ],
+  "variables": { /* final variable state */ }
+}
+```
+</details>
+
+<details>
+<summary><strong><code>plan</code></strong> — Generate automation plan</summary>
+
+Generate a step-by-step automation plan from a natural language goal. Uses built-in patterns and context to create an executable plan.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `goal` | string | ✅ | Natural language goal (e.g. `log into Gmail and check inbox`) |
+| `context` | object | | Additional context as key-value pairs (url, credentials, etc.) |
+
+**Response:** JSON `TaskPlan` with `goal`, `steps[]`, `estimated_duration`, `complexity`.
+</details>
+
+<details>
+<summary><strong><code>execute</code></strong> — Execute plan</summary>
+
+Execute a generated task plan (from `plan` action) or generate and execute from a natural language goal.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `plan` | string | ✅ | Task plan JSON (from `plan` output), or natural language goal |
+| `context` | object | | Additional context/variables |
+| `max_retries` | integer | | Maximum retries per step (default `2`) |
+
+**Response:**
+```json
+{
+  "goal": "...",
+  "status": "success|partial_success|failed",
+  "steps_completed": 5,
+  "steps_total": 6,
+  "steps_results": [ /* StepExecutionResult[] */ ],
+  "retries_used": 1,
+  "total_duration_ms": 8000
+}
+```
+</details>
+
+<details>
+<summary><strong><code>patterns</code></strong> — List automation patterns</summary>
+
+List all built-in automation patterns (login, search, form fill, etc.).
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "patterns": [
+    { "category": "authentication", "keywords": ["login", "sign in"], "steps": 4, "template": ["Navigate to login page", ...] }
+  ],
+  "count": 12
+}
+```
+</details>
+
+<details>
+<summary><strong><code>rate_limit</code></strong> — Rate limiter</summary>
+
+Check if the next action is allowed under the current rate limit, and optionally configure limits.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `max_per_second` | number | | Max requests per second (default `2.0`) |
+| `max_per_minute` | number | | Max requests per minute (default `60.0`) |
+
+**Response:**
+```json
+{ "can_proceed": true, "stats": { "requests_this_second": 1, "requests_this_minute": 15, ... } }
+```
+</details>
+
+<details>
+<summary><strong><code>retry</code></strong> — Enqueue retry</summary>
+
+Add a failed operation to the retry queue with exponential backoff.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `url` | string | ✅ | URL to retry |
+| `operation` | string | ✅ | Operation label (e.g. `navigate`, `extract`) |
+| `payload` | string | | Optional payload string |
+
+**Response:**
+```json
+{ "id": "retry-abc123", "queue_stats": { "pending": 3, "total": 5, "max_retries": 3 } }
+```
+</details>
+
+---
+
+### 10. `perf`
+
+Performance monitoring, budgets, regression detection, and visual regression testing.
+
+#### Actions
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `audit` | `{url?}` | Collect Core Web Vitals and performance metrics |
+| `budget` | `{budget, url?}` | Check performance against budget |
+| `compare` | `{baseline, current, threshold_pct?}` | Detect performance regressions |
+| `trace` | `{url, settle_ms?}` | Full performance trace with navigation |
+| `vrt_run` | `{suite}` | Run visual regression test suite |
+| `vrt_compare` | `{url, name, threshold?, selector?, full_page?, baseline_dir?}` | Compare screenshot against baseline |
+| `vrt_update` | `{test_name, baseline_dir?}` | Update VRT baseline |
+
+#### Action Details
+
+<details>
+<summary><strong><code>audit</code></strong> — Performance audit</summary>
+
+Collect Core Web Vitals (LCP, FID, CLS) and other performance metrics from the current or specified page.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `url` | string | | URL to audit (navigates there first). If omitted, audits current page |
+
+**Response:**
+```json
+{
+  "url": "https://example.com",
+  "timestamp": 1700000000,
+  "vitals": { "lcp": 1.2, "fid": 50, "cls": 0.05, ... },
+  "ratings": { "lcp": "good", "fid": "good", "cls": "good" },
+  "navigation_timing": { ... },
+  "resource_count": { ... },
+  "memory": { ... }
+}
+```
+</details>
+
+<details>
+<summary><strong><code>budget</code></strong> — Performance budget check</summary>
+
+Check current page performance against a defined budget.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `budget` | string | ✅ | Budget definition as JSON |
+| `url` | string | | URL to check (uses current page if omitted) |
+
+**Response:** JSON with pass/fail for each budget metric, violations list.
+</details>
+
+<details>
+<summary><strong><code>compare</code></strong> — Regression detection</summary>
+
+Compare two performance snapshots to detect regressions.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `baseline` | string | ✅ | Baseline snapshot JSON (from `audit` output) |
+| `current` | string | ✅ | Current snapshot JSON (from `audit` output) |
+| `threshold_pct` | number | | Regression threshold percentage (default `10`) |
+
+**Response:**
+```json
+{
+  "baseline_url": "...",
+  "current_url": "...",
+  "threshold_pct": 10,
+  "regressions": [ /* metric regressions */ ],
+  "regressed": false,
+  "count": 0
+}
+```
+</details>
+
+<details>
+<summary><strong><code>trace</code></strong> — Full performance trace</summary>
+
+Navigate to a URL and perform a full performance trace, waiting for the page to settle before collecting metrics.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `url` | string | ✅ | URL to trace |
+| `settle_ms` | integer | | Wait time in ms after load for late metrics (default `3000`) |
+
+**Response:**
+```json
+{
+  "url": "...",
+  "trace_duration_ms": 5000,
+  "settle_ms": 3000,
+  "vitals": { ... },
+  "ratings": { ... },
+  "navigation_timing": { ... },
+  "resource_count": { ... },
+  "memory": { ... }
+}
+```
+</details>
+
+<details>
+<summary><strong><code>vrt_run</code></strong> — Run VRT suite</summary>
+
+Run a full visual regression test suite, comparing screenshots against baselines.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `suite` | string | ✅ | VRT suite definition as JSON, or path to suite JSON file |
+
+**Response:**
+```json
+{
+  "suite_name": "homepage",
+  "total": 5,
+  "passed": 4,
+  "failed": 0,
+  "new_baselines": 1,
+  "errors": 0,
+  "duration_ms": 12000,
+  "results": [ /* VrtTestResult[] */ ],
+  "junit_xml": "<?xml ..."
+}
+```
+</details>
+
+<details>
+<summary><strong><code>vrt_compare</code></strong> — Compare screenshot</summary>
+
+Navigate to a URL, take a screenshot, and compare it against a stored baseline.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `url` | string | ✅ | URL to capture and compare |
+| `name` | string | ✅ | Test name for baseline lookup |
+| `threshold` | number | | Mismatch threshold percentage (default `0.1`) |
+| `selector` | string | | CSS selector for element screenshot |
+| `full_page` | boolean | | Capture full scrollable page |
+| `baseline_dir` | string | | Baseline directory (default `.vrt/baselines`) |
+
+**Response:** JSON `VrtTestResult` with `status` (passed/failed/new_baseline), `mismatch_percentage`, `diff_path`.
+</details>
+
+<details>
+<summary><strong><code>vrt_update</code></strong> — Update VRT baseline</summary>
+
+Promote the current screenshot to become the new baseline for a test.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `test_name` | string | ✅ | Test name to update baseline for |
+| `baseline_dir` | string | | Baseline directory (default `.vrt/baselines`) |
+
+**Response:**
+```json
+{ "updated": true, "test_name": "homepage-hero", "baseline_path": ".vrt/baselines/homepage-hero.png", "bytes": 54321 }
+```
+</details>
+
+---
+
+## Examples
+
+### Navigate and screenshot
+
+```json
+// Step 1: Navigate
+{ "action": "goto", "params": { "url": "https://example.com" } }
+
+// Step 2: Screenshot
+{ "action": "screenshot", "params": { "full_page": true } }
+```
+
+### Scrape with pagination
+
+```json
+{
+  "action": "stream",
+  "params": {
+    "item_selector": ".product-card",
+    "fields": "[{\"name\":\"title\",\"selector\":\"h2\",\"extract\":\"text\"},{\"name\":\"price\",\"selector\":\".price\",\"extract\":\"text\"}]",
+    "pagination": "{\"next_selector\":\".next-page\",\"max_pages\":5,\"delay_ms\":1000}"
+  }
+}
+```
+
+### Stealth + crawl workflow
+
+```json
+// 1. Apply stealth
+{ "action": "inject", "params": {} }
+
+// 2. Apply fingerprint
+{ "action": "fingerprint", "params": {} }
+
+// 3. Block trackers
+{ "action": "block_domains", "params": { "category": "trackers" } }
+
+// 4. Crawl (use `crawl` tool)
+{ "action": "spider", "params": { "start_urls": ["https://example.com"], "max_pages": 100 } }
+```
+
+### Execute a command chain
+
+```json
+{
+  "action": "execute_chain",
+  "params": {
+    "commands": [
+      { "tool": "navigation.goto", "args": { "url": "https://example.com/login" } },
+      { "tool": "navigation.type", "args": { "selector": "#email", "text": "user@example.com" } },
+      { "tool": "navigation.type", "args": { "selector": "#password", "text": "secret" } },
+      { "tool": "navigation.click", "args": { "selector": "button[type=submit]" } }
+    ]
+  }
+}
+```
+
+### Performance budget check
+
+```json
+{
+  "action": "budget",
+  "params": {
+    "url": "https://example.com",
+    "budget": "{\"lcp_ms\":2500,\"cls\":0.1,\"fid_ms\":100,\"resource_count\":{\"script\":10,\"image\":20}}"
+  }
 }
 ```
 
 ---
 
-## Net
+## Migration from v2 (108 tools → 10 tools)
 
-Network Intelligence tools for API reverse engineering. Capture page traffic, discover API schemas, generate SDK stubs, mock server configs, and replay sequences.
+The old 108-tool interface mapped 1:1 to individual operations. The new interface groups them by domain:
 
-### `net.capture`
-
-Capture network traffic from the current page by intercepting fetch() and XMLHttpRequest calls.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `duration_seconds` | number | — | Capture duration (default: 10) |
-| `api_only` | boolean | — | Exclude static assets (default: true) |
-
-**Returns:**
-```json
-{
-  "endpoints": [
-    {
-      "method": "GET",
-      "url": "https://api.example.com/users",
-      "path": "/users",
-      "base_url": "https://api.example.com",
-      "status_code": 200,
-      "content_type": "application/json",
-      "response_body": [{"id": 1, "name": "Alice"}],
-      "timing_ms": 150,
-      "category": "rest"
-    }
-  ],
-  "count": 5,
-  "duration_seconds": 10
-}
-```
-
-### `net.analyze`
-
-Analyze captured traffic to discover API schemas, auth patterns, and endpoint templates.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `capture` | string | ✅ | Endpoints JSON from `net.capture` output |
-
-**Returns:**
-```json
-{
-  "base_url": "https://api.example.com",
-  "endpoints": [
-    {
-      "method": "GET",
-      "path": "/users/{id}",
-      "path_params": ["id"],
-      "query_params": [],
-      "response_body_schema": { "type": "object", "properties": { "id": { "type": "integer" }, "name": { "type": "string" } } },
-      "status_codes": [200],
-      "call_count": 3,
-      "avg_latency_ms": 145.0
-    }
-  ],
-  "auth_pattern": { "type": "bearer", "header": "Authorization" },
-  "total_requests": 12,
-  "unique_endpoints": 5
-}
-```
-
-### `net.sdk`
-
-Generate an SDK client from an API schema. Supports TypeScript and Python.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `schema` | string | ✅ | API schema JSON from `net.analyze` |
-| `language` | string | — | `typescript` (default) or `python` |
-
-**Returns:**
-```json
-{
-  "language": "typescript",
-  "code": "export class ApiClient {\n  ...\n}",
-  "endpoints_covered": 5
-}
-```
-
-### `net.mock`
-
-Generate a mock server configuration from captured endpoints.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `endpoints` | string | ✅ | Endpoints JSON from `net.capture` |
-| `port` | number | — | Port for mock server (default: 3001) |
-
-**Returns:**
-```json
-{
-  "port": 3001,
-  "endpoints": [
-    { "method": "GET", "path": "/users", "response_status": 200, "response_body": [...] }
-  ],
-  "default_response": { "method": "GET", "path": "*", "response_status": 404 }
-}
-```
-
-### `net.replay`
-
-Generate a replay sequence from captured network traffic for reproducing API call patterns.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `endpoints` | string | ✅ | Endpoints JSON from `net.capture` |
-| `name` | string | — | Name for the sequence (default: `replay_sequence`) |
-
-**Returns:**
-```json
-{
-  "name": "checkout_flow",
-  "steps": [
-    { "method": "GET", "url": "https://api.example.com/cart", "expected_status": 200, "delay_before_ms": 50 },
-    { "method": "POST", "url": "https://api.example.com/checkout", "expected_status": 201, "delay_before_ms": 100 }
-  ],
-  "total_duration_ms": 150
-}
-```
+| Old Tool Name | New Tool | Action |
+|--------------|----------|--------|
+| `navigation.goto` | `browser` | `goto` |
+| `navigation.click` | `browser` | `click` |
+| `navigation.type` | `browser` | `type` |
+| `navigation.screenshot` | `browser` | `screenshot` |
+| `scraping.css` | `browser` | `css` |
+| `scraping.xpath` | `browser` | `xpath` |
+| `scraping.text` | `browser` | `text` |
+| `scraping.html` | `browser` | `html` |
+| `scraping.markdown` | `browser` | `markdown` |
+| `scraping.structured` | `browser` | `structured` |
+| `scraping.stream` | `browser` | `stream` |
+| `scraping.detect_forms` | `browser` | `detect_forms` |
+| `scraping.fill_form` | `browser` | `fill_form` |
+| `crawling.spider` | `crawl` | `spider` |
+| `crawling.robots` | `crawl` | `robots` |
+| `crawling.sitemap` | `crawl` | `sitemap` |
+| `crawling.snapshot` | `crawl` | `dom_snapshot` |
+| `crawling.compare` | `crawl` | `dom_compare` |
+| `stealth.inject` | `stealth` | `inject` |
+| `stealth.test` | `stealth` | `test` |
+| `stealth.fingerprint` | `stealth` | `fingerprint` |
+| `stealth.block_domains` | `stealth` | `block_domains` |
+| `stealth.detect_captcha` | `stealth` | `detect_captcha` |
+| `crypto.encrypt` | `secure` | `encrypt` |
+| `crypto.decrypt` | `secure` | `decrypt` |
+| `crypto.pkce` | `secure` | `pkce` |
+| `crypto.totp` | `secure` | `totp` |
+| `storage.set` | `secure` | `kv_set` |
+| `storage.get` | `secure` | `kv_get` |
+| `storage.list` | `secure` | `kv_list` |
+| `parser.accessibility` | `browser` | `parse_a11y` |
+| `parser.selector` | `browser` | `parse_selector` |
+| `parser.text` | `browser` | `parse_text` |
+| `parser.links` | `browser` | `parse_links` |
+| `data.pipeline` | `data` | `pipeline` |
+| `data.http_get` | `data` | `http_get` |
+| `data.http_post` | `data` | `http_post` |
+| `data.links` | `data` | `links` |
+| `data.graph` | `data` | `graph` |
+| `automation.rate_limit` | `automate` | `rate_limit` |
+| `automation.retry` | `automate` | `retry` |
+| `agent.execute_chain` | `agent` | `execute_chain` |
+| `agent.element_screenshot` | `agent` | `element_screenshot` |
+| `computer.act` | `computer` | `act` |
+| `computer.observe` | `computer` | `observe` |
+| `computer.batch` | `computer` | `batch` |
+| `computer.smart_find` | `computer` | `smart_find` |
+| `computer.smart_click` | `computer` | `smart_click` |
+| `computer.smart_fill` | `computer` | `smart_fill` |
+| `memory.store` | `memory` | `store` |
+| `memory.recall` | `memory` | `recall` |
+| `memory.search` | `memory` | `search` |
+| `memory.forget` | `memory` | `forget` |
+| `memory.domain_strategy` | `memory` | `domain_strategy` |
+| `memory.stats` | `memory` | `stats` |
+| `automation.workflow_validate` | `automate` | `workflow_validate` |
+| `automation.workflow_run` | `automate` | `workflow_run` |
+| `automation.plan` | `automate` | `plan` |
+| `automation.execute` | `automate` | `execute` |
+| `automation.patterns` | `automate` | `patterns` |
+| `perf.audit` | `perf` | `audit` |
+| `perf.budget` | `perf` | `budget` |
+| `perf.compare` | `perf` | `compare` |
+| `perf.trace` | `perf` | `trace` |
+| `perf.vrt_run` | `perf` | `vrt_run` |
+| `perf.vrt_compare` | `perf` | `vrt_compare` |
+| `perf.vrt_update` | `perf` | `vrt_update` |
+| `stealth.inject` | `stealth` | `inject` |
+| `stealth.test` | `stealth` | `test` |
+| `stealth.fingerprint` | `stealth` | `fingerprint` |
+| `stealth.block_domains` | `stealth` | `block_domains` |
+| `stealth.detect_captcha` | `stealth` | `detect_captcha` |
+| `agent.api_capture_start` | `agent` | `api_capture_start` |
+| `agent.api_capture_summary` | `agent` | `api_capture_summary` |
+| `agent.iframe_list` | `agent` | `iframe_list` |
+| `agent.iframe_snapshot` | `agent` | `iframe_snapshot` |
+| `agent.connect_remote` | `agent` | `connect_remote` |
+| `agent.safety_set` | `agent` | `safety_set` |
+| `agent.safety_status` | `agent` | `safety_status` |
+| `agent.skills_list` | `agent` | `skills_list` |
+| `agent.screencast_start` | `agent` | `screencast_start` |
+| `agent.screencast_stop` | `agent` | `screencast_stop` |
+| `agent.screencast_frame` | `agent` | `screencast_frame` |
+| `agent.recording_start` | `agent` | `recording_start` |
+| `agent.recording_stop` | `agent` | `recording_stop` |
+| `agent.recording_status` | `agent` | `recording_status` |
+| `agent.ios_devices` | `agent` | `ios_devices` |
+| `agent.ios_connect` | `agent` | `ios_connect` |
+| `agent.ios_navigate` | `agent` | `ios_navigate` |
+| `agent.ios_tap` | `agent` | `ios_tap` |
+| `agent.ios_screenshot` | `agent` | `ios_screenshot` |
+| `passkey.enable` | `secure` | `passkey_enable` |
+| `passkey.add` | `secure` | `passkey_add` |
+| `passkey.list` | `secure` | `passkey_list` |
+| `passkey.log` | `secure` | `passkey_log` |
+| `passkey.disable` | `secure` | `passkey_disable` |
+| `passkey.remove` | `secure` | `passkey_remove` |
+| `net.capture` | `data` | `net_capture` |
+| `net.analyze` | `data` | `net_analyze` |
+| `net.sdk` | `data` | `net_sdk` |
+| `net.mock` | `data` | `net_mock` |
+| `net.replay` | `data` | `net_replay` |
+| `crawl.spider` | `crawl` | `spider` |
+| `crawl.robots` | `crawl` | `robots` |
+| `crawl.sitemap` | `crawl` | `sitemap` |
+| `crawl.dom_snapshot` | `crawl` | `dom_snapshot` |
+| `crawl.dom_compare` | `crawl` | `dom_compare` |
+| `pool.list` | `computer` | `pool_list` |
+| `pool.status` | `computer` | `pool_status` |
 
 ---
 
 ## Error Handling
 
-All tools return errors via MCP's `ErrorData` format:
+All tools return errors in a consistent format:
 
 ```json
 {
-  "code": -1,
-  "message": "element not found: @e99"
+  "error": "descriptive error message"
 }
 ```
 
-Chain commands include structured step-level errors:
+### Common Error Patterns
 
-```json
-{
-  "tool": "navigation.click",
-  "success": false,
-  "error": {
-    "message": "element not found",
-    "code": "CHAIN_STEP_FAILED"
-  }
-}
-```
-
-### Common Error Codes
-
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `element not found` | Selector/ref doesn't match any element | Use `navigation.snapshot` to discover valid refs |
-| `browser error` | Browser session issue | Call `navigation.goto` to reinitialize |
-| `timeout` | Operation exceeded time limit | Increase `timeout_ms` or check page load |
-| `invalid base64` | Malformed encrypted data | Verify data was produced by `crypto.encrypt` |
-| `selector must not be empty` | Empty string passed as selector | Provide a valid CSS selector or `@ref` |
-
----
-
-<a id="vrt"></a>
-## vrt.* — Visual Regression Testing
-
-Compare screenshots against baselines to detect unintended visual changes. Supports per-test thresholds and JUnit XML reporting.
-
----
-
-### `vrt.run`
-
-Run a visual regression test suite. Navigates to each URL, takes screenshots, and compares against baselines.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `suite` | string | ✅ | JSON suite definition: `{"name": "...", "tests": [{"name": "...", "url": "...", "selector?": "...", "threshold?": 0.01}]}` |
-| `baseline_dir` | string | ✅ | Directory path for baseline screenshots |
-
-**Returns:**
-```json
-{
-  "suite": "homepage",
-  "total": 3,
-  "passed": 2,
-  "failed": 1,
-  "results": [
-    { "name": "hero", "passed": true, "mismatch_pct": 0.002 },
-    { "name": "footer", "passed": false, "mismatch_pct": 0.05 }
-  ],
-  "junit_xml_path": "/tmp/vrt-homepage.xml"
-}
-```
-
-### `vrt.compare`
-
-Compare two screenshots and return pixel-level diff metrics.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `baseline` | string | ✅ | Base64-encoded baseline image |
-| `current` | string | ✅ | Base64-encoded current image |
-| `threshold` | number | — | Mismatch threshold (default: 0.01 = 1%) |
-
-**Returns:**
-```json
-{
-  "match": false,
-  "mismatch_pct": 0.032,
-  "total_pixels": 1920000,
-  "diff_pixels": 61440
-}
-```
-
-### `vrt.update_baseline`
-
-Update baseline screenshots for a VRT suite (accept current as new baseline).
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `suite_name` | string | ✅ | Name of the suite to update |
-| `baseline_dir` | string | ✅ | Directory path for baselines |
-| `tests` | string | ✅ | JSON array of test names to update |
-
-**Returns:**
-```json
-{
-  "updated": 2,
-  "paths": [
-    "/baselines/homepage/hero.png",
-    "/baselines/homepage/footer.png"
-  ]
-}
-```
-
----
-
-<a id="planner"></a>
-## planner.* — AI Task Planner
-
-Generate and execute automation plans from natural language goals. Uses pattern matching against 7 built-in patterns (auth, search, extraction, form, navigation, interaction, monitoring).
-
----
-
-### `planner.plan`
-
-Generate an executable automation plan from a natural language goal.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `goal` | string | ✅ | Natural language goal (e.g., "log in to the admin panel") |
-| `context` | string | — | Additional context (current URL, page state, etc.) |
-
-**Returns:**
-```json
-{
-  "pattern": "auth",
-  "confidence": 0.92,
-  "steps": [
-    { "action": "navigate", "url": "https://example.com/login" },
-    { "action": "fill", "selector": "#email", "value": "{{email}}" },
-    { "action": "fill", "selector": "#password", "value": "{{password}}" },
-    { "action": "click", "selector": "button[type=submit]" }
-  ],
-  "fallback_patterns": ["form", "navigation"]
-}
-```
-
-### `planner.execute`
-
-Execute a generated plan step-by-step with self-healing retries and fallback strategies.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `plan` | string | ✅ | JSON plan from `planner.plan` output |
-| `max_retries` | number | — | Max retries per step (default: 2) |
-
-**Returns:**
-```json
-{
-  "completed": true,
-  "steps_executed": 4,
-  "results": [
-    { "step": 0, "action": "navigate", "success": true },
-    { "step": 1, "action": "fill", "success": true },
-    { "step": 2, "action": "fill", "success": true },
-    { "step": 3, "action": "click", "success": true }
-  ],
-  "errors": []
-}
-```
-
-### `planner.patterns`
-
-List all available automation patterns with their descriptions and trigger keywords.
-
-**Parameters:** None
-
-**Returns:**
-```json
-[
-  {
-    "name": "auth",
-    "description": "Authentication and login flows",
-    "keywords": ["login", "sign in", "authenticate", "credentials"],
-    "example_goals": ["log in to the admin panel", "authenticate with SSO"]
-  },
-  {
-    "name": "search",
-    "description": "Search and filter operations",
-    "keywords": ["search", "find", "filter", "query"],
-    "example_goals": ["search for product X", "filter results by date"]
-  }
-]
-```
-
----
-
-<a id="perf"></a>
-## perf.* — Performance Monitor
-
-Collect Core Web Vitals, enforce performance budgets, detect regressions, and run full page traces.
-
----
-
-### `perf.audit`
-
-Collect performance metrics from the current page — Core Web Vitals (LCP, FID, CLS, FCP, TTFB, INP), navigation timing, resource counts, and memory usage. Each vital is rated as good/needs_improvement/poor per Google's thresholds.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `url` | string | — | URL to audit (navigates first). Omit to audit current page. |
-
-**Returns:**
-```json
-{
-  "url": "https://example.com",
-  "vitals": { "lcp_ms": 1800, "fid_ms": 50, "cls": 0.05, "fcp_ms": 900, "ttfb_ms": 200, "inp_ms": 120 },
-  "ratings": { "lcp": "good", "fid": "good", "cls": "good", "fcp": "good", "ttfb": "good", "inp": "good" },
-  "navigation_timing": { "dns_ms": 10, "connect_ms": 30, "request_ms": 150, "response_ms": 50, "dom_interactive_ms": 800 },
-  "resource_count": { "total": 42, "scripts": 12, "stylesheets": 3, "images": 15, "fonts": 4, "other": 8 },
-  "memory": { "used_mb": 45.2, "total_mb": 128 }
-}
-```
-
-### `perf.budget`
-
-Check page performance against a budget. Returns pass/fail for each metric with severity levels (ok/warning/critical).
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `budget` | string | ✅ | JSON budget: `{"name": "...", "lcp_ms": 2500, "cls": 0.1, "max_requests": 50, ...}` |
-| `url` | string | — | URL to check (uses current page if omitted) |
-
-**Returns:**
-```json
-{
-  "budget_name": "production",
-  "passed": false,
-  "violations": 1,
-  "checks": [
-    { "metric": "lcp_ms", "budget": 2500, "actual": 1800, "passed": true, "severity": "ok" },
-    { "metric": "cls", "budget": 0.1, "actual": 0.05, "passed": true, "severity": "ok" },
-    { "metric": "max_requests", "budget": 50, "actual": 62, "passed": false, "severity": "critical" }
-  ]
-}
-```
-
-### `perf.compare`
-
-Compare two performance snapshots to detect regressions. Returns metrics that regressed beyond the threshold.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `baseline` | string | ✅ | Baseline snapshot JSON (from `perf.audit`) |
-| `current` | string | ✅ | Current snapshot JSON (from `perf.audit`) |
-| `threshold_pct` | number | — | Regression threshold percentage (default: 10) |
-
-**Returns:**
-```json
-{
-  "regressed": true,
-  "regressions": [
-    { "metric": "lcp_ms", "baseline": 1800, "current": 2400, "delta": 600, "delta_pct": 33.3, "severity": "critical" }
-  ]
-}
-```
-
-### `perf.trace`
-
-Full performance trace — navigates to a URL, waits for the page to settle, then collects comprehensive metrics including Core Web Vitals with ratings.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `url` | string | ✅ | URL to trace |
-| `settle_ms` | number | — | Wait time in ms after load for late metrics (default: 3000) |
-
-**Returns:**
-```json
-{
-  "url": "https://example.com",
-  "trace_duration_ms": 4500,
-  "vitals": { "lcp_ms": 1800, "fid_ms": 50, "cls": 0.05, "fcp_ms": 900, "ttfb_ms": 200, "inp_ms": 120 },
-  "ratings": { "lcp": "good", "fid": "good", "cls": "good", "fcp": "good", "ttfb": "good", "inp": "good" },
-  "navigation_timing": { "dns_ms": 10, "connect_ms": 30, "request_ms": 150, "response_ms": 50, "dom_interactive_ms": 800 },
-  "resource_count": { "total": 42, "scripts": 12, "stylesheets": 3, "images": 15, "fonts": 4, "other": 8 }
-}
-```
+| Error | Cause | Resolution |
+|-------|-------|------------|
+| `"Unknown action: xyz"` | Invalid action name | Check the action name in the reference tables above |
+| `"Browser not initialized"` | CDP action called before `goto` | Call `browser` with `goto` action first |
+| `"Missing required param: x"` | Required parameter omitted | Add the missing parameter to `params` |
+| `"Element not found"` | Selector/ref matches nothing | Verify selector; use `snapshot` to inspect the page |
+| `"Navigation timeout"` | Page load exceeded timeout | Increase `timeout` param or check URL accessibility |
+| `"Accessibility ref not found"` | Invalid `@eN` reference | Call `snapshot` to refresh refs before using them |
 
 ---
 
 ## Notes
 
-- **Browser lifecycle:** The headless browser starts on the first CDP tool call and persists for the session.
-- **`@ref` notation:** Refs from `navigation.snapshot` (e.g. `@e1`) can be used in any tool accepting a CSS selector — they auto-resolve to the actual DOM selector.
-- **Stealth:** Call `stealth.inject` early, before navigating to detection-heavy sites.
-- **Parser vs. Scraping:** `parser.*` works on raw HTML strings (no browser needed); `scraping.*` operates on the live browser DOM.
-- **Safety policies:** Use `agent.safety_policy_set` to constrain agent behavior in production deployments.
-- **Agent Memory:** Memory persists in `~/.onecrawl/agent_memory.json`. Use `memory.store` to teach the agent, `memory.recall` to retrieve, `memory.search` to find patterns.
-- **Workflow DSL:** Workflows support `{{variable}}` interpolation. Use `workflow.validate` before `workflow.run` in production.
-- **Network Intelligence:** The capture→analyze→sdk/mock/replay pipeline enables full API reverse engineering from browser traffic.
+- **Browser lazy init**: The browser is started on the first action that needs CDP (e.g., `goto`, `click`). Offline actions like `parse_a11y` never start a browser.
+- **Accessibility refs**: After calling `snapshot`, elements are assigned refs like `@e1`, `@e2`. Use these in `click`, `type`, `screenshot` (via `element` param) instead of CSS selectors for more reliable targeting.
+- **Memory persistence**: Agent memory is stored at `~/.onecrawl/agent_memory.json` and survives across sessions.
+- **Stealth patches**: Must call `stealth` → `inject` before navigating to the target site for maximum effectiveness.
+- **Rate limiting**: The `automate` → `rate_limit` action configures per-domain request throttling that applies to all subsequent navigation and network actions.
+
+---
+
+*Auto-generated from OneCrawl MCP server source (`onecrawl-mcp-rs`). Total: 10 tools, 108 actions.*
