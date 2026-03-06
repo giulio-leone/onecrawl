@@ -1,6 +1,6 @@
 # OneCrawl MCP API Reference
 
-> **10 consolidated tools • 123 actions • Action-based dispatch**
+> **10 consolidated tools • 148 actions • Action-based dispatch**
 
 All browser automation, crawling, scraping, security, and AI orchestration capabilities are accessed through 10 super-tools. Each tool accepts a uniform `{ action, params }` interface.
 
@@ -10,7 +10,7 @@ All browser automation, crawling, scraping, security, and AI orchestration capab
 
 | Tool | Actions | Description |
 |------|:-------:|-------------|
-| [`browser`](#1-browser) | 41 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage |
+| [`browser`](#1-browser) | 58 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage, network interception, console & errors, device emulation |
 | [`crawl`](#2-crawl) | 5 | Web crawling, robots.txt, sitemaps, DOM snapshots |
 | [`agent`](#3-agent) | 21 | Command chains, API capture, iframes, remote CDP, safety, screencast, recording, iOS |
 | [`stealth`](#4-stealth) | 5 | Anti-detection patches, fingerprinting, CAPTCHA detection |
@@ -97,6 +97,26 @@ A headless Chromium browser is launched automatically on the first call that req
 | `storage_set` | `{key, value, storage_type?}` | Set localStorage/sessionStorage value |
 | `export_session` | `{cookies?, local_storage?, session_storage?}` | Export full session state as JSON |
 | `import_session` | `{state}` | Import session state from export JSON |
+| | | **Network Interception** |
+| `intercept_enable` | `{patterns?}` | Start request interception with URL patterns (glob syntax) |
+| `intercept_add_rule` | `{url_pattern, method?, status?, headers?, body?}` | Add mock response rule; returns rule_id |
+| `intercept_remove_rule` | `{rule_id}` | Remove interception rule by ID |
+| `intercept_list` | — | List active interception rules and status |
+| `intercept_disable` | — | Stop interception, clear all rules |
+| `block_requests` | `{patterns, resource_types?}` | Block URLs matching patterns |
+| | | **Console, Dialog & Error** |
+| `console_start` | — | Start capturing console.log/warn/error/info messages |
+| `console_get` | `{level?, limit?}` | Get captured messages with optional filter |
+| `console_clear` | — | Clear captured console messages and page errors |
+| `dialog_handle` | `{accept, prompt_text?}` | Auto-handle JS alert/confirm/prompt dialogs |
+| `dialog_get` | — | Get info about last captured dialog |
+| `errors_get` | — | Get uncaught JS exceptions and page errors |
+| | | **Device Emulation** |
+| `emulate_device` | `{device?, width?, height?, user_agent?, device_scale_factor?, has_touch?, is_landscape?}` | Emulate device (presets: iphone-14, pixel-7, ipad-air, etc.) or custom |
+| `emulate_geolocation` | `{latitude, longitude, accuracy?}` | Spoof GPS coordinates |
+| `emulate_timezone` | `{timezone_id}` | Override timezone (e.g. 'America/New_York') |
+| `emulate_media` | `{color_scheme?, reduced_motion?, forced_colors?}` | Override CSS media features |
+| `emulate_network` | `{preset?, download_throughput?, upload_throughput?, latency?, offline?}` | Throttle network (presets: offline, 2g, 3g, 4g, wifi, etc.) or custom |
 
 #### Action Details
 
@@ -695,6 +715,245 @@ Import a previously exported session state to restore cookies and storage values
 | `state` | object | ✅ | Session state JSON (output of `export_session`) |
 
 **Response:** `"session imported — <n> cookies, <n> localStorage keys, <n> sessionStorage keys"`
+</details>
+
+<details>
+<summary><strong><code>intercept_enable</code></strong> — Start request interception</summary>
+
+Start intercepting network requests. Optionally filter by URL patterns (glob syntax). Once enabled, matching requests can be mocked via `intercept_add_rule` or blocked via `block_requests`.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `patterns` | string[] | | URL patterns to intercept (glob syntax, e.g. `["**/api/**"]`). Omit to intercept all requests. |
+
+**Response:** `"interception enabled"`
+</details>
+
+<details>
+<summary><strong><code>intercept_add_rule</code></strong> — Add mock response rule</summary>
+
+Add a rule that returns a mock response for requests matching the given URL pattern.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `url_pattern` | string | ✅ | URL pattern to match (glob syntax) |
+| `method` | string | | HTTP method filter (e.g. `"GET"`, `"POST"`) |
+| `status` | number | | HTTP status code for the mock response (default `200`) |
+| `headers` | object | | Response headers as key-value pairs |
+| `body` | string | | Response body string |
+
+**Response:** `"rule added — id: <rule_id>"`
+</details>
+
+<details>
+<summary><strong><code>intercept_remove_rule</code></strong> — Remove interception rule</summary>
+
+Remove a previously added interception rule by its ID.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `rule_id` | string | ✅ | Rule ID returned by `intercept_add_rule` |
+
+**Response:** `"rule <rule_id> removed"`
+</details>
+
+<details>
+<summary><strong><code>intercept_list</code></strong> — List interception rules</summary>
+
+List all active interception rules and current interception status.
+
+**Params:** None.
+
+**Response:** JSON object `{ "enabled": true, "rules": [{ "id": "...", "url_pattern": "...", ... }] }`.
+</details>
+
+<details>
+<summary><strong><code>intercept_disable</code></strong> — Stop interception</summary>
+
+Disable request interception and clear all active rules.
+
+**Params:** None.
+
+**Response:** `"interception disabled — <n> rules cleared"`
+</details>
+
+<details>
+<summary><strong><code>block_requests</code></strong> — Block URLs matching patterns</summary>
+
+Block network requests matching the given URL patterns. Optionally filter by resource type.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `patterns` | string[] | ✅ | URL patterns to block (glob syntax) |
+| `resource_types` | string[] | | Filter by resource type (e.g. `["image", "font", "stylesheet"]`) |
+
+**Response:** `"blocking <n> patterns"`
+</details>
+
+<details>
+<summary><strong><code>console_start</code></strong> — Start capturing console messages</summary>
+
+Begin capturing browser console output (`console.log`, `console.warn`, `console.error`, `console.info`). Messages are buffered until retrieved with `console_get`.
+
+**Params:** None.
+
+**Response:** `"console capture started"`
+</details>
+
+<details>
+<summary><strong><code>console_get</code></strong> — Get captured console messages</summary>
+
+Retrieve buffered console messages, optionally filtered by level.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `level` | string | | Filter by level: `"log"`, `"warn"`, `"error"`, `"info"` |
+| `limit` | number | | Maximum number of messages to return |
+
+**Response:** JSON array `[{ "level": "error", "text": "...", "timestamp": "..." }, ...]`.
+</details>
+
+<details>
+<summary><strong><code>console_clear</code></strong> — Clear console messages</summary>
+
+Clear all captured console messages and page errors from the buffer.
+
+**Params:** None.
+
+**Response:** `"console cleared — <n> messages removed"`
+</details>
+
+<details>
+<summary><strong><code>dialog_handle</code></strong> — Handle JS dialogs</summary>
+
+Configure automatic handling of JavaScript `alert()`, `confirm()`, and `prompt()` dialogs.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `accept` | boolean | ✅ | `true` to accept/OK, `false` to dismiss/cancel |
+| `prompt_text` | string | | Text to enter for `prompt()` dialogs |
+
+**Response:** `"dialog handler configured — accept: <accept>"`
+</details>
+
+<details>
+<summary><strong><code>dialog_get</code></strong> — Get last dialog info</summary>
+
+Get information about the most recently captured JavaScript dialog.
+
+**Params:** None.
+
+**Response:** JSON object `{ "type": "confirm", "message": "Are you sure?", "handled": true, "accepted": true }` or `"no dialog captured"`.
+</details>
+
+<details>
+<summary><strong><code>errors_get</code></strong> — Get page errors</summary>
+
+Get uncaught JavaScript exceptions and page errors captured during the session.
+
+**Params:** None.
+
+**Response:** JSON array `[{ "message": "...", "stack": "...", "timestamp": "..." }, ...]`.
+</details>
+
+<details>
+<summary><strong><code>emulate_device</code></strong> — Emulate device</summary>
+
+Emulate a mobile/tablet device using a preset or custom viewport configuration.
+
+**Presets:** `iphone-14`, `iphone-14-pro`, `pixel-7`, `ipad-air`, `galaxy-s23`.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `device` | string | | Preset device name (e.g. `"iphone-14"`) |
+| `width` | number | | Custom viewport width (px) |
+| `height` | number | | Custom viewport height (px) |
+| `user_agent` | string | | Custom User-Agent string |
+| `device_scale_factor` | number | | Device pixel ratio (e.g. `2`, `3`) |
+| `has_touch` | boolean | | Enable touch events |
+| `is_landscape` | boolean | | Use landscape orientation |
+
+**Response:** `"emulating <device> — <width>×<height> @<dpr>x"`
+</details>
+
+<details>
+<summary><strong><code>emulate_geolocation</code></strong> — Spoof GPS coordinates</summary>
+
+Override the browser's geolocation API to return the specified coordinates.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `latitude` | number | ✅ | Latitude in decimal degrees |
+| `longitude` | number | ✅ | Longitude in decimal degrees |
+| `accuracy` | number | | Accuracy in meters (default `1`) |
+
+**Response:** `"geolocation set — <lat>, <lng>"`
+</details>
+
+<details>
+<summary><strong><code>emulate_timezone</code></strong> — Override timezone</summary>
+
+Override the browser's timezone for `Date` objects, `Intl`, and related APIs.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `timezone_id` | string | ✅ | IANA timezone identifier (e.g. `"America/New_York"`, `"Europe/Rome"`) |
+
+**Response:** `"timezone set — <timezone_id>"`
+</details>
+
+<details>
+<summary><strong><code>emulate_media</code></strong> — Override CSS media features</summary>
+
+Override CSS media features for responsive design testing and accessibility checks.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `color_scheme` | string | | `"light"` or `"dark"` |
+| `reduced_motion` | string | | `"reduce"` or `"no-preference"` |
+| `forced_colors` | string | | `"active"` or `"none"` |
+
+**Response:** `"media features set"`
+</details>
+
+<details>
+<summary><strong><code>emulate_network</code></strong> — Throttle network</summary>
+
+Simulate network conditions using a preset or custom throughput/latency values.
+
+**Presets:** `offline`, `2g`, `slow-3g`, `3g`, `4g`, `wifi`.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `preset` | string | | Network preset name |
+| `download_throughput` | number | | Download speed in bytes/sec |
+| `upload_throughput` | number | | Upload speed in bytes/sec |
+| `latency` | number | | Additional latency in ms |
+| `offline` | boolean | | Simulate offline mode |
+
+**Response:** `"network emulation — <preset or custom>"`
 </details>
 
 ---
@@ -2467,4 +2726,4 @@ All tools return errors in a consistent format:
 
 ---
 
-*Auto-generated from OneCrawl MCP server source (`onecrawl-mcp-rs`). Total: 10 tools, 123 actions.*
+*Auto-generated from OneCrawl MCP server source (`onecrawl-mcp-rs`). Total: 10 tools, 148 actions.*
