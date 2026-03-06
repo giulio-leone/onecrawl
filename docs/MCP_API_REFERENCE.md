@@ -1,6 +1,6 @@
 # OneCrawl MCP API Reference
 
-> **85 tools across 14 namespaces** for browser automation, web scraping, anti-detection, and AI-driven computer use.
+> **98 tools across 17 namespaces** for browser automation, web scraping, anti-detection, and AI-driven computer use.
 
 ---
 
@@ -45,6 +45,9 @@ A headless Chromium browser is launched automatically on the first CDP tool call
 | [storage.*](#storage) | 3 | Encrypted Key-Value Storage |
 | [auth.*](#auth) | 6 | WebAuthn / Passkeys — virtual authenticator simulation |
 | [automation.*](#automation) | 2 | Rate Limiting & Retry Queues |
+| [memory.*](#memory) | 6 | Agent Memory — persistent cross-session memory, domain strategies |
+| [workflow.*](#workflow) | 2 | Workflow DSL — JSON workflow definitions with steps, conditionals, loops |
+| [net.*](#net) | 5 | Network Intelligence — API discovery, SDK generation, mock servers |
 
 ---
 
@@ -1853,6 +1856,325 @@ Or with accessibility snapshots:
 
 ---
 
+## Memory
+
+Agent Memory tools for persistent cross-session knowledge. Data is stored in `~/.onecrawl/agent_memory.json` and persists across sessions. Agents use memory to learn domain-specific patterns, selectors, strategies, and improve over time.
+
+### `memory.store`
+
+Store a memory entry — persists data across sessions.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `key` | string | ✅ | Unique key for this memory entry |
+| `value` | any | ✅ | JSON value to store |
+| `category` | string | — | Category: `page_visit`, `element_pattern`, `domain_strategy`, `retry_knowledge`, `user_preference`, `selector_mapping`, `error_pattern`, `custom` |
+| `domain` | string | — | Domain this memory is associated with (e.g. `example.com`) |
+
+**Returns:**
+```json
+{
+  "stored": "login:google",
+  "category": "Some(SelectorMapping)"
+}
+```
+
+### `memory.recall`
+
+Recall a specific memory entry by key.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `key` | string | ✅ | Key of the memory entry to recall |
+
+**Returns:**
+```json
+{
+  "key": "login:google",
+  "value": {"selector": "#login-btn"},
+  "category": "SelectorMapping",
+  "domain": "google.com",
+  "access_count": 5,
+  "created_at": 1700000000,
+  "accessed_at": 1700001000
+}
+```
+
+### `memory.search`
+
+Search agent memory by query text with optional filters.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `query` | string | ✅ | Search query (matches against keys and values) |
+| `category` | string | — | Filter by category |
+| `domain` | string | — | Filter by domain |
+
+**Returns:**
+```json
+{
+  "query": "login",
+  "count": 3,
+  "results": [
+    { "key": "login:google", "value": {...}, "category": "SelectorMapping", "domain": "google.com", "access_count": 5 }
+  ]
+}
+```
+
+### `memory.forget`
+
+Forget a specific memory entry by key, or clear all memories for a domain.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `key` | string | — | Key to forget |
+| `domain` | string | — | Domain to clear all memories for |
+
+If neither `key` nor `domain` is provided, clears **all** memory.
+
+**Returns:**
+```json
+{ "removed": 3, "domain": "example.com" }
+```
+
+### `memory.domain_strategy`
+
+Store or recall domain-specific strategies (login selectors, navigation patterns, popup handlers, rate limits).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `domain` | string | ✅ | Domain to store/recall strategy for |
+| `strategy` | object | — | Strategy data as JSON. Omit to recall existing. |
+
+**Strategy format:**
+```json
+{
+  "domain": "example.com",
+  "login_selectors": {
+    "username_selector": "#user",
+    "password_selector": "#pass",
+    "submit_selector": "#submit",
+    "success_indicator": ".dashboard"
+  },
+  "navigation_patterns": [],
+  "known_popups": [
+    { "trigger": "page_load", "dismiss_selector": ".cookie-accept", "frequency": "always" }
+  ],
+  "rate_limit_info": { "max_requests_per_minute": 60, "retry_after_seconds": 30, "backoff_strategy": "exponential" },
+  "anti_bot_level": "medium"
+}
+```
+
+### `memory.stats`
+
+Get memory utilization statistics.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| — | — | — | No parameters |
+
+**Returns:**
+```json
+{
+  "total_entries": 42,
+  "max_entries": 10000,
+  "categories": { "SelectorMapping": 15, "PageVisit": 20, "DomainStrategy": 7 },
+  "domains": { "google.com": 10, "github.com": 8 },
+  "utilization": "0.4%"
+}
+```
+
+---
+
+## Workflow
+
+Workflow DSL tools for defining and executing browser automation as JSON recipes. Supports 17 action types: `navigate`, `click`, `type`, `wait_for_selector`, `screenshot`, `evaluate`, `extract`, `smart_click`, `smart_fill`, `sleep`, `set_variable`, `log`, `assert`, `loop`, `conditional`, `sub_workflow`, `http_request`, `snapshot`.
+
+### `workflow.validate`
+
+Validate a workflow definition before execution.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `workflow` | string | ✅ | Workflow definition as JSON string |
+
+**Returns:**
+```json
+{
+  "valid": true,
+  "name": "Login Flow",
+  "steps": 5,
+  "variables": ["base_url", "username"]
+}
+```
+
+### `workflow.run`
+
+Execute a complete workflow. Supports variable interpolation (`{{var_name}}`), conditionals, loops, error handling, and step chaining.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `workflow` | string | ✅ | Workflow JSON string or file path |
+| `variables` | object | — | Override variables as key-value pairs |
+
+**Example workflow:**
+```json
+{
+  "name": "Login Flow",
+  "variables": { "base_url": "https://example.com", "username": "user@test.com" },
+  "steps": [
+    { "name": "Navigate", "action": { "type": "navigate", "url": "{{base_url}}/login" } },
+    { "name": "Type username", "action": { "type": "type", "selector": "#email", "text": "{{username}}" } },
+    { "name": "Type password", "action": { "type": "type", "selector": "#password", "text": "secret123" } },
+    { "name": "Submit", "action": { "type": "click", "selector": "#submit" } },
+    { "name": "Verify", "action": { "type": "wait_for_selector", "selector": ".dashboard" } },
+    { "name": "Take screenshot", "action": { "type": "screenshot", "path": "result.png" } }
+  ],
+  "on_error": { "action": "stop", "screenshot": true, "log": true }
+}
+```
+
+**Returns:**
+```json
+{
+  "name": "Login Flow",
+  "status": "success",
+  "total_duration_ms": 3200,
+  "steps_succeeded": 6,
+  "steps_failed": 0,
+  "steps_skipped": 0,
+  "steps": [...],
+  "variables": { "base_url": "https://example.com", "username": "user@test.com" }
+}
+```
+
+---
+
+## Net
+
+Network Intelligence tools for API reverse engineering. Capture page traffic, discover API schemas, generate SDK stubs, mock server configs, and replay sequences.
+
+### `net.capture`
+
+Capture network traffic from the current page by intercepting fetch() and XMLHttpRequest calls.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `duration_seconds` | number | — | Capture duration (default: 10) |
+| `api_only` | boolean | — | Exclude static assets (default: true) |
+
+**Returns:**
+```json
+{
+  "endpoints": [
+    {
+      "method": "GET",
+      "url": "https://api.example.com/users",
+      "path": "/users",
+      "base_url": "https://api.example.com",
+      "status_code": 200,
+      "content_type": "application/json",
+      "response_body": [{"id": 1, "name": "Alice"}],
+      "timing_ms": 150,
+      "category": "rest"
+    }
+  ],
+  "count": 5,
+  "duration_seconds": 10
+}
+```
+
+### `net.analyze`
+
+Analyze captured traffic to discover API schemas, auth patterns, and endpoint templates.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `capture` | string | ✅ | Endpoints JSON from `net.capture` output |
+
+**Returns:**
+```json
+{
+  "base_url": "https://api.example.com",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/users/{id}",
+      "path_params": ["id"],
+      "query_params": [],
+      "response_body_schema": { "type": "object", "properties": { "id": { "type": "integer" }, "name": { "type": "string" } } },
+      "status_codes": [200],
+      "call_count": 3,
+      "avg_latency_ms": 145.0
+    }
+  ],
+  "auth_pattern": { "type": "bearer", "header": "Authorization" },
+  "total_requests": 12,
+  "unique_endpoints": 5
+}
+```
+
+### `net.sdk`
+
+Generate an SDK client from an API schema. Supports TypeScript and Python.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `schema` | string | ✅ | API schema JSON from `net.analyze` |
+| `language` | string | — | `typescript` (default) or `python` |
+
+**Returns:**
+```json
+{
+  "language": "typescript",
+  "code": "export class ApiClient {\n  ...\n}",
+  "endpoints_covered": 5
+}
+```
+
+### `net.mock`
+
+Generate a mock server configuration from captured endpoints.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `endpoints` | string | ✅ | Endpoints JSON from `net.capture` |
+| `port` | number | — | Port for mock server (default: 3001) |
+
+**Returns:**
+```json
+{
+  "port": 3001,
+  "endpoints": [
+    { "method": "GET", "path": "/users", "response_status": 200, "response_body": [...] }
+  ],
+  "default_response": { "method": "GET", "path": "*", "response_status": 404 }
+}
+```
+
+### `net.replay`
+
+Generate a replay sequence from captured network traffic for reproducing API call patterns.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `endpoints` | string | ✅ | Endpoints JSON from `net.capture` |
+| `name` | string | — | Name for the sequence (default: `replay_sequence`) |
+
+**Returns:**
+```json
+{
+  "name": "checkout_flow",
+  "steps": [
+    { "method": "GET", "url": "https://api.example.com/cart", "expected_status": 200, "delay_before_ms": 50 },
+    { "method": "POST", "url": "https://api.example.com/checkout", "expected_status": 201, "delay_before_ms": 100 }
+  ],
+  "total_duration_ms": 150
+}
+```
+
+---
+
 ## Error Handling
 
 All tools return errors via MCP's `ErrorData` format:
@@ -1896,3 +2218,6 @@ Chain commands include structured step-level errors:
 - **Stealth:** Call `stealth.inject` early, before navigating to detection-heavy sites.
 - **Parser vs. Scraping:** `parser.*` works on raw HTML strings (no browser needed); `scraping.*` operates on the live browser DOM.
 - **Safety policies:** Use `agent.safety_policy_set` to constrain agent behavior in production deployments.
+- **Agent Memory:** Memory persists in `~/.onecrawl/agent_memory.json`. Use `memory.store` to teach the agent, `memory.recall` to retrieve, `memory.search` to find patterns.
+- **Workflow DSL:** Workflows support `{{variable}}` interpolation. Use `workflow.validate` before `workflow.run` in production.
+- **Network Intelligence:** The capture→analyze→sdk/mock/replay pipeline enables full API reverse engineering from browser traffic.
