@@ -1,6 +1,6 @@
 # OneCrawl MCP API Reference
 
-> **10 consolidated tools • 214 actions • Action-based dispatch**
+> **10 consolidated tools • 239 actions • Action-based dispatch**
 
 All browser automation, crawling, scraping, security, and AI orchestration capabilities are accessed through 10 super-tools. Each tool accepts a uniform `{ action, params }` interface.
 
@@ -10,11 +10,11 @@ All browser automation, crawling, scraping, security, and AI orchestration capab
 
 | Tool | Actions | Description |
 |------|:-------:|-------------|
-| [`browser`](#1-browser) | 84 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage, network interception, console & errors, device emulation, file operations, shadow DOM, session context, smart forms, self-healing selectors, event reactions |
+| [`browser`](#1-browser) | 92 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage, network interception, console & errors, device emulation, file operations, shadow DOM, session context, smart forms, self-healing selectors, event reactions, service worker/PWA, offline mode |
 | [`crawl`](#2-crawl) | 5 | Web crawling, robots.txt, sitemaps, DOM snapshots |
-| [`agent`](#3-agent) | 27 | Command chains, API capture, iframes, remote CDP, safety, screencast, recording, iOS, task decomposition, vision observation |
-| [`stealth`](#4-stealth) | 5 | Anti-detection patches, fingerprinting, CAPTCHA detection |
-| [`data`](#5-data) | 18 | Data pipelines, HTTP client, link graphs, network intelligence, structured extraction |
+| [`agent`](#3-agent) | 37 | Command chains, API capture, iframes, remote CDP, safety, screencast, recording, iOS, task decomposition, vision observation, WCAG auditing, accessibility tree, screen reader simulation |
+| [`stealth`](#4-stealth) | 12 | Anti-detection patches, fingerprinting, CAPTCHA detection, human behavior simulation |
+| [`data`](#5-data) | 26 | Data pipelines, HTTP client, link graphs, network intelligence, structured extraction, WebSocket, SSE, GraphQL subscriptions |
 | [`secure`](#6-secure) | 21 | Encryption, PKCE, TOTP, KV store, WebAuthn, OAuth2, session/form auth, MFA |
 | [`computer`](#7-computer) | 14 | AI computer-use, smart element resolution, browser pool, multi-browser fleet |
 | [`memory`](#8-memory) | 6 | Persistent agent memory across sessions |
@@ -150,6 +150,15 @@ A headless Chromium browser is launched automatically on the first call that req
 | `event_unsubscribe` | `{event_type}` | Unsubscribe from events |
 | `event_poll` | `{event_type?, limit?, clear?}` | Poll buffered events |
 | `event_clear` | — | Clear event buffer |
+| | | **Service Worker / PWA** |
+| `sw_register` | `{script_url, scope?}` | Register service worker |
+| `sw_unregister` | `{scope?}` | Unregister service worker |
+| `sw_list` | — | List registered service workers |
+| `sw_update` | `{scope?}` | Force-update service worker |
+| `cache_list` | — | List Cache Storage entries |
+| `cache_clear` | — | Clear all cache storage |
+| `push_simulate` | `{title, body?, icon?, data?}` | Simulate push notification |
+| `offline_mode` | `{enabled, bypass_for?}` | Enable/disable offline mode |
 
 #### Action Details
 
@@ -1515,6 +1524,134 @@ Clear all buffered events across all subscriptions.
 ```
 </details>
 
+<details>
+<summary><strong><code>sw_register</code></strong> — Register service worker</summary>
+
+Register a service worker script at the given URL with an optional scope.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `script_url` | string | ✅ | URL of the service worker script |
+| `scope` | string | | Scope URL (defaults to script directory) |
+
+**Response:**
+```json
+{ "registered": true, "scope": "https://example.com/", "state": "activated" }
+```
+</details>
+
+<details>
+<summary><strong><code>sw_unregister</code></strong> — Unregister service worker</summary>
+
+Unregister the service worker for the given scope.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `scope` | string | | Scope URL (defaults to current page origin) |
+
+**Response:** `"service worker unregistered for scope <scope>"`
+</details>
+
+<details>
+<summary><strong><code>sw_list</code></strong> — List registered service workers</summary>
+
+List all registered service workers and their status.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "workers": [
+    { "scope": "https://example.com/", "script_url": "/sw.js", "state": "activated", "version_id": "1" }
+  ],
+  "count": 1
+}
+```
+</details>
+
+<details>
+<summary><strong><code>sw_update</code></strong> — Force-update service worker</summary>
+
+Force-update the service worker registration for the given scope, bypassing the browser's 24-hour update check.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `scope` | string | | Scope URL (defaults to current page origin) |
+
+**Response:** `"service worker updated for scope <scope>"`
+</details>
+
+<details>
+<summary><strong><code>cache_list</code></strong> — List Cache Storage entries</summary>
+
+List all named caches and their entry counts in the Cache Storage API.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "caches": [
+    { "name": "v1-assets", "entry_count": 42 },
+    { "name": "v1-api", "entry_count": 15 }
+  ],
+  "total_caches": 2
+}
+```
+</details>
+
+<details>
+<summary><strong><code>cache_clear</code></strong> — Clear all cache storage</summary>
+
+Delete all named caches from Cache Storage.
+
+**Params:** None
+
+**Response:** `"cleared <N> caches"`
+</details>
+
+<details>
+<summary><strong><code>push_simulate</code></strong> — Simulate push notification</summary>
+
+Simulate a push notification event dispatched to the active service worker.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `title` | string | ✅ | Notification title |
+| `body` | string | | Notification body text |
+| `icon` | string | | URL of the notification icon |
+| `data` | string | | Arbitrary JSON data payload |
+
+**Response:**
+```json
+{ "dispatched": true, "title": "New message", "sw_handled": true }
+```
+</details>
+
+<details>
+<summary><strong><code>offline_mode</code></strong> — Enable/disable offline mode</summary>
+
+Enable or disable offline mode, optionally allowing specific URL patterns to bypass.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `enabled` | boolean | ✅ | `true` to go offline, `false` to restore connectivity |
+| `bypass_for` | string[] | | URL patterns that bypass offline mode (glob syntax) |
+
+**Response:** `"offline mode enabled"` or `"offline mode disabled"`
+</details>
+
 ---
 
 ### 2. `crawl`
@@ -1631,7 +1768,7 @@ Compare two previously taken DOM snapshots by label.
 
 ### 3. `agent`
 
-AI agent orchestration — command chains, element screenshots, API capture, iframes, remote CDP, safety policies, skills, screencast, recording, iOS automation, task decomposition, and vision observation.
+AI agent orchestration — command chains, element screenshots, API capture, iframes, remote CDP, safety policies, skills, screencast, recording, iOS automation, task decomposition, vision observation, and WCAG/accessibility auditing.
 
 #### Actions
 
@@ -1666,6 +1803,17 @@ AI agent orchestration — command chains, element screenshots, API capture, ifr
 | `vision_describe` | `{selector?, format?}` | Describe page state structurally |
 | `vision_locate` | `{description, strategy?}` | Find element by natural language |
 | `vision_compare` | `{baseline, current?, threshold?}` | Compare page state against baseline |
+| | | **WCAG / Accessibility Auditing** |
+| `wcag_audit` | `{level?, selector?}` | Full WCAG compliance audit |
+| `aria_tree` | — | Build ARIA accessibility tree |
+| `contrast_check` | `{selector?, threshold?}` | Color contrast ratio validation |
+| `landmark_nav` | — | List ARIA landmark regions |
+| `focus_order` | — | Map tab/focus order |
+| `alt_text_audit` | `{selector?, include_decorative?}` | Audit image alt text |
+| `heading_structure` | — | Validate heading hierarchy |
+| `role_validate` | `{selector?, roles?}` | Validate ARIA roles/properties |
+| `keyboard_trap_detect` | — | Detect keyboard focus traps |
+| `screen_reader_sim` | `{selector?, max_elements?}` | Simulate screen reader output |
 
 #### Action Details
 
@@ -2138,11 +2286,238 @@ Compare the current page state against a baseline snapshot. Detects visual and s
 ```
 </details>
 
+<details>
+<summary><strong><code>wcag_audit</code></strong> — Full WCAG compliance audit</summary>
+
+Run a full WCAG compliance audit on the current page or a specific subtree. Reports violations, warnings, and passes grouped by WCAG success criterion.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `level` | string | | WCAG conformance level: `A`, `AA`, `AAA` (default `AA`) |
+| `selector` | string | | CSS selector to scope the audit (default: entire page) |
+
+**Response:**
+```json
+{
+  "level": "AA",
+  "violations": [
+    { "id": "color-contrast", "impact": "serious", "nodes": 3, "description": "Elements must have sufficient color contrast" }
+  ],
+  "passes": 42,
+  "warnings": 2,
+  "violations_count": 1
+}
+```
+</details>
+
+<details>
+<summary><strong><code>aria_tree</code></strong> — Build ARIA accessibility tree</summary>
+
+Build the full ARIA accessibility tree of the current page, including roles, names, states, and properties.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "tree": {
+    "role": "document",
+    "name": "Example Page",
+    "children": [
+      { "role": "banner", "children": [{ "role": "heading", "name": "Welcome", "level": 1 }] },
+      { "role": "main", "children": [] },
+      { "role": "contentinfo", "children": [] }
+    ]
+  },
+  "node_count": 87
+}
+```
+</details>
+
+<details>
+<summary><strong><code>contrast_check</code></strong> — Color contrast ratio validation</summary>
+
+Check color contrast ratios of text elements against WCAG thresholds.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | | CSS selector to scope check (default: all text elements) |
+| `threshold` | number | | Minimum contrast ratio (default `4.5` for AA normal text) |
+
+**Response:**
+```json
+{
+  "total_checked": 24,
+  "passing": 21,
+  "failing": [
+    { "selector": "p.light-gray", "foreground": "#999", "background": "#fff", "ratio": 2.85, "required": 4.5 }
+  ]
+}
+```
+</details>
+
+<details>
+<summary><strong><code>landmark_nav</code></strong> — List ARIA landmark regions</summary>
+
+List all ARIA landmark regions on the page (banner, navigation, main, complementary, contentinfo, etc.).
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "landmarks": [
+    { "role": "banner", "selector": "header", "label": null },
+    { "role": "navigation", "selector": "nav.main-nav", "label": "Main" },
+    { "role": "main", "selector": "main", "label": null }
+  ],
+  "count": 3
+}
+```
+</details>
+
+<details>
+<summary><strong><code>focus_order</code></strong> — Map tab/focus order</summary>
+
+Map the sequential tab/focus order of all focusable elements on the page.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "focus_order": [
+    { "index": 1, "selector": "a.skip-link", "role": "link", "name": "Skip to content", "tab_index": 0 },
+    { "index": 2, "selector": "input#search", "role": "textbox", "name": "Search", "tab_index": 0 }
+  ],
+  "total_focusable": 18
+}
+```
+</details>
+
+<details>
+<summary><strong><code>alt_text_audit</code></strong> — Audit image alt text</summary>
+
+Audit all images on the page for alt text presence, quality, and decorative marking.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | | CSS selector to scope audit (default: all `img` elements) |
+| `include_decorative` | boolean | | Include images marked as decorative (default `false`) |
+
+**Response:**
+```json
+{
+  "total_images": 12,
+  "with_alt": 10,
+  "missing_alt": 1,
+  "empty_alt_decorative": 1,
+  "issues": [
+    { "selector": "img.hero", "src": "/hero.jpg", "issue": "missing alt attribute" }
+  ]
+}
+```
+</details>
+
+<details>
+<summary><strong><code>heading_structure</code></strong> — Validate heading hierarchy</summary>
+
+Validate the heading hierarchy (h1–h6) for proper nesting and structure.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "headings": [
+    { "level": 1, "text": "Welcome", "selector": "h1" },
+    { "level": 2, "text": "Features", "selector": "section h2" },
+    { "level": 3, "text": "Speed", "selector": "section h3" }
+  ],
+  "valid": true,
+  "issues": []
+}
+```
+</details>
+
+<details>
+<summary><strong><code>role_validate</code></strong> — Validate ARIA roles/properties</summary>
+
+Validate that ARIA roles, states, and properties are used correctly on the page.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | | CSS selector to scope validation (default: all elements with ARIA attributes) |
+| `roles` | string[] | | Filter to specific roles (e.g. `["button", "dialog"]`) |
+
+**Response:**
+```json
+{
+  "total_checked": 15,
+  "valid": 13,
+  "issues": [
+    { "selector": "div.modal", "role": "dialog", "issue": "missing required aria-label or aria-labelledby" }
+  ]
+}
+```
+</details>
+
+<details>
+<summary><strong><code>keyboard_trap_detect</code></strong> — Detect keyboard focus traps</summary>
+
+Detect elements that trap keyboard focus, preventing users from navigating away with Tab or Escape.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "traps_detected": 1,
+  "traps": [
+    { "selector": "div.modal-overlay", "reason": "focus cycles within element, no escape handler" }
+  ]
+}
+```
+</details>
+
+<details>
+<summary><strong><code>screen_reader_sim</code></strong> — Simulate screen reader output</summary>
+
+Simulate screen reader output for the page or a specific subtree, producing the linearized reading order with roles and announcements.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | | CSS selector to scope simulation (default: entire page) |
+| `max_elements` | number | | Maximum elements to include (default `100`) |
+
+**Response:**
+```json
+{
+  "output": [
+    { "role": "banner", "announcement": "banner landmark" },
+    { "role": "heading", "level": 1, "announcement": "Welcome, heading level 1" },
+    { "role": "link", "announcement": "Get Started, link" }
+  ],
+  "element_count": 45
+}
+```
+</details>
+
 ---
 
 ### 4. `stealth`
 
-Anti-detection and bot evasion — stealth patches, fingerprinting, domain blocking, CAPTCHA detection.
+Anti-detection and bot evasion — stealth patches, fingerprinting, domain blocking, CAPTCHA detection, human behavior simulation.
 
 #### Actions
 
@@ -2153,6 +2528,14 @@ Anti-detection and bot evasion — stealth patches, fingerprinting, domain block
 | `fingerprint` | `{user_agent?}` | Generate and apply browser fingerprint |
 | `block_domains` | `{domains?, category?}` | Block tracking/ad domains |
 | `detect_captcha` | — | Detect CAPTCHAs on page |
+| | | **Human Behavior Simulation** |
+| `human_delay` | `{min_ms?, max_ms?, pattern?}` | Random human-like delay |
+| `human_mouse` | `{target, speed?, curve?}` | Bézier curve mouse movement |
+| `human_type` | `{selector, text, speed?, mistakes?}` | Natural typing with typos |
+| `human_scroll` | `{direction?, amount?, speed?}` | Human-like scrolling |
+| `human_profile` | `{profile?}` | Set behavior profile |
+| `stealth_max` | `{features?}` | Enable maximum stealth |
+| `stealth_score` | — | Score current page stealth level |
 
 #### Action Details
 
@@ -2223,11 +2606,147 @@ Detect the presence of CAPTCHAs (reCAPTCHA, hCaptcha, etc.) on the current page.
 **Response:** JSON with CAPTCHA detection results (type, location, confidence).
 </details>
 
+<details>
+<summary><strong><code>human_delay</code></strong> — Random human-like delay</summary>
+
+Pause execution for a random duration sampled from a human-like distribution.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `min_ms` | number | | Minimum delay in milliseconds (default `200`) |
+| `max_ms` | number | | Maximum delay in milliseconds (default `2000`) |
+| `pattern` | string | | Distribution pattern: `uniform`, `gaussian`, `reading` (default `gaussian`) |
+
+**Response:** `"delayed <N>ms (pattern: gaussian)"`
+</details>
+
+<details>
+<summary><strong><code>human_mouse</code></strong> — Bézier curve mouse movement</summary>
+
+Move the mouse to a target element using a realistic Bézier curve path with variable speed.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `target` | string | ✅ | CSS selector or `@ref` of the target element |
+| `speed` | number | | Movement speed multiplier (default `1.0`, lower = slower) |
+| `curve` | string | | Curve type: `bezier`, `arc`, `linear` (default `bezier`) |
+
+**Response:** `"moved mouse to <target> via bezier curve (<N> points, <M>ms)"`
+</details>
+
+<details>
+<summary><strong><code>human_type</code></strong> — Natural typing with typos</summary>
+
+Type text into an element with realistic keystroke timing and occasional typos that are corrected.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | ✅ | CSS selector or `@ref` of the input element |
+| `text` | string | ✅ | Text to type |
+| `speed` | number | | Typing speed in WPM (default `65`) |
+| `mistakes` | boolean | | Simulate occasional typos and corrections (default `true`) |
+
+**Response:** `"typed <N> chars into <selector> (human mode, <M>ms, <K> corrections)"`
+</details>
+
+<details>
+<summary><strong><code>human_scroll</code></strong> — Human-like scrolling</summary>
+
+Scroll the page with variable speed and momentum, mimicking natural scrolling behavior.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `direction` | string | | Scroll direction: `down`, `up`, `left`, `right` (default `down`) |
+| `amount` | number | | Approximate scroll distance in pixels (default `500`) |
+| `speed` | string | | Speed preset: `slow`, `normal`, `fast` (default `normal`) |
+
+**Response:** `"scrolled <direction> ~<N>px (human mode, <M>ms)"`
+</details>
+
+<details>
+<summary><strong><code>human_profile</code></strong> — Set behavior profile</summary>
+
+Set a human behavior profile that adjusts timing, accuracy, and patterns for all subsequent human simulation actions.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `profile` | string | | Profile name: `casual`, `fast`, `careful` (default `casual`) |
+
+**Response:**
+```json
+{
+  "profile": "casual",
+  "settings": {
+    "typing_wpm": 55,
+    "mouse_speed": 0.8,
+    "mistake_rate": 0.05,
+    "scroll_speed": "normal",
+    "delay_range_ms": [300, 2500]
+  }
+}
+```
+</details>
+
+<details>
+<summary><strong><code>stealth_max</code></strong> — Enable maximum stealth</summary>
+
+Enable all available stealth patches and human behavior simulation features for maximum anti-detection.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `features` | string[] | | Specific features to enable (default: all). Options: `patches`, `fingerprint`, `human_mouse`, `human_type`, `human_scroll`, `human_delay` |
+
+**Response:**
+```json
+{
+  "enabled_features": ["patches", "fingerprint", "human_mouse", "human_type", "human_scroll", "human_delay"],
+  "patches_applied": 12,
+  "profile": "casual"
+}
+```
+</details>
+
+<details>
+<summary><strong><code>stealth_score</code></strong> — Score current page stealth level</summary>
+
+Evaluate how well the current page session evades bot detection, returning a score and breakdown.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "score": 92,
+  "max_score": 100,
+  "breakdown": {
+    "navigator": { "score": 10, "max": 10 },
+    "webgl": { "score": 10, "max": 10 },
+    "webrtc": { "score": 8, "max": 10 },
+    "timing": { "score": 9, "max": 10 },
+    "behavior": { "score": 7, "max": 10 }
+  },
+  "recommendations": ["Enable human_scroll for more natural behavior"]
+}
+```
+</details>
+
 ---
 
 ### 5. `data`
 
-Data processing, HTTP requests, link analysis, and network intelligence.
+Data processing, HTTP requests, link analysis, network intelligence, WebSocket, SSE, and GraphQL subscriptions.
 
 #### Actions
 
@@ -2251,6 +2770,15 @@ Data processing, HTTP requests, link analysis, and network intelligence.
 | `export_csv` | `{data, columns?, delimiter?}` | Export JSON array to CSV |
 | `extract_metadata` | `{include_og?, include_twitter?, include_all?}` | Extract page metadata |
 | `extract_feeds` | `{feed_type?}` | Discover RSS, Atom, JSON feeds |
+| | | **WebSocket / SSE / GraphQL** |
+| `ws_connect` | `{url, protocols?}` | Connect to WebSocket server |
+| `ws_intercept` | `{url_pattern?, capture_only?}` | Intercept WebSocket traffic |
+| `ws_send` | `{target, message}` | Send WebSocket message |
+| `ws_messages` | `{url_filter?, limit?}` | Get captured WebSocket messages |
+| `ws_close` | `{target?}` | Close WebSocket connections |
+| `sse_listen` | `{url, duration_ms?}` | Listen to Server-Sent Events |
+| `sse_messages` | `{url_filter?, limit?}` | Get captured SSE messages |
+| `graphql_subscribe` | `{url, query, variables?, duration_ms?}` | GraphQL subscription via WebSocket |
 
 #### Action Details
 
@@ -2510,6 +3038,168 @@ Discover and extract feed links from the current page.
 | `feed_type` | string | | Feed type filter: `all`, `rss`, `atom`, `json` (default `all`) |
 
 **Response:** JSON array of discovered feeds with type, URL, and title.
+</details>
+
+<details>
+<summary><strong><code>ws_connect</code></strong> — Connect to WebSocket server</summary>
+
+Open a WebSocket connection to the specified URL, optionally with sub-protocols.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `url` | string | ✅ | WebSocket URL (`ws://` or `wss://`) |
+| `protocols` | string[] | | Sub-protocols to request (e.g. `["graphql-ws"]`) |
+
+**Response:**
+```json
+{ "connected": true, "url": "wss://example.com/ws", "protocol": "graphql-ws" }
+```
+</details>
+
+<details>
+<summary><strong><code>ws_intercept</code></strong> — Intercept WebSocket traffic</summary>
+
+Start intercepting WebSocket frames on the page, optionally filtering by URL pattern.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `url_pattern` | string | | URL pattern to filter (glob syntax, default: all) |
+| `capture_only` | boolean | | If `true`, capture without blocking (default `true`) |
+
+**Response:** `"WebSocket interception started (pattern: <pattern>)"`
+</details>
+
+<details>
+<summary><strong><code>ws_send</code></strong> — Send WebSocket message</summary>
+
+Send a message through an active WebSocket connection.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `target` | string | ✅ | WebSocket URL or connection identifier |
+| `message` | string | ✅ | Message payload (string or JSON) |
+
+**Response:** `"sent <N> bytes to <target>"`
+</details>
+
+<details>
+<summary><strong><code>ws_messages</code></strong> — Get captured WebSocket messages</summary>
+
+Retrieve captured WebSocket messages from active interception.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `url_filter` | string | | Filter messages by WebSocket URL (glob syntax) |
+| `limit` | number | | Maximum messages to return (default `100`) |
+
+**Response:**
+```json
+{
+  "messages": [
+    { "url": "wss://example.com/ws", "direction": "received", "data": "{\"type\":\"update\"}", "timestamp": "2025-01-15T10:30:00Z" }
+  ],
+  "count": 1,
+  "truncated": false
+}
+```
+</details>
+
+<details>
+<summary><strong><code>ws_close</code></strong> — Close WebSocket connections</summary>
+
+Close one or all active WebSocket connections.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `target` | string | | WebSocket URL to close (omit to close all) |
+
+**Response:** `"closed <N> WebSocket connection(s)"`
+</details>
+
+<details>
+<summary><strong><code>sse_listen</code></strong> — Listen to Server-Sent Events</summary>
+
+Connect to an SSE endpoint and capture events for the specified duration.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `url` | string | ✅ | SSE endpoint URL |
+| `duration_ms` | number | | Listen duration in milliseconds (default `5000`) |
+
+**Response:**
+```json
+{
+  "url": "https://example.com/events",
+  "events": [
+    { "type": "message", "data": "{\"count\":42}", "id": "1", "timestamp": "2025-01-15T10:30:00Z" }
+  ],
+  "count": 1,
+  "duration_ms": 5000
+}
+```
+</details>
+
+<details>
+<summary><strong><code>sse_messages</code></strong> — Get captured SSE messages</summary>
+
+Retrieve previously captured SSE messages.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `url_filter` | string | | Filter by SSE endpoint URL (glob syntax) |
+| `limit` | number | | Maximum messages to return (default `100`) |
+
+**Response:**
+```json
+{
+  "messages": [
+    { "url": "https://example.com/events", "type": "message", "data": "{\"count\":42}", "id": "1", "timestamp": "2025-01-15T10:30:00Z" }
+  ],
+  "count": 1,
+  "truncated": false
+}
+```
+</details>
+
+<details>
+<summary><strong><code>graphql_subscribe</code></strong> — GraphQL subscription via WebSocket</summary>
+
+Subscribe to a GraphQL subscription over WebSocket and capture incoming data for the specified duration.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `url` | string | ✅ | GraphQL WebSocket endpoint URL |
+| `query` | string | ✅ | GraphQL subscription query |
+| `variables` | string | | Variables as JSON object |
+| `duration_ms` | number | | Listen duration in milliseconds (default `5000`) |
+
+**Response:**
+```json
+{
+  "subscription": "subscription { messageAdded { id text } }",
+  "events": [
+    { "data": { "messageAdded": { "id": "1", "text": "Hello" } }, "timestamp": "2025-01-15T10:30:00Z" }
+  ],
+  "count": 1,
+  "duration_ms": 5000
+}
+```
 </details>
 
 ---
@@ -4024,4 +4714,4 @@ All tools return errors in a consistent format:
 
 ---
 
-*Auto-generated from OneCrawl MCP server source (`onecrawl-mcp-rs`). Total: 10 tools, 148 actions.*
+*Auto-generated from OneCrawl MCP server source (`onecrawl-mcp-rs`). Total: 10 tools, 239 actions.*
