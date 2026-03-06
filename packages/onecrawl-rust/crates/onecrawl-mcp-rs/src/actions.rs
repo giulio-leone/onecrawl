@@ -121,6 +121,15 @@ action_enum!(BrowserAction, "browser", [
     EventUnsubscribe => "event_unsubscribe",
     EventPoll => "event_poll",
     EventClear => "event_clear",
+    // Service Worker & PWA
+    SwRegister => "sw_register",
+    SwUnregister => "sw_unregister",
+    SwList => "sw_list",
+    SwUpdate => "sw_update",
+    CacheList => "cache_list",
+    CacheClear => "cache_clear",
+    PushSimulate => "push_simulate",
+    OfflineMode => "offline_mode",
 ]);
 
 action_enum!(CrawlAction, "crawl", [
@@ -161,6 +170,17 @@ action_enum!(AgentAction, "agent", [
     VisionDescribe => "vision_describe",
     VisionLocate => "vision_locate",
     VisionCompare => "vision_compare",
+    // Accessibility & WCAG
+    WcagAudit => "wcag_audit",
+    AriaTree => "aria_tree",
+    ContrastCheck => "contrast_check",
+    LandmarkNav => "landmark_nav",
+    FocusOrder => "focus_order",
+    AltTextAudit => "alt_text_audit",
+    HeadingStructure => "heading_structure",
+    RoleValidate => "role_validate",
+    KeyboardTrapDetect => "keyboard_trap_detect",
+    ScreenReaderSim => "screen_reader_sim",
 ]);
 
 action_enum!(StealthAction, "stealth", [
@@ -169,6 +189,14 @@ action_enum!(StealthAction, "stealth", [
     Fingerprint => "fingerprint",
     BlockDomains => "block_domains",
     DetectCaptcha => "detect_captcha",
+    // Human behavior simulation
+    HumanDelay => "human_delay",
+    HumanMouse => "human_mouse",
+    HumanType => "human_type",
+    HumanScroll => "human_scroll",
+    HumanProfile => "human_profile",
+    StealthMax => "stealth_max",
+    StealthScore => "stealth_score",
 ]);
 
 action_enum!(DataAction, "data", [
@@ -191,6 +219,15 @@ action_enum!(DataAction, "data", [
     ExportCsv => "export_csv",
     ExtractMetadata => "extract_metadata",
     ExtractFeeds => "extract_feeds",
+    // WebSocket & Real-Time Protocol
+    WsConnect => "ws_connect",
+    WsIntercept => "ws_intercept",
+    WsSend => "ws_send",
+    WsMessages => "ws_messages",
+    WsClose => "ws_close",
+    SseListen => "sse_listen",
+    SseMessages => "sse_messages",
+    GraphqlSubscribe => "graphql_subscribe",
 ]);
 
 action_enum!(SecureAction, "secure", [

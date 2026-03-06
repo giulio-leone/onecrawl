@@ -754,3 +754,192 @@ impl OneCrawlMcp {
     }
 
 }
+
+// ── WebSocket & Real-Time Protocol ──────────────────────────────
+
+impl OneCrawlMcp {
+    pub(crate) async fn ws_connect(&self, p: WsConnectParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let protocols = p.protocols.as_ref().map(|ps| ps.join(",")).unwrap_or_default();
+        let js = format!(r#"(async () => {{
+            const protocols = "{}".split(",").filter(Boolean);
+            const ws = protocols.length
+                ? new WebSocket("{}", protocols)
+                : new WebSocket("{}");
+            window._onecrawl_ws = window._onecrawl_ws || {{}};
+            window._onecrawl_ws_msgs = window._onecrawl_ws_msgs || [];
+            const id = "ws_" + Date.now();
+            ws.onmessage = (e) => window._onecrawl_ws_msgs.push({{ id, url: "{}", data: typeof e.data === 'string' ? e.data.substring(0, 1000) : '[binary]', ts: Date.now() }});
+            ws.onerror = (e) => window._onecrawl_ws_msgs.push({{ id, url: "{}", error: 'connection_error', ts: Date.now() }});
+            window._onecrawl_ws[id] = ws;
+            await new Promise(r => {{ ws.onopen = r; setTimeout(r, 5000); }});
+            return {{ id, url: "{}", state: ws.readyState, protocol: ws.protocol }};
+        }})()"#, json_escape(&protocols), json_escape(&p.url), json_escape(&p.url), json_escape(&p.url), json_escape(&p.url), json_escape(&p.url));
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "ws_connect", "connection": val }))
+    }
+
+    pub(crate) async fn ws_intercept(&self, p: WsInterceptParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let pattern = json_escape(p.url_pattern.as_deref().unwrap_or("*"));
+        let capture_only = p.capture_only.unwrap_or(true);
+        let js = format!(r#"(() => {{
+            window._onecrawl_ws_msgs = window._onecrawl_ws_msgs || [];
+            const origWS = window._origWebSocket || window.WebSocket;
+            window._origWebSocket = origWS;
+            const pattern = "{}";
+            const captureOnly = {};
+            window.WebSocket = function(url, protocols) {{
+                const ws = new origWS(url, protocols);
+                const matchesPattern = pattern === "*" || url.includes(pattern);
+                if (matchesPattern) {{
+                    const origOnMessage = null;
+                    ws.addEventListener('message', (e) => {{
+                        window._onecrawl_ws_msgs.push({{
+                            direction: 'incoming', url, data: typeof e.data === 'string' ? e.data.substring(0, 1000) : '[binary]', ts: Date.now()
+                        }});
+                    }});
+                    const origSend = ws.send.bind(ws);
+                    ws.send = function(data) {{
+                        window._onecrawl_ws_msgs.push({{
+                            direction: 'outgoing', url, data: typeof data === 'string' ? data.substring(0, 1000) : '[binary]', ts: Date.now()
+                        }});
+                        return origSend(data);
+                    }};
+                }}
+                return ws;
+            }};
+            window.WebSocket.prototype = origWS.prototype;
+            return {{ intercepting: true, pattern, capture_only: captureOnly }};
+        }})()"#, pattern, capture_only);
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "ws_intercept", "result": val }))
+    }
+
+    pub(crate) async fn ws_send(&self, p: WsSendParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = format!(r#"(() => {{
+            const ws = (window._onecrawl_ws || {{}})["{target}"];
+            if (!ws) return {{ error: "WebSocket connection not found", target: "{target}" }};
+            if (ws.readyState !== 1) return {{ error: "WebSocket not open", state: ws.readyState }};
+            ws.send("{}");
+            return {{ sent: true, target: "{target}", message_length: {len} }};
+        }})()"#, json_escape(&p.message), target = json_escape(&p.target), len = p.message.len());
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "ws_send", "result": val }))
+    }
+
+    pub(crate) async fn ws_messages(&self, p: WsMessagesParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let limit = p.limit.unwrap_or(100);
+        let filter = json_escape(p.url_filter.as_deref().unwrap_or(""));
+        let js = format!(r#"(() => {{
+            const msgs = window._onecrawl_ws_msgs || [];
+            const filter = "{}";
+            const filtered = filter ? msgs.filter(m => (m.url || '').includes(filter)) : msgs;
+            return {{ total: msgs.length, returned: Math.min(filtered.length, {}), messages: filtered.slice(-{}) }};
+        }})()"#, filter, limit, limit);
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "ws_messages", "result": val }))
+    }
+
+    pub(crate) async fn ws_close(&self, p: WsCloseParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let target = json_escape(p.target.as_deref().unwrap_or(""));
+        let js = format!(r#"(() => {{
+            const wss = window._onecrawl_ws || {{}};
+            const target = "{}";
+            let closed = 0;
+            if (target) {{
+                const ws = wss[target];
+                if (ws && ws.readyState <= 1) {{ ws.close(); closed++; delete wss[target]; }}
+            }} else {{
+                for (const [id, ws] of Object.entries(wss)) {{
+                    if (ws.readyState <= 1) {{ ws.close(); closed++; }}
+                    delete wss[id];
+                }}
+            }}
+            return {{ closed, target: target || "all" }};
+        }})()"#, target);
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "ws_close", "result": val }))
+    }
+
+    pub(crate) async fn sse_listen(&self, p: SseListenParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let duration = p.duration_ms.unwrap_or(5000);
+        let js = format!(r#"(async () => {{
+            const url = "{}";
+            const messages = [];
+            const es = new EventSource(url);
+            await new Promise((resolve) => {{
+                es.onmessage = (e) => messages.push({{ type: 'message', data: e.data.substring(0, 500), lastEventId: e.lastEventId, ts: Date.now() }});
+                es.onerror = () => messages.push({{ type: 'error', ts: Date.now() }});
+                es.onopen = () => messages.push({{ type: 'open', ts: Date.now() }});
+                setTimeout(() => {{ es.close(); resolve(); }}, {});
+            }});
+            window._onecrawl_sse_msgs = (window._onecrawl_sse_msgs || []).concat(messages);
+            return {{ url, duration_ms: {}, messages_received: messages.length, messages }};
+        }})()"#, json_escape(&p.url), duration, duration);
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "sse_listen", "result": val }))
+    }
+
+    pub(crate) async fn sse_messages(&self, p: SseMessagesParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let limit = p.limit.unwrap_or(100);
+        let filter = json_escape(p.url_filter.as_deref().unwrap_or(""));
+        let js = format!(r#"(() => {{
+            const msgs = window._onecrawl_sse_msgs || [];
+            const filter = "{}";
+            const filtered = filter ? msgs.filter(m => m.type === 'message') : msgs;
+            return {{ total: msgs.length, returned: Math.min(filtered.length, {}), messages: filtered.slice(-{}) }};
+        }})()"#, filter, limit, limit);
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "sse_messages", "result": val }))
+    }
+
+    pub(crate) async fn graphql_subscribe(&self, p: GraphqlSubscribeParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let duration = p.duration_ms.unwrap_or(5000);
+        let variables = p.variables.as_ref().map(|v| serde_json::to_string(v).unwrap_or_default()).unwrap_or_else(|| "{}".to_string());
+        let js = format!(r#"(async () => {{
+            const url = "{}";
+            const query = "{}";
+            const variables = {};
+            const messages = [];
+            
+            // Try WebSocket-based GraphQL subscription (graphql-ws protocol)
+            const wsUrl = url.replace(/^http/, 'ws');
+            const ws = new WebSocket(wsUrl, 'graphql-transport-ws');
+            
+            await new Promise((resolve) => {{
+                ws.onopen = () => {{
+                    ws.send(JSON.stringify({{ type: 'connection_init' }}));
+                    ws.send(JSON.stringify({{ id: '1', type: 'subscribe', payload: {{ query, variables }} }}));
+                }};
+                ws.onmessage = (e) => {{
+                    try {{
+                        const msg = JSON.parse(e.data);
+                        messages.push({{ type: msg.type, data: msg.payload, ts: Date.now() }});
+                    }} catch(_) {{
+                        messages.push({{ type: 'raw', data: e.data.substring(0, 500), ts: Date.now() }});
+                    }}
+                }};
+                ws.onerror = () => messages.push({{ type: 'error', ts: Date.now() }});
+                setTimeout(() => {{ ws.close(); resolve(); }}, {});
+            }});
+            return {{ url, query: query.substring(0, 200), duration_ms: {}, messages_received: messages.length, messages }};
+        }})()"#, json_escape(&p.url), json_escape(&p.query), variables, duration, duration);
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "graphql_subscribe", "result": val }))
+    }
+}

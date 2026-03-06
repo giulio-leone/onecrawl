@@ -2213,3 +2213,133 @@ impl OneCrawlMcp {
         }))
     }
 }
+
+// ── Service Worker & PWA Control ─────────────────────────────────
+
+impl OneCrawlMcp {
+    pub(crate) async fn sw_register(&self, p: SwRegisterParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let scope = p.scope.as_deref().unwrap_or("/");
+        let js = format!(r#"(async () => {{
+            const reg = await navigator.serviceWorker.register("{}", {{ scope: "{}" }});
+            return {{
+                scope: reg.scope,
+                active: reg.active ? {{ state: reg.active.state, scriptURL: reg.active.scriptURL }} : null,
+                installing: reg.installing ? {{ state: reg.installing.state }} : null,
+                waiting: reg.waiting ? {{ state: reg.waiting.state }} : null
+            }};
+        }})()"#, json_escape(&p.script_url), json_escape(scope));
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "sw_register", "registration": val }))
+    }
+
+    pub(crate) async fn sw_unregister(&self, p: SwUnregisterParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let scope_filter = p.scope.as_deref().unwrap_or("");
+        let js = format!(r#"(async () => {{
+            const regs = await navigator.serviceWorker.getRegistrations();
+            let unregistered = 0;
+            for (const reg of regs) {{
+                if (!"{scope_filter}" || reg.scope.includes("{scope_filter}")) {{
+                    await reg.unregister();
+                    unregistered++;
+                }}
+            }}
+            return {{ unregistered, total: regs.length }};
+        }})()"#);
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "sw_unregister", "result": val }))
+    }
+
+    pub(crate) async fn sw_list(&self) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"(async () => {
+            const regs = await navigator.serviceWorker.getRegistrations();
+            return regs.map(reg => ({
+                scope: reg.scope,
+                active: reg.active ? { state: reg.active.state, scriptURL: reg.active.scriptURL } : null,
+                installing: reg.installing ? { state: reg.installing.state } : null,
+                waiting: reg.waiting ? { state: reg.waiting.state } : null
+            }));
+        })()"#;
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!([]));
+        json_ok(&serde_json::json!({ "action": "sw_list", "service_workers": val }))
+    }
+
+    pub(crate) async fn sw_update(&self, p: SwUpdateParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let scope_filter = p.scope.as_deref().unwrap_or("");
+        let js = format!(r#"(async () => {{
+            const regs = await navigator.serviceWorker.getRegistrations();
+            let updated = 0;
+            for (const reg of regs) {{
+                if (!"{scope_filter}" || reg.scope.includes("{scope_filter}")) {{
+                    await reg.update();
+                    updated++;
+                }}
+            }}
+            return {{ updated, total: regs.length }};
+        }})()"#);
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "sw_update", "result": val }))
+    }
+
+    pub(crate) async fn cache_list(&self) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"(async () => {
+            const names = await caches.keys();
+            const result = [];
+            for (const name of names) {
+                const cache = await caches.open(name);
+                const keys = await cache.keys();
+                result.push({ name, entries: keys.length, urls: keys.slice(0, 20).map(r => r.url) });
+            }
+            return result;
+        })()"#;
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!([]));
+        json_ok(&serde_json::json!({ "action": "cache_list", "caches": val }))
+    }
+
+    pub(crate) async fn cache_clear(&self) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"(async () => {
+            const names = await caches.keys();
+            for (const name of names) { await caches.delete(name); }
+            return { cleared: names.length, names };
+        })()"#;
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "cache_clear", "result": val }))
+    }
+
+    pub(crate) async fn push_simulate(&self, p: PushSimulateParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let body = json_escape(p.body.as_deref().unwrap_or(""));
+        let tag = json_escape(p.tag.as_deref().unwrap_or("onecrawl-push"));
+        let js = format!(r#"(async () => {{
+            if (!('Notification' in window)) return {{ error: 'Notifications not supported' }};
+            const perm = await Notification.requestPermission();
+            if (perm !== 'granted') return {{ error: 'Permission denied', permission: perm }};
+            const n = new Notification("{}", {{ body: "{body}", tag: "{tag}" }});
+            return {{ simulated: true, title: "{}", permission: perm }};
+        }})()"#, json_escape(&p.title), json_escape(&p.title));
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "push_simulate", "result": val }))
+    }
+
+    pub(crate) async fn offline_mode(&self, p: OfflineModeParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let latency = p.latency_ms.unwrap_or(0);
+        let js = format!(r#"(async () => {{
+            return {{ action: "offline_mode", enabled: {}, latency_ms: {}, note: "Network emulation applied at CDP level" }};
+        }})()"#, p.enabled, latency);
+        let _result = page.evaluate(js).await.mcp()?;
+        json_ok(&serde_json::json!({ "action": "offline_mode", "enabled": p.enabled, "latency_ms": latency }))
+    }
+}

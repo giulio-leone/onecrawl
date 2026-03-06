@@ -937,3 +937,373 @@ impl OneCrawlMcp {
         }))
     }
 }
+
+// ── Accessibility & WCAG Engine ─────────────────────────────────
+
+impl OneCrawlMcp {
+    pub(crate) async fn wcag_audit(&self, p: WcagAuditParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let level = p.level.as_deref().unwrap_or("AA");
+        let selector = p.selector.as_deref().unwrap_or("body");
+        let include_passes = p.include_passes.unwrap_or(false);
+        let js = format!(r#"(() => {{
+            const root = document.querySelector("{}");
+            if (!root) return {{ error: "Selector not found" }};
+            const issues = [];
+            const passes = [];
+
+            // Check images without alt
+            root.querySelectorAll('img').forEach(img => {{
+                if (!img.hasAttribute('alt')) {{
+                    issues.push({{ rule: "1.1.1", level: "A", type: "error", element: img.outerHTML.substring(0, 100), message: "Image missing alt attribute" }});
+                }} else if ({include_passes}) {{
+                    passes.push({{ rule: "1.1.1", element: img.outerHTML.substring(0, 100) }});
+                }}
+            }});
+
+            // Check form inputs without labels
+            root.querySelectorAll('input, select, textarea').forEach(el => {{
+                const id = el.id;
+                const hasLabel = id && document.querySelector('label[for="' + id + '"]');
+                const hasAriaLabel = el.hasAttribute('aria-label') || el.hasAttribute('aria-labelledby');
+                if (!hasLabel && !hasAriaLabel && el.type !== 'hidden') {{
+                    issues.push({{ rule: "1.3.1", level: "A", type: "error", element: el.outerHTML.substring(0, 100), message: "Form control missing label" }});
+                }}
+            }});
+
+            // Check heading hierarchy
+            const headings = [...root.querySelectorAll('h1,h2,h3,h4,h5,h6')];
+            let prevLevel = 0;
+            headings.forEach(h => {{
+                const level = parseInt(h.tagName[1]);
+                if (level > prevLevel + 1 && prevLevel > 0) {{
+                    issues.push({{ rule: "1.3.1", level: "A", type: "warning", element: h.outerHTML.substring(0, 100), message: "Heading level skipped: h" + prevLevel + " to h" + level }});
+                }}
+                prevLevel = level;
+            }});
+
+            // Check links with generic text
+            root.querySelectorAll('a').forEach(a => {{
+                const text = a.textContent.trim().toLowerCase();
+                if (['click here', 'read more', 'more', 'here', 'link'].includes(text)) {{
+                    issues.push({{ rule: "2.4.4", level: "A", type: "warning", element: a.outerHTML.substring(0, 100), message: "Link has non-descriptive text: " + text }});
+                }}
+            }});
+
+            // Check lang attribute
+            if (!document.documentElement.hasAttribute('lang')) {{
+                issues.push({{ rule: "3.1.1", level: "A", type: "error", element: "<html>", message: "Document missing lang attribute" }});
+            }}
+
+            // Check button/link without accessible name
+            root.querySelectorAll('button, a[href], [role="button"]').forEach(el => {{
+                const name = el.textContent.trim() || el.getAttribute('aria-label') || el.getAttribute('title') || '';
+                if (!name) {{
+                    issues.push({{ rule: "4.1.2", level: "A", type: "error", element: el.outerHTML.substring(0, 100), message: "Interactive element missing accessible name" }});
+                }}
+            }});
+
+            return {{
+                level: "{level}",
+                total_issues: issues.length,
+                errors: issues.filter(i => i.type === "error").length,
+                warnings: issues.filter(i => i.type === "warning").length,
+                issues,
+                passes: {include_passes} ? passes : undefined
+            }};
+        }})()"#, json_escape(selector));
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "wcag_audit", "audit": val }))
+    }
+
+    pub(crate) async fn aria_tree(&self) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"(() => {
+            function buildTree(el, depth) {
+                if (depth > 10) return null;
+                const role = el.getAttribute('role') || el.tagName.toLowerCase();
+                const name = el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent?.trim().substring(0, 50) || '';
+                const children = [...el.children].map(c => buildTree(c, depth + 1)).filter(Boolean);
+                const node = { role, name: name.substring(0, 50) };
+                if (el.getAttribute('aria-expanded') !== null) node.expanded = el.getAttribute('aria-expanded') === 'true';
+                if (el.getAttribute('aria-selected') !== null) node.selected = el.getAttribute('aria-selected') === 'true';
+                if (el.getAttribute('aria-checked') !== null) node.checked = el.getAttribute('aria-checked');
+                if (el.getAttribute('aria-disabled') !== null) node.disabled = el.getAttribute('aria-disabled') === 'true';
+                if (children.length) node.children = children;
+                return node;
+            }
+            return buildTree(document.body, 0);
+        })()"#;
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "aria_tree", "tree": val }))
+    }
+
+    pub(crate) async fn contrast_check(&self, p: ContrastCheckParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let selector = p.selector.as_deref().unwrap_or("body *");
+        let min_ratio = p.min_ratio.unwrap_or(4.5);
+        let js = format!(r#"(() => {{
+            function luminance(r, g, b) {{
+                const [rs, gs, bs] = [r, g, b].map(c => {{
+                    c = c / 255;
+                    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+                }});
+                return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+            }}
+            function parseColor(str) {{
+                const div = document.createElement('div');
+                div.style.color = str;
+                document.body.appendChild(div);
+                const computed = getComputedStyle(div).color;
+                document.body.removeChild(div);
+                const m = computed.match(/(\d+)/g);
+                return m ? m.map(Number) : [0, 0, 0];
+            }}
+            function contrastRatio(fg, bg) {{
+                const l1 = luminance(...fg) + 0.05;
+                const l2 = luminance(...bg) + 0.05;
+                return l1 > l2 ? l1 / l2 : l2 / l1;
+            }}
+            const elements = document.querySelectorAll("{}");
+            const failures = [];
+            const checked = Math.min(elements.length, 200);
+            for (let i = 0; i < checked; i++) {{
+                const el = elements[i];
+                if (!el.textContent.trim()) continue;
+                const style = getComputedStyle(el);
+                const fg = parseColor(style.color);
+                const bg = parseColor(style.backgroundColor);
+                const ratio = contrastRatio(fg, bg);
+                if (ratio < {min_ratio}) {{
+                    failures.push({{
+                        element: el.tagName + (el.className ? '.' + el.className.split(' ')[0] : ''),
+                        text: el.textContent.trim().substring(0, 30),
+                        ratio: Math.round(ratio * 100) / 100,
+                        fg: style.color,
+                        bg: style.backgroundColor,
+                        required: {min_ratio}
+                    }});
+                }}
+            }}
+            return {{ checked, failures: failures.length, details: failures.slice(0, 50) }};
+        }})()"#, json_escape(selector));
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "contrast_check", "result": val }))
+    }
+
+    pub(crate) async fn landmark_nav(&self) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"(() => {
+            const landmarks = [
+                ...document.querySelectorAll('[role="banner"], header'),
+                ...document.querySelectorAll('[role="navigation"], nav'),
+                ...document.querySelectorAll('[role="main"], main'),
+                ...document.querySelectorAll('[role="complementary"], aside'),
+                ...document.querySelectorAll('[role="contentinfo"], footer'),
+                ...document.querySelectorAll('[role="search"]'),
+                ...document.querySelectorAll('[role="form"]'),
+                ...document.querySelectorAll('[role="region"][aria-label]')
+            ];
+            return landmarks.map(el => ({
+                role: el.getAttribute('role') || el.tagName.toLowerCase(),
+                label: el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || '',
+                tag: el.tagName.toLowerCase(),
+                children_count: el.children.length
+            }));
+        })()"#;
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!([]));
+        json_ok(&serde_json::json!({ "action": "landmark_nav", "landmarks": val }))
+    }
+
+    pub(crate) async fn focus_order(&self) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"(() => {
+            const focusable = [...document.querySelectorAll(
+                'a[href], button, input:not([type="hidden"]), select, textarea, [tabindex], [contenteditable]'
+            )].filter(el => {
+                const style = getComputedStyle(el);
+                return style.display !== 'none' && style.visibility !== 'hidden' && !el.disabled;
+            });
+            return focusable.map((el, i) => ({
+                index: i,
+                tag: el.tagName.toLowerCase(),
+                type: el.type || null,
+                tabindex: el.tabIndex,
+                text: (el.textContent || el.value || el.placeholder || '').trim().substring(0, 50),
+                role: el.getAttribute('role') || null,
+                visible: el.offsetParent !== null
+            }));
+        })()"#;
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!([]));
+        json_ok(&serde_json::json!({ "action": "focus_order", "elements": val, "count": val.as_array().map(|a| a.len()).unwrap_or(0) }))
+    }
+
+    pub(crate) async fn alt_text_audit(&self, p: AltTextAuditParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let include_decorative = p.include_decorative.unwrap_or(false);
+        let js = format!(r#"(() => {{
+            const images = [...document.querySelectorAll('img')];
+            const missing = [];
+            const empty = [];
+            const present = [];
+            images.forEach(img => {{
+                if (!img.hasAttribute('alt')) {{
+                    missing.push({{ src: img.src.substring(0, 100), width: img.width, height: img.height }});
+                }} else if (img.alt === '') {{
+                    if ({include_decorative}) empty.push({{ src: img.src.substring(0, 100), role: 'decorative' }});
+                }} else {{
+                    present.push({{ src: img.src.substring(0, 100), alt: img.alt.substring(0, 100) }});
+                }}
+            }});
+            return {{ total: images.length, missing: missing.length, decorative: empty.length, with_alt: present.length, missing_details: missing, decorative_details: empty }};
+        }})()"#);
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "alt_text_audit", "audit": val }))
+    }
+
+    pub(crate) async fn heading_structure(&self) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"(() => {
+            const headings = [...document.querySelectorAll('h1,h2,h3,h4,h5,h6')];
+            const issues = [];
+            let prevLevel = 0;
+            const structure = headings.map((h, i) => {
+                const level = parseInt(h.tagName[1]);
+                if (level > prevLevel + 1 && prevLevel > 0) {
+                    issues.push({ index: i, from: 'h' + prevLevel, to: h.tagName.toLowerCase(), message: 'Level skipped' });
+                }
+                prevLevel = level;
+                return { level, tag: h.tagName.toLowerCase(), text: h.textContent.trim().substring(0, 80) };
+            });
+            const h1Count = headings.filter(h => h.tagName === 'H1').length;
+            if (h1Count === 0) issues.push({ message: 'No h1 found' });
+            if (h1Count > 1) issues.push({ message: 'Multiple h1 elements: ' + h1Count });
+            return { total: headings.length, h1_count: h1Count, issues: issues.length, structure, issue_details: issues };
+        })()"#;
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "heading_structure", "result": val }))
+    }
+
+    pub(crate) async fn role_validate(&self, p: RoleValidateParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let selector = p.selector.as_deref().unwrap_or("body");
+        let js = format!(r#"(() => {{
+            const root = document.querySelector("{}");
+            if (!root) return {{ error: "Selector not found" }};
+            const valid_roles = new Set(['alert','alertdialog','application','article','banner','button','cell','checkbox',
+                'columnheader','combobox','complementary','contentinfo','definition','dialog','directory','document',
+                'feed','figure','form','grid','gridcell','group','heading','img','link','list','listbox','listitem',
+                'log','main','marquee','math','menu','menubar','menuitem','menuitemcheckbox','menuitemradio',
+                'navigation','none','note','option','presentation','progressbar','radio','radiogroup','region',
+                'row','rowgroup','rowheader','scrollbar','search','searchbox','separator','slider','spinbutton',
+                'status','switch','tab','table','tablist','tabpanel','term','textbox','timer','toolbar','tooltip',
+                'tree','treegrid','treeitem']);
+            const issues = [];
+            root.querySelectorAll('[role]').forEach(el => {{
+                const role = el.getAttribute('role');
+                if (!valid_roles.has(role)) {{
+                    issues.push({{ element: el.outerHTML.substring(0, 80), role, message: 'Invalid ARIA role' }});
+                }}
+            }});
+            // Check required ARIA properties
+            root.querySelectorAll('[role="checkbox"], [role="radio"]').forEach(el => {{
+                if (!el.hasAttribute('aria-checked')) {{
+                    issues.push({{ element: el.outerHTML.substring(0, 80), role: el.getAttribute('role'), message: 'Missing required aria-checked' }});
+                }}
+            }});
+            root.querySelectorAll('[role="slider"], [role="progressbar"]').forEach(el => {{
+                if (!el.hasAttribute('aria-valuenow')) {{
+                    issues.push({{ element: el.outerHTML.substring(0, 80), role: el.getAttribute('role'), message: 'Missing required aria-valuenow' }});
+                }}
+            }});
+            const roleElements = root.querySelectorAll('[role]');
+            return {{ total_with_roles: roleElements.length, issues: issues.length, details: issues }};
+        }})()"#, json_escape(selector));
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "role_validate", "validation": val }))
+    }
+
+    pub(crate) async fn keyboard_trap_detect(&self) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"(() => {
+            const focusable = [...document.querySelectorAll(
+                'a[href], button, input:not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])'
+            )].filter(el => {
+                const style = getComputedStyle(el);
+                return style.display !== 'none' && style.visibility !== 'hidden' && !el.disabled;
+            });
+            const traps = [];
+            // Check for elements that prevent tab-out
+            focusable.forEach(el => {
+                const listeners = typeof getEventListeners === 'function' ? getEventListeners(el) : {};
+                const hasKeydown = listeners.keydown?.length > 0;
+                const hasKeypress = listeners.keypress?.length > 0;
+                // Check tabindex patterns that could trap
+                if (el.tabIndex < 0 && el.matches('[tabindex]')) {
+                    traps.push({ element: el.outerHTML.substring(0, 80), reason: 'Negative tabindex on focusable element' });
+                }
+                // Check for modal dialogs without escape
+                if (el.getAttribute('role') === 'dialog' && !el.querySelector('[aria-label*="close"], [aria-label*="Close"], button')) {
+                    traps.push({ element: el.outerHTML.substring(0, 80), reason: 'Dialog without close button' });
+                }
+            });
+            // Check for focus-trapping containers
+            document.querySelectorAll('[role="dialog"], [role="alertdialog"], .modal').forEach(el => {
+                if (getComputedStyle(el).display !== 'none') {
+                    const closable = el.querySelector('button, [role="button"], [aria-label*="close"]');
+                    if (!closable) traps.push({ element: el.outerHTML.substring(0, 80), reason: 'Visible modal without dismiss control' });
+                }
+            });
+            return { focusable_count: focusable.length, potential_traps: traps.length, traps };
+        })()"#;
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "keyboard_trap_detect", "result": val }))
+    }
+
+    pub(crate) async fn screen_reader_sim(&self, p: ScreenReaderSimParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let start = p.start_selector.as_deref().unwrap_or("body");
+        let max_el = p.max_elements.unwrap_or(50);
+        let js = format!(r#"(() => {{
+            const root = document.querySelector("{}");
+            if (!root) return {{ error: "Start selector not found" }};
+            const output = [];
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null);
+            let count = 0;
+            while (walker.nextNode() && count < {max_el}) {{
+                const node = walker.currentNode;
+                if (node.nodeType === 3) {{
+                    const text = node.textContent.trim();
+                    if (text) output.push({{ type: "text", content: text.substring(0, 100) }});
+                    count++;
+                }} else if (node.nodeType === 1) {{
+                    const el = node;
+                    const role = el.getAttribute('role') || '';
+                    const ariaLabel = el.getAttribute('aria-label') || '';
+                    const tag = el.tagName.toLowerCase();
+                    if (role || ariaLabel || ['h1','h2','h3','h4','h5','h6','a','button','input','img','nav','main','footer','header'].includes(tag)) {{
+                        const entry = {{ type: "element", tag, role: role || undefined, label: ariaLabel || undefined }};
+                        if (tag === 'img') entry.alt = el.getAttribute('alt') || 'NO ALT';
+                        if (tag === 'a') entry.href = el.getAttribute('href')?.substring(0, 50);
+                        if (tag === 'input') entry.input_type = el.type;
+                        output.push(entry);
+                        count++;
+                    }}
+                }}
+            }}
+            return {{ elements_read: output.length, output }};
+        }})()"#, json_escape(start));
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
+        json_ok(&serde_json::json!({ "action": "screen_reader_sim", "simulation": val }))
+    }
+}

@@ -1406,6 +1406,216 @@ pub struct CredentialGetParams {
     pub label: String,
 }
 
+// ── Service Worker & PWA Control ──────────────────────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SwRegisterParams {
+    #[schemars(description = "Service worker script URL")]
+    pub script_url: String,
+    #[schemars(description = "Scope for the service worker")]
+    pub scope: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SwUnregisterParams {
+    #[schemars(description = "Scope of service worker to unregister")]
+    pub scope: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SwUpdateParams {
+    #[schemars(description = "Scope of service worker to update")]
+    pub scope: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct PushSimulateParams {
+    #[schemars(description = "Push notification title")]
+    pub title: String,
+    #[schemars(description = "Push notification body")]
+    pub body: Option<String>,
+    #[schemars(description = "Push notification tag")]
+    pub tag: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct OfflineModeParams {
+    #[schemars(description = "Enable offline mode")]
+    pub enabled: bool,
+    #[schemars(description = "Latency in ms to simulate (0 = full offline)")]
+    pub latency_ms: Option<u64>,
+}
+
+// ── Accessibility & WCAG Engine ──────────────────────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct WcagAuditParams {
+    #[schemars(description = "WCAG level: A, AA, or AAA")]
+    pub level: Option<String>,
+    #[schemars(description = "CSS selector to scope audit")]
+    pub selector: Option<String>,
+    #[schemars(description = "Include passing rules in results")]
+    pub include_passes: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ContrastCheckParams {
+    #[schemars(description = "CSS selector to check")]
+    pub selector: Option<String>,
+    #[schemars(description = "Minimum contrast ratio (default 4.5 for AA)")]
+    pub min_ratio: Option<f64>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AltTextAuditParams {
+    #[schemars(description = "Include decorative images in report")]
+    pub include_decorative: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct RoleValidateParams {
+    #[schemars(description = "CSS selector to scope validation")]
+    pub selector: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ScreenReaderSimParams {
+    #[schemars(description = "CSS selector of element to start reading from")]
+    pub start_selector: Option<String>,
+    #[schemars(description = "Maximum elements to read")]
+    pub max_elements: Option<u32>,
+}
+
+// ── WebSocket & Real-Time Protocol ──────────────────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct WsConnectParams {
+    #[schemars(description = "WebSocket URL to connect to")]
+    pub url: String,
+    #[schemars(description = "Sub-protocols to request")]
+    pub protocols: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct WsInterceptParams {
+    #[schemars(description = "URL pattern to intercept (glob)")]
+    pub url_pattern: Option<String>,
+    #[schemars(description = "Only capture (true) or also modify (false)")]
+    pub capture_only: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct WsSendParams {
+    #[schemars(description = "WebSocket URL or connection ID")]
+    pub target: String,
+    #[schemars(description = "Message to send")]
+    pub message: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct WsMessagesParams {
+    #[schemars(description = "URL filter for messages")]
+    pub url_filter: Option<String>,
+    #[schemars(description = "Maximum messages to return")]
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct WsCloseParams {
+    #[schemars(description = "WebSocket URL or connection ID to close")]
+    pub target: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SseListenParams {
+    #[schemars(description = "SSE endpoint URL")]
+    pub url: String,
+    #[schemars(description = "Duration in ms to listen")]
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SseMessagesParams {
+    #[schemars(description = "URL filter for SSE messages")]
+    pub url_filter: Option<String>,
+    #[schemars(description = "Maximum messages to return")]
+    pub limit: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct GraphqlSubscribeParams {
+    #[schemars(description = "GraphQL endpoint URL")]
+    pub url: String,
+    #[schemars(description = "GraphQL subscription query")]
+    pub query: String,
+    #[schemars(description = "GraphQL variables")]
+    pub variables: Option<serde_json::Value>,
+    #[schemars(description = "Duration in ms to listen")]
+    pub duration_ms: Option<u64>,
+}
+
+// ── Human Behavior Simulation ────────────────────────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct HumanDelayParams {
+    #[schemars(description = "Minimum delay in milliseconds")]
+    pub min_ms: u64,
+    #[schemars(description = "Maximum delay in milliseconds")]
+    pub max_ms: u64,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct HumanMouseParams {
+    #[schemars(description = "Target X coordinate")]
+    pub x: f64,
+    #[schemars(description = "Target Y coordinate")]
+    pub y: f64,
+    #[schemars(description = "Number of intermediate steps (default 20)")]
+    pub steps: Option<u32>,
+    #[schemars(description = "Movement speed: slow, normal, fast")]
+    pub speed: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct HumanTypeParams {
+    #[schemars(description = "CSS selector of input element")]
+    pub selector: String,
+    #[schemars(description = "Text to type")]
+    pub text: String,
+    #[schemars(description = "Min delay between keystrokes in ms (default 50)")]
+    pub min_delay_ms: Option<u64>,
+    #[schemars(description = "Max delay between keystrokes in ms (default 200)")]
+    pub max_delay_ms: Option<u64>,
+    #[schemars(description = "Simulate occasional typos and corrections")]
+    pub typos: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct HumanScrollParams {
+    #[schemars(description = "Scroll direction: down, up, left, right")]
+    pub direction: Option<String>,
+    #[schemars(description = "Distance in pixels")]
+    pub distance: Option<i32>,
+    #[schemars(description = "Number of scroll steps (default 5)")]
+    pub steps: Option<u32>,
+    #[schemars(description = "Speed: slow, normal, fast")]
+    pub speed: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct HumanProfileParams {
+    #[schemars(description = "Profile name: fast, normal, careful, elderly")]
+    pub profile: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct StealthMaxParams {
+    #[schemars(description = "Enable all stealth features")]
+    pub enable_all: Option<bool>,
+    #[schemars(description = "Include human behavior simulation")]
+    pub human_simulation: Option<bool>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -176,7 +176,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "browser",
-        description = "Browser navigation, interaction, extraction, multi-tab, DOM events, session, network interception, console/dialog, device emulation, drag/drop, file upload, shadow DOM.\n\nActions:\n- goto {url} — Navigate to URL\n- click {selector} — Click element\n- type {selector, text} — Type into input\n- screenshot {selector?, full_page?} — Screenshot\n- pdf {landscape?} — Export PDF\n- back / forward / reload — Navigation\n- wait {selector, timeout_ms?} — Wait for element\n- evaluate {js} — Execute JavaScript\n- snapshot {interactive_only?, compact?, depth?} — A11y snapshot\n- css / xpath / find_text — Query elements\n- text / html / markdown / structured — Extract content\n- stream — Paginated extraction\n- detect_forms / fill_form — Forms\n- snapshot_diff — Diff snapshots\n- parse_a11y / parse_selector / parse_text / parse_links — Offline\n- new_tab / list_tabs / switch_tab / close_tab — Multi-tab\n- observe_mutations / get_mutations / stop_mutations / wait_for_event — DOM\n- cookies_get / cookies_set / cookies_clear — Cookies\n- storage_get / storage_set / export_session / import_session — Storage\n- intercept_enable / intercept_add_rule / intercept_remove_rule / intercept_list / intercept_disable / block_requests — Network\n- console_start / console_get / console_clear / dialog_handle / dialog_get / errors_get — Debug\n- emulate_device / emulate_geolocation / emulate_timezone / emulate_media / emulate_network — Emulation\n- drag {source, target} — Drag and drop\n- hover {selector} — Mouse hover\n- keyboard {keys, selector?} — Keyboard shortcuts\n- select {selector, value?, text?, index?} — Select dropdown option\n- upload {selector, file_path} — File upload\n- download_wait / download_list / download_set_dir — Downloads\n- shadow_query / shadow_text {host_selector, inner_selector} — Shadow DOM\n- deep_query {selector} — Pierce shadow DOM with >>>\n- context_set {key, value} / context_get {key} / context_list / context_clear / context_transfer {from_tab, to_tab, keys?} — Page context\n- form_infer {selector?} / form_auto_fill {data, selector?, confidence_threshold?} / form_validate — Smart form mapping\n- selector_heal {selector, context?} / selector_alternatives {selector, max_alternatives?} / selector_validate {selector, expected_role?, expected_text?} — Self-healing selectors\n- event_subscribe {event_type, filter?} / event_unsubscribe {event_type} / event_poll {event_type?, limit?, clear?} / event_clear — Event reactions"
+        description = "Browser navigation, interaction, extraction, multi-tab, DOM events, session, network interception, console/dialog, device emulation, drag/drop, file upload, shadow DOM, Service Worker/PWA.\n\nActions:\n- goto {url} — Navigate to URL\n- click {selector} — Click element\n- type {selector, text} — Type into input\n- screenshot {selector?, full_page?} — Screenshot\n- pdf {landscape?} — Export PDF\n- back / forward / reload — Navigation\n- wait {selector, timeout_ms?} — Wait for element\n- evaluate {js} — Execute JavaScript\n- snapshot {interactive_only?, compact?, depth?} — A11y snapshot\n- css / xpath / find_text — Query elements\n- text / html / markdown / structured — Extract content\n- stream — Paginated extraction\n- detect_forms / fill_form — Forms\n- snapshot_diff — Diff snapshots\n- parse_a11y / parse_selector / parse_text / parse_links — Offline\n- new_tab / list_tabs / switch_tab / close_tab — Multi-tab\n- observe_mutations / get_mutations / stop_mutations / wait_for_event — DOM\n- cookies_get / cookies_set / cookies_clear — Cookies\n- storage_get / storage_set / export_session / import_session — Storage\n- intercept_enable / intercept_add_rule / intercept_remove_rule / intercept_list / intercept_disable / block_requests — Network\n- console_start / console_get / console_clear / dialog_handle / dialog_get / errors_get — Debug\n- emulate_device / emulate_geolocation / emulate_timezone / emulate_media / emulate_network — Emulation\n- drag {source, target} — Drag and drop\n- hover {selector} — Mouse hover\n- keyboard {keys, selector?} — Keyboard shortcuts\n- select {selector, value?, text?, index?} — Select dropdown option\n- upload {selector, file_path} — File upload\n- download_wait / download_list / download_set_dir — Downloads\n- shadow_query / shadow_text {host_selector, inner_selector} — Shadow DOM\n- deep_query {selector} — Pierce shadow DOM with >>>\n- context_set {key, value} / context_get {key} / context_list / context_clear / context_transfer {from_tab, to_tab, keys?} — Page context\n- form_infer {selector?} / form_auto_fill {data, selector?, confidence_threshold?} / form_validate — Smart form mapping\n- selector_heal {selector, context?} / selector_alternatives {selector, max_alternatives?} / selector_validate {selector, expected_role?, expected_text?} — Self-healing selectors\n- event_subscribe {event_type, filter?} / event_unsubscribe {event_type} / event_poll {event_type?, limit?, clear?} / event_clear — Event reactions\n- sw_register {script_url, scope?} / sw_unregister {scope?} / sw_list / sw_update {scope?} — Service Worker\n- cache_list / cache_clear — Cache Storage\n- push_simulate {title, body?, icon?, data?} — Push notifications\n- offline_mode {enabled, bypass_for?} — Offline simulation"
     )]
     async fn tool_browser(
         &self,
@@ -481,6 +481,29 @@ impl OneCrawlMcp {
                 self.event_poll(params).await
             }
             BrowserAction::EventClear => self.event_clear(v).await,
+            BrowserAction::SwRegister => {
+                let params: SwRegisterParams = parse_params(v, "sw_register")?;
+                self.sw_register(params).await
+            }
+            BrowserAction::SwUnregister => {
+                let params: SwUnregisterParams = parse_params(v, "sw_unregister")?;
+                self.sw_unregister(params).await
+            }
+            BrowserAction::SwList => self.sw_list().await,
+            BrowserAction::SwUpdate => {
+                let params: SwUpdateParams = parse_params(v, "sw_update")?;
+                self.sw_update(params).await
+            }
+            BrowserAction::CacheList => self.cache_list().await,
+            BrowserAction::CacheClear => self.cache_clear().await,
+            BrowserAction::PushSimulate => {
+                let params: PushSimulateParams = parse_params(v, "push_simulate")?;
+                self.push_simulate(params).await
+            }
+            BrowserAction::OfflineMode => {
+                let params: OfflineModeParams = parse_params(v, "offline_mode")?;
+                self.offline_mode(params).await
+            }
         }
     }
 
@@ -521,7 +544,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "agent",
-        description = "AI agent orchestration — command chains, element screenshots, API capture, iframes, remote CDP, safety policies, skills, screencast, recording, and iOS automation.\n\nActions:\n- execute_chain {commands} — Execute multiple commands in sequence\n- element_screenshot {selector} — Screenshot a specific element\n- api_capture_start — Start capturing API calls\n- api_capture_summary — Get captured API call summary\n- iframe_list — List all iframes on page\n- iframe_snapshot {index, interactive_only?} — Snapshot an iframe\n- connect_remote {ws_url, headers?} — Connect to remote CDP\n- safety_set {policy} — Set safety policy JSON\n- safety_status — Get current safety policy status\n- skills_list — List available skills\n- screencast_start {quality?, max_width?, max_height?} — Start screencast\n- screencast_stop — Stop screencast\n- screencast_frame — Get latest screencast frame\n- recording_start {output?, fps?, quality?} — Start video recording\n- recording_stop — Stop recording and save\n- recording_status — Get recording status\n- ios_devices — List iOS devices\n- ios_connect {device_id, wda_url?} — Connect to iOS device\n- ios_navigate {url} — Navigate iOS Safari\n- ios_tap {x, y} — Tap on iOS screen\n- ios_screenshot — Take iOS screenshot\n- task_decompose {goal, context?, max_depth?} — Decompose goal into subtasks\n- task_plan {tasks, strategy?} — Generate execution plan\n- task_status — Get current task plans status\n- vision_describe {selector?, format?} — Describe page/element visually\n- vision_locate {description, strategy?} — Find element by description\n- vision_compare {baseline, current?, threshold?} — Compare page states"
+        description = "AI agent orchestration — command chains, element screenshots, API capture, iframes, remote CDP, safety policies, skills, screencast, recording, iOS automation, and WCAG accessibility auditing.\n\nActions:\n- execute_chain {commands} — Execute multiple commands in sequence\n- element_screenshot {selector} — Screenshot a specific element\n- api_capture_start — Start capturing API calls\n- api_capture_summary — Get captured API call summary\n- iframe_list — List all iframes on page\n- iframe_snapshot {index, interactive_only?} — Snapshot an iframe\n- connect_remote {ws_url, headers?} — Connect to remote CDP\n- safety_set {policy} — Set safety policy JSON\n- safety_status — Get current safety policy status\n- skills_list — List available skills\n- screencast_start {quality?, max_width?, max_height?} — Start screencast\n- screencast_stop — Stop screencast\n- screencast_frame — Get latest screencast frame\n- recording_start {output?, fps?, quality?} — Start video recording\n- recording_stop — Stop recording and save\n- recording_status — Get recording status\n- ios_devices — List iOS devices\n- ios_connect {device_id, wda_url?} — Connect to iOS device\n- ios_navigate {url} — Navigate iOS Safari\n- ios_tap {x, y} — Tap on iOS screen\n- ios_screenshot — Take iOS screenshot\n- task_decompose {goal, context?, max_depth?} — Decompose goal into subtasks\n- task_plan {tasks, strategy?} — Generate execution plan\n- task_status — Get current task plans status\n- vision_describe {selector?, format?} — Describe page/element visually\n- vision_locate {description, strategy?} — Find element by description\n- vision_compare {baseline, current?, threshold?} — Compare page states\n- wcag_audit {level?, selector?} — Full WCAG compliance audit\n- aria_tree — Build ARIA accessibility tree\n- contrast_check {selector?, threshold?} — Color contrast ratio check\n- landmark_nav — List ARIA landmark regions\n- focus_order — Map tab/focus order of interactive elements\n- alt_text_audit {selector?, include_decorative?} — Audit image alt text\n- heading_structure — Validate heading hierarchy (h1-h6)\n- role_validate {selector?, roles?} — Validate ARIA roles and properties\n- keyboard_trap_detect — Detect keyboard focus traps\n- screen_reader_sim {selector?, max_elements?} — Simulate screen reader output"
     )]
     async fn tool_agent(
         &self,
@@ -638,12 +661,37 @@ impl OneCrawlMcp {
                 let params: VisionCompareParams = parse_params(v, "vision_compare")?;
                 self.vision_compare(params).await
             }
+            AgentAction::WcagAudit => {
+                let params: WcagAuditParams = parse_params(v, "wcag_audit")?;
+                self.wcag_audit(params).await
+            }
+            AgentAction::AriaTree => self.aria_tree().await,
+            AgentAction::ContrastCheck => {
+                let params: ContrastCheckParams = parse_params(v, "contrast_check")?;
+                self.contrast_check(params).await
+            }
+            AgentAction::LandmarkNav => self.landmark_nav().await,
+            AgentAction::FocusOrder => self.focus_order().await,
+            AgentAction::AltTextAudit => {
+                let params: AltTextAuditParams = parse_params(v, "alt_text_audit")?;
+                self.alt_text_audit(params).await
+            }
+            AgentAction::HeadingStructure => self.heading_structure().await,
+            AgentAction::RoleValidate => {
+                let params: RoleValidateParams = parse_params(v, "role_validate")?;
+                self.role_validate(params).await
+            }
+            AgentAction::KeyboardTrapDetect => self.keyboard_trap_detect().await,
+            AgentAction::ScreenReaderSim => {
+                let params: ScreenReaderSimParams = parse_params(v, "screen_reader_sim")?;
+                self.screen_reader_sim(params).await
+            }
         }
     }
 
     #[tool(
         name = "stealth",
-        description = "Anti-detection and bot evasion — stealth patches, fingerprinting, CAPTCHA detection.\n\nActions:\n- inject — Inject stealth patches into page\n- test — Test if current page detects bot\n- fingerprint {user_agent?} — Generate and apply browser fingerprint\n- block_domains {domains} — Block tracking domains\n- detect_captcha — Detect CAPTCHAs on page"
+        description = "Anti-detection, bot evasion, stealth patches, fingerprinting, CAPTCHA detection, and human behavior simulation.\n\nActions:\n- inject — Inject stealth patches into page\n- test — Test if current page detects bot\n- fingerprint {user_agent?} — Generate and apply browser fingerprint\n- block_domains {domains} — Block tracking domains\n- detect_captcha — Detect CAPTCHAs on page\n- human_delay {min_ms?, max_ms?, pattern?} — Random human-like delay\n- human_mouse {target, speed?, curve?} — Bézier curve mouse movement\n- human_type {selector, text, speed?, mistakes?} — Natural typing with typos\n- human_scroll {direction?, amount?, speed?} — Human-like scroll behavior\n- human_profile {profile?} — Set human behavior profile (casual/fast/careful)\n- stealth_max {features?} — Enable maximum stealth (all patches + human sim)\n- stealth_score — Score current page stealth level"
     )]
     async fn tool_stealth(
         &self,
@@ -673,12 +721,37 @@ impl OneCrawlMcp {
                 let params: DetectCaptchaParams = parse_params(v, "detect_captcha")?;
                 self.stealth_detect_captcha(params).await
             }
+            StealthAction::HumanDelay => {
+                let params: HumanDelayParams = parse_params(v, "human_delay")?;
+                self.human_delay(params).await
+            }
+            StealthAction::HumanMouse => {
+                let params: HumanMouseParams = parse_params(v, "human_mouse")?;
+                self.human_mouse(params).await
+            }
+            StealthAction::HumanType => {
+                let params: HumanTypeParams = parse_params(v, "human_type")?;
+                self.human_type(params).await
+            }
+            StealthAction::HumanScroll => {
+                let params: HumanScrollParams = parse_params(v, "human_scroll")?;
+                self.human_scroll(params).await
+            }
+            StealthAction::HumanProfile => {
+                let params: HumanProfileParams = parse_params(v, "human_profile")?;
+                self.human_profile(params).await
+            }
+            StealthAction::StealthMax => {
+                let params: StealthMaxParams = parse_params(v, "stealth_max")?;
+                self.stealth_max(params).await
+            }
+            StealthAction::StealthScore => self.stealth_score().await,
         }
     }
 
     #[tool(
         name = "data",
-        description = "Data processing, HTTP requests, link analysis, network intelligence, and structured data extraction.\n\nActions:\n- pipeline {input, steps} — Multi-step data pipeline\n- http_get {url, headers?} — HTTP GET request\n- http_post {url, body?, content_type?, headers?} — HTTP POST request\n- links {base_url?} — Extract link graph from page\n- graph {edges} — Analyze link graph\n- net_capture {duration_ms?} — Capture network traffic\n- net_analyze {traffic?} — Analyze captured API traffic\n- net_sdk {traffic, language?} — Generate API SDK code\n- net_mock {traffic?} — Generate mock server config\n- net_replay {sequence} — Replay captured requests\n- extract_schema {schema_type?} — Extract JSON-LD, OpenGraph, Twitter Card, microdata\n- extract_tables {selector?, format?, headers?} — Extract HTML tables to JSON/CSV\n- extract_entities {types?, selector?} — Extract emails, phones, URLs, dates, prices\n- classify_content {strategy?, selector?} — Classify page content type and structure\n- transform_json {data, transform, output_format?} — Transform JSON data (flatten, keys, values, unique, field access)\n- export_csv {data, columns?, delimiter?} — Export JSON array to CSV\n- extract_metadata {include_og?, include_twitter?, include_all?} — Extract page metadata\n- extract_feeds {feed_type?} — Discover RSS, Atom, JSON feeds"
+        description = "Data processing, HTTP requests, link analysis, network intelligence, structured data extraction, WebSocket/SSE/GraphQL real-time protocols.\n\nActions:\n- pipeline {input, steps} — Multi-step data pipeline\n- http_get {url, headers?} — HTTP GET request\n- http_post {url, body?, content_type?, headers?} — HTTP POST request\n- links {base_url?} — Extract link graph from page\n- graph {edges} — Analyze link graph\n- net_capture {duration_ms?} — Capture network traffic\n- net_analyze {traffic?} — Analyze captured API traffic\n- net_sdk {traffic, language?} — Generate API SDK code\n- net_mock {traffic?} — Generate mock server config\n- net_replay {sequence} — Replay captured requests\n- extract_schema {schema_type?} — Extract JSON-LD, OpenGraph, Twitter Card, microdata\n- extract_tables {selector?, format?, headers?} — Extract HTML tables to JSON/CSV\n- extract_entities {types?, selector?} — Extract emails, phones, URLs, dates, prices\n- classify_content {strategy?, selector?} — Classify page content type and structure\n- transform_json {data, transform, output_format?} — Transform JSON data (flatten, keys, values, unique, field access)\n- export_csv {data, columns?, delimiter?} — Export JSON array to CSV\n- extract_metadata {include_og?, include_twitter?, include_all?} — Extract page metadata\n- extract_feeds {feed_type?} — Discover RSS, Atom, JSON feeds\n- ws_connect {url, protocols?} — Connect to WebSocket server\n- ws_intercept {url_pattern?, capture_only?} — Intercept WebSocket traffic\n- ws_send {target, message} — Send WebSocket message\n- ws_messages {url_filter?, limit?} — Get captured WebSocket messages\n- ws_close {target?} — Close WebSocket connections\n- sse_listen {url, duration_ms?} — Listen to Server-Sent Events\n- sse_messages {url_filter?, limit?} — Get captured SSE messages\n- graphql_subscribe {url, query, variables?, duration_ms?} — GraphQL subscription"
     )]
     async fn tool_data(
         &self,
@@ -760,6 +833,38 @@ impl OneCrawlMcp {
             DataAction::ExtractFeeds => {
                 let params: ExtractFeedsParams = parse_params(v, "extract_feeds")?;
                 self.extract_feeds(params).await
+            }
+            DataAction::WsConnect => {
+                let params: WsConnectParams = parse_params(v, "ws_connect")?;
+                self.ws_connect(params).await
+            }
+            DataAction::WsIntercept => {
+                let params: WsInterceptParams = parse_params(v, "ws_intercept")?;
+                self.ws_intercept(params).await
+            }
+            DataAction::WsSend => {
+                let params: WsSendParams = parse_params(v, "ws_send")?;
+                self.ws_send(params).await
+            }
+            DataAction::WsMessages => {
+                let params: WsMessagesParams = parse_params(v, "ws_messages")?;
+                self.ws_messages(params).await
+            }
+            DataAction::WsClose => {
+                let params: WsCloseParams = parse_params(v, "ws_close")?;
+                self.ws_close(params).await
+            }
+            DataAction::SseListen => {
+                let params: SseListenParams = parse_params(v, "sse_listen")?;
+                self.sse_listen(params).await
+            }
+            DataAction::SseMessages => {
+                let params: SseMessagesParams = parse_params(v, "sse_messages")?;
+                self.sse_messages(params).await
+            }
+            DataAction::GraphqlSubscribe => {
+                let params: GraphqlSubscribeParams = parse_params(v, "graphql_subscribe")?;
+                self.graphql_subscribe(params).await
             }
         }
     }
