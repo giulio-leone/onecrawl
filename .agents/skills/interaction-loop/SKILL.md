@@ -18,7 +18,7 @@ Enforce a strict iterative decision loop with consistent user checkpoints and ex
   1) Non-Breaking Path
   2) Breaking Path
   3) Alternative Structural Path
-  4) Freeform
+  4) Freeform (set enum value to `custom` — allows the user to type a free-text direction inline)
   5) Autonomous Mode
 - Mark the recommended (most future-proof) option.
 - At autonomous completion, ask for: rating, next action, satisfaction.

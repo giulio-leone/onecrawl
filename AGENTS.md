@@ -20,7 +20,7 @@ Do **not** mix tool names across runtimes.
 `AGENTS.md` + runtime adapters own only **runtime-critical contract**:
 - question tool binding (`vscode_askQuestions` vs `ask_user`)
 - fixed 5-option interaction shape
-- `Freeform` hard invariant (option 4, exact label — "Something else" via freeform tool)
+- `Freeform` hard invariant (option 4, exact label — "Something else" via `custom` enum value for inline free-text input)
 - `Autonomous Mode` placement and stop condition (`"I am satisfied"`)
 - escalation trigger for compatibility triad
 

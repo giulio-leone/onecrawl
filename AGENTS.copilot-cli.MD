@@ -11,13 +11,14 @@ Default option composition (for normal development decisions):
 1. **Recommended Development Path** (mark as ⭐ most future-proof)
 2. **Alternative Development Path A**
 3. **Alternative Development Path B**
-4. **Freeform** — "Something else": lets the user type a custom direction via the freeform tool
+4. **Freeform** — "Something else": lets the user type a custom direction (uses `custom` enum value — see below)
 5. **Autonomous Mode**
 
 `Freeform` is a hard invariant across all iterations:
-- option **4** must always be **Freeform** — the "Something else" escape hatch via the runtime freeform tool
+- option **4** must always be **Freeform** — the "Something else" escape hatch
 - label must remain exactly `Freeform` (no rename, merge, or synonym replacement)
-- when selected, prompt the user via the freeform tool to describe their preferred direction in free text
+- **implementation**: set the enum value to `custom` — Copilot CLI ≥ 1.0.2 allows custom responses in enum fields, so the user can type their preferred direction directly in the `ask_user` prompt without a separate freeform tool call
+- when the user types a custom response, treat it as their chosen direction and proceed accordingly
 - applies to default mode, compatibility-triad escalation, rollback/RCA prompts, and task-start mode selection
 - if `Freeform` is missing, the iteration is invalid and must be regenerated before proceeding
 
