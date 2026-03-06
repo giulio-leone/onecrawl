@@ -79,6 +79,8 @@ pub async fn ensure_page(browser: &SharedBrowser) -> Result<chromiumoxide::Page,
             .await
             .map_err(|e| mcp_err(format!("new page failed: {e}")))?;
         state.session = Some(session);
+        state.tabs.push(page.clone());
+        state.active_tab = 0;
         state.page = Some(page);
     }
     state
