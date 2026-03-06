@@ -2,7 +2,7 @@
 
 use rmcp::{ErrorData as McpError, model::*};
 use crate::cdp_tools::*;
-use crate::helpers::{mcp_err, ensure_page, json_ok, text_ok, McpResult};
+use crate::helpers::{mcp_err, ensure_page, json_ok, json_escape, text_ok, McpResult};
 use crate::types::*;
 use crate::OneCrawlMcp;
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
@@ -294,5 +294,332 @@ impl OneCrawlMcp {
     // ════════════════════════════════════════════════════════════════
     //  Agent tools — Enhanced Agentic API Layer
     // ════════════════════════════════════════════════════════════════
+
+    // ════════════════════════════════════════════════════════════════
+    //  Authentication Flows
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn auth_oauth2(&self, p: AuthOauth2Params) -> Result<CallToolResult, McpError> {
+        let use_pkce = p.use_pkce.unwrap_or(true);
+        let scopes = p.scopes.as_ref().map(|s| s.join(" ")).unwrap_or_else(|| "openid profile email".to_string());
+
+        // Generate PKCE pair if requested
+        let pkce = if use_pkce {
+            let pair = onecrawl_crypto::pkce::generate_pkce_challenge().map_err(|e| mcp_err(&format!("PKCE generation failed: {e}")))?;
+            Some(serde_json::json!({
+                "code_verifier": pair.code_verifier,
+                "code_challenge": pair.code_challenge,
+                "method": "S256"
+            }))
+        } else { None };
+
+        let redirect_uri = p.redirect_uri.as_deref().unwrap_or("http://localhost:3000/callback");
+
+        // Build authorization URL
+        let mut auth_url = format!("{}?response_type=code&client_id={}&redirect_uri={}&scope={}",
+            p.auth_url, p.client_id, redirect_uri, scopes);
+        if let Some(ref pkce_data) = pkce {
+            auth_url.push_str(&format!("&code_challenge={}&code_challenge_method=S256",
+                pkce_data["code_challenge"].as_str().unwrap_or("")));
+        }
+
+        // Store session info
+        let mut state = self.browser.lock().await;
+        state.auth_sessions.insert("oauth2".to_string(), serde_json::json!({
+            "auth_url": p.auth_url,
+            "token_url": p.token_url,
+            "client_id": p.client_id,
+            "redirect_uri": redirect_uri,
+            "scopes": scopes,
+            "pkce": pkce,
+        }));
+        state.auth_status = Some("oauth2_initiated".to_string());
+
+        json_ok(&serde_json::json!({
+            "action": "auth_oauth2",
+            "authorization_url": auth_url,
+            "token_url": p.token_url,
+            "use_pkce": use_pkce,
+            "scopes": scopes,
+            "status": "authorization_url_generated",
+            "next_step": "Navigate to authorization_url, complete login, capture redirect code"
+        }))
+    }
+
+    pub(crate) async fn auth_session(&self, p: AuthSessionParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+
+        if p.export.unwrap_or(false) {
+            // Export current cookies and storage
+            let js = r#"(() => {
+                const storage = {};
+                try {
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        storage[key] = localStorage.getItem(key);
+                    }
+                } catch(_) {}
+                return {
+                    url: location.href,
+                    cookies: document.cookie,
+                    localStorage: storage
+                };
+            })()"#;
+            let result = page.evaluate(js).await.mcp()?;
+            let session_data: serde_json::Value = result.into_value().unwrap_or(serde_json::json!({}));
+
+            let mut state = self.browser.lock().await;
+            state.auth_sessions.insert(p.name.clone(), session_data.clone());
+
+            json_ok(&serde_json::json!({
+                "action": "auth_session",
+                "name": p.name,
+                "operation": "export",
+                "session_data": session_data,
+                "stored": true
+            }))
+        } else if let Some(import_data) = p.import_data {
+            // Import session data
+            let data: serde_json::Value = serde_json::from_str(&import_data)
+                .map_err(|e| mcp_err(format!("invalid session data: {e}")))?;
+
+            if let Some(url) = data.get("url").and_then(|v| v.as_str()) {
+                page.goto(url).await.mcp()?;
+            }
+
+            if let Some(storage) = data.get("localStorage").and_then(|v| v.as_object()) {
+                for (key, value) in storage {
+                    let val_str = value.as_str().unwrap_or("");
+                    let js = format!("localStorage.setItem({}, {})",
+                        json_escape(key), json_escape(val_str));
+                    page.evaluate(js).await.mcp()?;
+                }
+            }
+
+            let mut state = self.browser.lock().await;
+            state.auth_sessions.insert(p.name.clone(), data);
+
+            json_ok(&serde_json::json!({
+                "action": "auth_session",
+                "name": p.name,
+                "operation": "import",
+                "restored": true
+            }))
+        } else {
+            // Just check session status
+            let state = self.browser.lock().await;
+            let session = state.auth_sessions.get(&p.name);
+            json_ok(&serde_json::json!({
+                "action": "auth_session",
+                "name": p.name,
+                "exists": session.is_some(),
+                "session": session
+            }))
+        }
+    }
+
+    pub(crate) async fn auth_form_login(&self, p: AuthFormLoginParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+
+        // Navigate to login page
+        page.goto(&p.url).await.mcp()?;
+        tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+        // Auto-detect or use provided selectors
+        let user_sel = p.username_selector.as_deref().unwrap_or("input[type='email'], input[name='email'], input[name='username'], input[type='text']:first-of-type");
+        let pass_sel = p.password_selector.as_deref().unwrap_or("input[type='password']");
+        let submit_sel = p.submit_selector.as_deref().unwrap_or("button[type='submit'], input[type='submit'], button:has-text('Login'), button:has-text('Sign in')");
+
+        // Fill credentials via JS
+        let js = format!(r#"(() => {{
+            const userField = document.querySelector({user_sel_js});
+            const passField = document.querySelector({pass_sel_js});
+
+            if (!userField) return {{ error: 'username field not found', selector: {user_sel_js} }};
+            if (!passField) return {{ error: 'password field not found', selector: {pass_sel_js} }};
+
+            userField.value = {username_js};
+            userField.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            userField.dispatchEvent(new Event('change', {{ bubbles: true }}));
+
+            passField.value = {password_js};
+            passField.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            passField.dispatchEvent(new Event('change', {{ bubbles: true }}));
+
+            const submitBtn = document.querySelector({submit_sel_js});
+            if (submitBtn) submitBtn.click();
+
+            return {{ filled: true, submitted: !!submitBtn }};
+        }})()"#,
+            user_sel_js = json_escape(user_sel),
+            pass_sel_js = json_escape(pass_sel),
+            submit_sel_js = json_escape(submit_sel),
+            username_js = json_escape(&p.username),
+            password_js = json_escape(&p.password),
+        );
+
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!({}));
+
+        // Wait for navigation
+        tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+
+        let mut state = self.browser.lock().await;
+        state.auth_status = Some("form_login_attempted".to_string());
+
+        json_ok(&serde_json::json!({
+            "action": "auth_form_login",
+            "url": p.url,
+            "result": val,
+            "status": "login_attempted"
+        }))
+    }
+
+    pub(crate) async fn auth_mfa(&self, p: AuthMfaParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+
+        let code = if let Some(manual_code) = &p.code {
+            manual_code.clone()
+        } else if p.mfa_type == "totp" {
+            if let Some(secret) = &p.totp_secret {
+                let config = onecrawl_core::TotpConfig {
+                    secret: secret.clone(),
+                    digits: 6,
+                    period: 30,
+                    algorithm: onecrawl_core::TotpAlgorithm::Sha1,
+                };
+                onecrawl_crypto::totp::generate_totp(&config)
+                    .map_err(|e| mcp_err(&format!("TOTP generation failed: {e}")))?
+            } else {
+                return json_ok(&serde_json::json!({ "error": "totp_secret required for TOTP MFA" }));
+            }
+        } else {
+            return json_ok(&serde_json::json!({
+                "action": "auth_mfa",
+                "mfa_type": p.mfa_type,
+                "status": "awaiting_code",
+                "message": "Provide code parameter or totp_secret for auto-generation"
+            }));
+        };
+
+        let code_sel = p.code_selector.as_deref().unwrap_or("input[type='text'], input[name='code'], input[name='otp'], input[autocomplete='one-time-code']");
+        let submit_sel = p.submit_selector.as_deref().unwrap_or("button[type='submit'], input[type='submit']");
+
+        let js = format!(r#"(() => {{
+            const codeField = document.querySelector({code_sel_js});
+            if (!codeField) return {{ error: 'MFA code field not found' }};
+
+            codeField.value = {code_js};
+            codeField.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            codeField.dispatchEvent(new Event('change', {{ bubbles: true }}));
+
+            const submitBtn = document.querySelector({submit_sel_js});
+            if (submitBtn) submitBtn.click();
+
+            return {{ filled: true, submitted: !!submitBtn }};
+        }})()"#,
+            code_sel_js = json_escape(code_sel),
+            code_js = json_escape(&code),
+            submit_sel_js = json_escape(submit_sel),
+        );
+
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!({}));
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+
+        let mut state = self.browser.lock().await;
+        state.auth_status = Some("mfa_completed".to_string());
+
+        json_ok(&serde_json::json!({
+            "action": "auth_mfa",
+            "mfa_type": p.mfa_type,
+            "result": val,
+            "status": "mfa_submitted"
+        }))
+    }
+
+    pub(crate) async fn auth_status_check(&self) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let sessions: Vec<&String> = state.auth_sessions.keys().collect();
+
+        json_ok(&serde_json::json!({
+            "action": "auth_status",
+            "current_status": state.auth_status,
+            "active_sessions": sessions,
+            "session_count": sessions.len()
+        }))
+    }
+
+    pub(crate) async fn auth_logout(&self) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+
+        // Clear all auth state
+        let js = r#"(() => {
+            localStorage.clear();
+            sessionStorage.clear();
+            document.cookie.split(';').forEach(c => {
+                document.cookie = c.replace(/^ +/, '').replace(/=.*/, '=;expires=' + new Date().toUTCString() + ';path=/');
+            });
+            return { cleared: true };
+        })()"#;
+
+        page.evaluate(js).await.mcp()?;
+
+        let mut state = self.browser.lock().await;
+        state.auth_sessions.clear();
+        state.auth_status = Some("logged_out".to_string());
+
+        json_ok(&serde_json::json!({
+            "action": "auth_logout",
+            "status": "logged_out",
+            "sessions_cleared": true,
+            "cookies_cleared": true,
+            "storage_cleared": true
+        }))
+    }
+
+    pub(crate) fn credential_store(&self, p: CredentialStoreParams) -> Result<CallToolResult, McpError> {
+        // Store credentials in encrypted KV store
+        let store = self.open_store()?;
+        let cred_value = serde_json::json!({
+            "username": p.username,
+            "password": p.password,
+            "domain": p.domain,
+            "metadata": p.metadata,
+        });
+        let json_str = serde_json::to_string(&cred_value).mcp()?;
+        store.set(&format!("cred:{}", p.label), json_str.as_bytes()).mcp()?;
+
+        json_ok(&serde_json::json!({
+            "action": "credential_store",
+            "label": p.label,
+            "domain": p.domain,
+            "stored": true
+        }))
+    }
+
+    pub(crate) fn credential_get(&self, p: CredentialGetParams) -> Result<CallToolResult, McpError> {
+        let store = self.open_store()?;
+        let key = format!("cred:{}", p.label);
+        match store.get(&key) {
+            Ok(Some(val)) => {
+                let val_str = std::str::from_utf8(&val).mcp()?;
+                let cred: serde_json::Value = serde_json::from_str(val_str).mcp()?;
+                json_ok(&serde_json::json!({
+                    "action": "credential_get",
+                    "label": p.label,
+                    "found": true,
+                    "credential": cred
+                }))
+            }
+            Ok(None) => json_ok(&serde_json::json!({
+                "action": "credential_get",
+                "label": p.label,
+                "found": false
+            })),
+            Err(e) => Err(mcp_err(format!("credential retrieval failed: {e}"))),
+        }
+    }
 
 }

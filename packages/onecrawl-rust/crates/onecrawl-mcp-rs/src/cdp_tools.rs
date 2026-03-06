@@ -49,6 +49,14 @@ pub struct BrowserState {
     // Event-driven reaction system
     pub event_subscriptions: Vec<String>,
     pub event_buffer: Vec<serde_json::Value>,
+    // Multi-browser fleet
+    pub fleet_instances: Vec<(String, Option<chromiumoxide::Page>)>,
+    pub fleet_name: Option<String>,
+    // Auth sessions
+    pub auth_sessions: HashMap<String, serde_json::Value>,
+    pub auth_status: Option<String>,
+    // Credential vault
+    pub credentials: HashMap<String, serde_json::Value>,
 }
 
 pub type SharedBrowser = Arc<Mutex<BrowserState>>;
@@ -1194,6 +1202,208 @@ pub struct EventPollParams {
     pub limit: Option<u32>,
     #[schemars(description = "Clear returned events from buffer (default: false)")]
     pub clear: Option<bool>,
+}
+
+// ──────────────── Structured Data Pipeline params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ExtractSchemaParams {
+    #[schemars(description = "Schema type: json_ld, open_graph, twitter_card, microdata, all")]
+    pub schema_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ExtractTablesParams {
+    #[schemars(description = "CSS selector for table (default: 'table')")]
+    pub selector: Option<String>,
+    #[schemars(description = "Output format: json, csv, array (default: json)")]
+    pub format: Option<String>,
+    #[schemars(description = "Use first row as headers (default: true)")]
+    pub headers: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ExtractEntitiesParams {
+    #[schemars(description = "Entity types to extract: emails, phones, urls, dates, prices, addresses")]
+    pub types: Option<Vec<String>>,
+    #[schemars(description = "CSS selector to scope extraction")]
+    pub selector: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ClassifyContentParams {
+    #[schemars(description = "Classification strategy: topic, sentiment, language, type")]
+    pub strategy: Option<String>,
+    #[schemars(description = "CSS selector to scope content")]
+    pub selector: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct TransformJsonParams {
+    #[schemars(description = "Input JSON data")]
+    pub data: serde_json::Value,
+    #[schemars(description = "JMESPath-style expression or transform operations")]
+    pub transform: String,
+    #[schemars(description = "Output format: json, csv, yaml, table")]
+    pub output_format: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ExportCsvParams {
+    #[schemars(description = "JSON array of objects to export")]
+    pub data: serde_json::Value,
+    #[schemars(description = "Column headers (auto-detected if absent)")]
+    pub columns: Option<Vec<String>>,
+    #[schemars(description = "Delimiter character (default: comma)")]
+    pub delimiter: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ExtractMetadataParams {
+    #[schemars(description = "Include Open Graph metadata")]
+    pub include_og: Option<bool>,
+    #[schemars(description = "Include Twitter Card metadata")]
+    pub include_twitter: Option<bool>,
+    #[schemars(description = "Include all meta tags")]
+    pub include_all: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ExtractFeedsParams {
+    #[schemars(description = "Feed types to detect: rss, atom, json_feed, all")]
+    pub feed_type: Option<String>,
+}
+
+// ──────────────── Multi-Browser Fleet params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct FleetSpawnParams {
+    #[schemars(description = "Number of browser instances to spawn")]
+    pub count: u32,
+    #[schemars(description = "Browser type: chrome, firefox, webkit (default: chrome)")]
+    pub browser_type: Option<String>,
+    #[schemars(description = "Run headless (default: true)")]
+    pub headless: Option<bool>,
+    #[schemars(description = "Fleet name/label for identification")]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct FleetBroadcastParams {
+    #[schemars(description = "Action to broadcast to all fleet instances")]
+    pub action: String,
+    #[schemars(description = "Parameters for the action")]
+    pub params: Option<serde_json::Value>,
+    #[schemars(description = "Specific instance indices to target (all if absent)")]
+    pub targets: Option<Vec<u32>>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct FleetCollectParams {
+    #[schemars(description = "What to collect: screenshots, text, html, data, all")]
+    pub collect_type: String,
+    #[schemars(description = "CSS selector to scope collection")]
+    pub selector: Option<String>,
+    #[schemars(description = "Merge strategy: concat, zip, group (default: group)")]
+    pub merge_strategy: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct FleetDestroyParams {
+    #[schemars(description = "Specific instance indices to destroy (all if absent)")]
+    pub targets: Option<Vec<u32>>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct FleetBalanceParams {
+    #[schemars(description = "URLs to distribute across fleet")]
+    pub urls: Vec<String>,
+    #[schemars(description = "Distribution strategy: round_robin, random, load_based (default: round_robin)")]
+    pub strategy: Option<String>,
+    #[schemars(description = "Action to perform on each URL")]
+    pub action: Option<String>,
+}
+
+// ──────────────── Authentication Flows params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AuthOauth2Params {
+    #[schemars(description = "OAuth2 authorization URL")]
+    pub auth_url: String,
+    #[schemars(description = "Token endpoint URL")]
+    pub token_url: String,
+    #[schemars(description = "Client ID")]
+    pub client_id: String,
+    #[schemars(description = "Client secret (optional for PKCE flows)")]
+    pub client_secret: Option<String>,
+    #[schemars(description = "Redirect URI")]
+    pub redirect_uri: Option<String>,
+    #[schemars(description = "OAuth2 scopes")]
+    pub scopes: Option<Vec<String>>,
+    #[schemars(description = "Use PKCE (default: true)")]
+    pub use_pkce: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AuthSessionParams {
+    #[schemars(description = "Session name for identification")]
+    pub name: String,
+    #[schemars(description = "Export current session cookies/storage")]
+    pub export: Option<bool>,
+    #[schemars(description = "Session data to import (JSON)")]
+    pub import_data: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AuthFormLoginParams {
+    #[schemars(description = "Login page URL")]
+    pub url: String,
+    #[schemars(description = "Username/email field selector")]
+    pub username_selector: Option<String>,
+    #[schemars(description = "Password field selector")]
+    pub password_selector: Option<String>,
+    #[schemars(description = "Submit button selector")]
+    pub submit_selector: Option<String>,
+    #[schemars(description = "Username/email value")]
+    pub username: String,
+    #[schemars(description = "Password value")]
+    pub password: String,
+    #[schemars(description = "Expected URL or selector after successful login")]
+    pub success_indicator: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AuthMfaParams {
+    #[schemars(description = "MFA type: totp, sms, email")]
+    pub mfa_type: String,
+    #[schemars(description = "TOTP secret for code generation")]
+    pub totp_secret: Option<String>,
+    #[schemars(description = "MFA code input field selector")]
+    pub code_selector: Option<String>,
+    #[schemars(description = "Manual MFA code (if not auto-generating)")]
+    pub code: Option<String>,
+    #[schemars(description = "Submit button selector")]
+    pub submit_selector: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct CredentialStoreParams {
+    #[schemars(description = "Credential label/name")]
+    pub label: String,
+    #[schemars(description = "Username/email")]
+    pub username: String,
+    #[schemars(description = "Password")]
+    pub password: String,
+    #[schemars(description = "Associated domain/URL")]
+    pub domain: Option<String>,
+    #[schemars(description = "Additional metadata")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct CredentialGetParams {
+    #[schemars(description = "Credential label to retrieve")]
+    pub label: String,
 }
 
 #[cfg(test)]

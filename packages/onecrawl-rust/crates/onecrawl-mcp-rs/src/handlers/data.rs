@@ -2,7 +2,7 @@
 
 use rmcp::{ErrorData as McpError, model::*};
 use crate::cdp_tools::*;
-use crate::helpers::{mcp_err, ensure_page, json_ok, parse_json_str, parse_opt_json_str, McpResult};
+use crate::helpers::{mcp_err, ensure_page, json_ok, json_escape, parse_json_str, parse_opt_json_str, McpResult};
 use crate::types::*;
 use crate::OneCrawlMcp;
 use std::collections::HashMap;
@@ -404,5 +404,353 @@ impl OneCrawlMcp {
     // ════════════════════════════════════════════════════════════════
     //  Visual Regression Testing tools
     // ════════════════════════════════════════════════════════════════
+
+    // ════════════════════════════════════════════════════════════════
+    //  Structured Data Pipeline
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn extract_schema(&self, p: ExtractSchemaParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let schema_type = p.schema_type.as_deref().unwrap_or("all");
+
+        let js = format!(r#"(() => {{
+            const result = {{}};
+
+            if ("{schema_type}" === "all" || "{schema_type}" === "json_ld") {{
+                const ld = [...document.querySelectorAll('script[type="application/ld+json"]')];
+                result.json_ld = ld.map(s => {{ try {{ return JSON.parse(s.textContent); }} catch(_) {{ return null; }} }}).filter(Boolean);
+            }}
+
+            if ("{schema_type}" === "all" || "{schema_type}" === "open_graph") {{
+                const og = [...document.querySelectorAll('meta[property^="og:"]')];
+                result.open_graph = {{}};
+                og.forEach(m => {{ result.open_graph[m.getAttribute('property')] = m.getAttribute('content'); }});
+            }}
+
+            if ("{schema_type}" === "all" || "{schema_type}" === "twitter_card") {{
+                const tw = [...document.querySelectorAll('meta[name^="twitter:"]')];
+                result.twitter_card = {{}};
+                tw.forEach(m => {{ result.twitter_card[m.getAttribute('name')] = m.getAttribute('content'); }});
+            }}
+
+            if ("{schema_type}" === "all" || "{schema_type}" === "microdata") {{
+                const items = [...document.querySelectorAll('[itemscope]')];
+                result.microdata = items.map(el => ({{
+                    type: el.getAttribute('itemtype'),
+                    properties: [...el.querySelectorAll('[itemprop]')].map(p => ({{
+                        name: p.getAttribute('itemprop'),
+                        value: p.textContent.trim().substring(0, 200)
+                    }}))
+                }}));
+            }}
+
+            return result;
+        }})()"#);
+
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!({}));
+        json_ok(&serde_json::json!({ "action": "extract_schema", "schema_type": schema_type, "data": val }))
+    }
+
+    pub(crate) async fn extract_tables(&self, p: ExtractTablesParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let selector = json_escape(p.selector.as_deref().unwrap_or("table"));
+        let use_headers = p.headers.unwrap_or(true);
+
+        let js = format!(r#"(() => {{
+            const tables = [...document.querySelectorAll({selector})];
+            return tables.map((table, idx) => {{
+                const rows = [...table.querySelectorAll('tr')];
+                if (rows.length === 0) return {{ index: idx, rows: [] }};
+
+                let headers = null;
+                let dataRows = rows;
+                if ({use_headers} && rows.length > 0) {{
+                    const firstRow = rows[0];
+                    const cells = [...firstRow.querySelectorAll('th, td')];
+                    headers = cells.map(c => c.textContent.trim());
+                    dataRows = rows.slice(1);
+                }}
+
+                const data = dataRows.map(row => {{
+                    const cells = [...row.querySelectorAll('td, th')];
+                    if (headers) {{
+                        const obj = {{}};
+                        cells.forEach((c, i) => {{ obj[headers[i] || 'col_' + i] = c.textContent.trim(); }});
+                        return obj;
+                    }}
+                    return cells.map(c => c.textContent.trim());
+                }});
+
+                return {{ index: idx, headers, row_count: data.length, data }};
+            }});
+        }})()"#);
+
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!([]));
+        let format = p.format.as_deref().unwrap_or("json");
+        json_ok(&serde_json::json!({ "action": "extract_tables", "format": format, "tables": val }))
+    }
+
+    pub(crate) async fn extract_entities(&self, p: ExtractEntitiesParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let scope = p.selector.as_deref().unwrap_or("body");
+        let scope_js = json_escape(scope);
+        let types = p.types.as_ref().map(|t| t.join(",")).unwrap_or_else(|| "emails,phones,urls,dates,prices".to_string());
+
+        let js = format!(r#"(() => {{
+            const el = document.querySelector({scope_js}) || document.body;
+            const text = el.innerText || el.textContent || '';
+            const result = {{}};
+            const types = '{types}'.split(',');
+
+            if (types.includes('emails')) {{
+                result.emails = [...new Set(text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{{2,}}/g) || [])];
+            }}
+            if (types.includes('phones')) {{
+                result.phones = [...new Set(text.match(/[\+]?[(]?[0-9]{{1,4}}[)]?[-\s\.]?[0-9]{{1,4}}[-\s\.]?[0-9]{{1,9}}/g) || [])];
+            }}
+            if (types.includes('urls')) {{
+                result.urls = [...new Set(text.match(/https?:\/\/[^\s<>"']+/g) || [])];
+            }}
+            if (types.includes('dates')) {{
+                result.dates = [...new Set(text.match(/\d{{1,2}}[\/\-\.]\d{{1,2}}[\/\-\.]\d{{2,4}}|\d{{4}}-\d{{2}}-\d{{2}}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{{1,2}},? \d{{4}}/gi) || [])];
+            }}
+            if (types.includes('prices')) {{
+                result.prices = [...new Set(text.match(/[\$\€\£\¥]\s?[\d,]+\.?\d*/g) || [])];
+            }}
+
+            return result;
+        }})()"#);
+
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!({}));
+        json_ok(&serde_json::json!({ "action": "extract_entities", "entities": val }))
+    }
+
+    pub(crate) async fn classify_content(&self, p: ClassifyContentParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let strategy = p.strategy.as_deref().unwrap_or("type");
+        let scope = p.selector.as_deref().unwrap_or("body");
+        let scope_js = json_escape(scope);
+
+        let js = format!(r#"(() => {{
+            const el = document.querySelector({scope_js}) || document.body;
+            const text = (el.innerText || '').substring(0, 5000);
+            const title = document.title || '';
+            const url = location.href;
+            const meta = document.querySelector('meta[name="description"]');
+            const desc = meta ? meta.content : '';
+
+            const h1Count = el.querySelectorAll('h1').length;
+            const formCount = el.querySelectorAll('form').length;
+            const imgCount = el.querySelectorAll('img').length;
+            const linkCount = el.querySelectorAll('a').length;
+            const wordCount = text.split(/\s+/).length;
+            const lang = document.documentElement.lang || 'unknown';
+
+            let pageType = 'unknown';
+            if (formCount > 0 && text.match(/login|sign\s?in|password/i)) pageType = 'login';
+            else if (formCount > 0 && text.match(/sign\s?up|register|create account/i)) pageType = 'registration';
+            else if (formCount > 0 && text.match(/search/i)) pageType = 'search';
+            else if (formCount > 0) pageType = 'form';
+            else if (text.match(/cart|checkout|payment/i)) pageType = 'commerce';
+            else if (wordCount > 500 && h1Count >= 1) pageType = 'article';
+            else if (linkCount > 20 && wordCount < 300) pageType = 'listing';
+            else if (imgCount > 5) pageType = 'gallery';
+            else if (wordCount < 100) pageType = 'landing';
+            else pageType = 'content';
+
+            return {{
+                page_type: pageType,
+                language: lang,
+                title, description: desc, url,
+                stats: {{ word_count: wordCount, h1_count: h1Count, form_count: formCount, image_count: imgCount, link_count: linkCount }}
+            }};
+        }})()"#);
+
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!({}));
+        json_ok(&serde_json::json!({ "action": "classify_content", "strategy": strategy, "classification": val }))
+    }
+
+    pub(crate) fn transform_json(&self, p: TransformJsonParams) -> Result<CallToolResult, McpError> {
+        let transform = &p.transform;
+        let data = &p.data;
+        let output_format = p.output_format.as_deref().unwrap_or("json");
+
+        // Simple transform operations: select, filter, map, flatten, sort, unique, count
+        let result = match transform.as_str() {
+            "flatten" => {
+                if let Some(arr) = data.as_array() {
+                    let flat: Vec<&serde_json::Value> = arr.iter()
+                        .flat_map(|v| v.as_array().map(|a| a.iter().collect::<Vec<_>>()).unwrap_or_else(|| vec![v]))
+                        .collect();
+                    serde_json::json!(flat)
+                } else { data.clone() }
+            }
+            "count" => serde_json::json!({ "count": data.as_array().map(|a| a.len()).unwrap_or(1) }),
+            "keys" => {
+                if let Some(obj) = data.as_object() {
+                    serde_json::json!(obj.keys().collect::<Vec<_>>())
+                } else { serde_json::json!([]) }
+            }
+            "values" => {
+                if let Some(obj) = data.as_object() {
+                    serde_json::json!(obj.values().collect::<Vec<_>>())
+                } else { serde_json::json!([]) }
+            }
+            "unique" => {
+                if let Some(arr) = data.as_array() {
+                    let mut seen = std::collections::HashSet::new();
+                    let unique: Vec<&serde_json::Value> = arr.iter().filter(|v| seen.insert(v.to_string())).collect();
+                    serde_json::json!(unique)
+                } else { data.clone() }
+            }
+            "reverse" => {
+                if let Some(arr) = data.as_array() {
+                    let mut rev = arr.clone();
+                    rev.reverse();
+                    serde_json::json!(rev)
+                } else { data.clone() }
+            }
+            _ => {
+                // Treat as JMESPath-like field access: "field.subfield"
+                let parts: Vec<&str> = transform.split('.').collect();
+                let mut current = data.clone();
+                for part in parts {
+                    current = current.get(part).cloned().unwrap_or(serde_json::Value::Null);
+                }
+                current
+            }
+        };
+
+        json_ok(&serde_json::json!({ "action": "transform_json", "format": output_format, "result": result }))
+    }
+
+    pub(crate) fn export_csv(&self, p: ExportCsvParams) -> Result<CallToolResult, McpError> {
+        let delimiter = p.delimiter.as_deref().unwrap_or(",");
+        let del_char = delimiter.chars().next().unwrap_or(',');
+
+        let items = p.data.as_array().ok_or_else(|| mcp_err("data must be a JSON array"))?;
+        if items.is_empty() {
+            return json_ok(&serde_json::json!({ "action": "export_csv", "csv": "", "row_count": 0 }));
+        }
+
+        let columns: Vec<String> = if let Some(cols) = &p.columns {
+            cols.clone()
+        } else {
+            // Auto-detect from first item
+            items[0].as_object().map(|o| o.keys().cloned().collect()).unwrap_or_default()
+        };
+
+        let mut csv = String::new();
+        csv.push_str(&columns.join(&del_char.to_string()));
+        csv.push('\n');
+
+        for item in items {
+            let row: Vec<String> = columns.iter().map(|col| {
+                item.get(col).map(|v| match v {
+                    serde_json::Value::String(s) => {
+                        if s.contains(del_char) || s.contains('"') || s.contains('\n') {
+                            format!("\"{}\"", s.replace('"', "\"\""))
+                        } else { s.clone() }
+                    }
+                    other => other.to_string().trim_matches('"').to_string(),
+                }).unwrap_or_default()
+            }).collect();
+            csv.push_str(&row.join(&del_char.to_string()));
+            csv.push('\n');
+        }
+
+        json_ok(&serde_json::json!({ "action": "export_csv", "csv": csv, "row_count": items.len(), "column_count": columns.len() }))
+    }
+
+    pub(crate) async fn extract_metadata(&self, p: ExtractMetadataParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let inc_og = p.include_og.unwrap_or(true);
+        let inc_tw = p.include_twitter.unwrap_or(true);
+        let inc_all = p.include_all.unwrap_or(false);
+
+        let js = format!(r#"(() => {{
+            const result = {{
+                title: document.title,
+                canonical: (document.querySelector('link[rel="canonical"]') || {{}}).href || null,
+                description: (document.querySelector('meta[name="description"]') || {{}}).content || null,
+                author: (document.querySelector('meta[name="author"]') || {{}}).content || null,
+                robots: (document.querySelector('meta[name="robots"]') || {{}}).content || null,
+            }};
+
+            if ({inc_og}) {{
+                result.open_graph = {{}};
+                document.querySelectorAll('meta[property^="og:"]').forEach(m => {{
+                    result.open_graph[m.getAttribute('property')] = m.content;
+                }});
+            }}
+
+            if ({inc_tw}) {{
+                result.twitter_card = {{}};
+                document.querySelectorAll('meta[name^="twitter:"]').forEach(m => {{
+                    result.twitter_card[m.getAttribute('name')] = m.content;
+                }});
+            }}
+
+            if ({inc_all}) {{
+                result.all_meta = [];
+                document.querySelectorAll('meta').forEach(m => {{
+                    result.all_meta.push({{
+                        name: m.getAttribute('name'),
+                        property: m.getAttribute('property'),
+                        content: m.content
+                    }});
+                }});
+            }}
+
+            return result;
+        }})()"#);
+
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!({}));
+        json_ok(&serde_json::json!({ "action": "extract_metadata", "metadata": val }))
+    }
+
+    pub(crate) async fn extract_feeds(&self, p: ExtractFeedsParams) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let feed_type = p.feed_type.as_deref().unwrap_or("all");
+
+        let js = format!(r#"(() => {{
+            const feeds = [];
+            const feedType = '{feed_type}';
+
+            if (feedType === 'all' || feedType === 'rss' || feedType === 'atom') {{
+                document.querySelectorAll('link[type="application/rss+xml"], link[type="application/atom+xml"]').forEach(link => {{
+                    feeds.push({{
+                        type: link.type.includes('atom') ? 'atom' : 'rss',
+                        title: link.title || null,
+                        url: link.href
+                    }});
+                }});
+            }}
+
+            if (feedType === 'all' || feedType === 'json_feed') {{
+                document.querySelectorAll('link[type="application/feed+json"], link[type="application/json"]').forEach(link => {{
+                    if (link.href.match(/feed|json/i)) {{
+                        feeds.push({{ type: 'json_feed', title: link.title || null, url: link.href }});
+                    }}
+                }});
+            }}
+
+            // Also check common feed URL patterns in links
+            document.querySelectorAll('a[href*="feed"], a[href*="rss"], a[href*="atom"]').forEach(a => {{
+                feeds.push({{ type: 'discovered', title: a.textContent.trim().substring(0, 100), url: a.href }});
+            }});
+
+            return feeds;
+        }})()"#);
+
+        let result = page.evaluate(js).await.mcp()?;
+        let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!([]));
+        json_ok(&serde_json::json!({ "action": "extract_feeds", "feed_type": feed_type, "feeds": val }))
+    }
 
 }

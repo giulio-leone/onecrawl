@@ -678,7 +678,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "data",
-        description = "Data processing, HTTP requests, link analysis, and network intelligence.\n\nActions:\n- pipeline {input, steps} — Multi-step data pipeline\n- http_get {url, headers?} — HTTP GET request\n- http_post {url, body?, content_type?, headers?} — HTTP POST request\n- links {base_url?} — Extract link graph from page\n- graph {edges} — Analyze link graph\n- net_capture {duration_ms?} — Capture network traffic\n- net_analyze {traffic?} — Analyze captured API traffic\n- net_sdk {traffic, language?} — Generate API SDK code\n- net_mock {traffic?} — Generate mock server config\n- net_replay {sequence} — Replay captured requests"
+        description = "Data processing, HTTP requests, link analysis, network intelligence, and structured data extraction.\n\nActions:\n- pipeline {input, steps} — Multi-step data pipeline\n- http_get {url, headers?} — HTTP GET request\n- http_post {url, body?, content_type?, headers?} — HTTP POST request\n- links {base_url?} — Extract link graph from page\n- graph {edges} — Analyze link graph\n- net_capture {duration_ms?} — Capture network traffic\n- net_analyze {traffic?} — Analyze captured API traffic\n- net_sdk {traffic, language?} — Generate API SDK code\n- net_mock {traffic?} — Generate mock server config\n- net_replay {sequence} — Replay captured requests\n- extract_schema {schema_type?} — Extract JSON-LD, OpenGraph, Twitter Card, microdata\n- extract_tables {selector?, format?, headers?} — Extract HTML tables to JSON/CSV\n- extract_entities {types?, selector?} — Extract emails, phones, URLs, dates, prices\n- classify_content {strategy?, selector?} — Classify page content type and structure\n- transform_json {data, transform, output_format?} — Transform JSON data (flatten, keys, values, unique, field access)\n- export_csv {data, columns?, delimiter?} — Export JSON array to CSV\n- extract_metadata {include_og?, include_twitter?, include_all?} — Extract page metadata\n- extract_feeds {feed_type?} — Discover RSS, Atom, JSON feeds"
     )]
     async fn tool_data(
         &self,
@@ -728,12 +728,45 @@ impl OneCrawlMcp {
                 let params: NetIntelReplayParams = parse_params(v, "net_replay")?;
                 self.net_replay(params).await
             }
+            // Structured data pipeline
+            DataAction::ExtractSchema => {
+                let params: ExtractSchemaParams = parse_params(v, "extract_schema")?;
+                self.extract_schema(params).await
+            }
+            DataAction::ExtractTables => {
+                let params: ExtractTablesParams = parse_params(v, "extract_tables")?;
+                self.extract_tables(params).await
+            }
+            DataAction::ExtractEntities => {
+                let params: ExtractEntitiesParams = parse_params(v, "extract_entities")?;
+                self.extract_entities(params).await
+            }
+            DataAction::ClassifyContent => {
+                let params: ClassifyContentParams = parse_params(v, "classify_content")?;
+                self.classify_content(params).await
+            }
+            DataAction::TransformJson => {
+                let params: TransformJsonParams = parse_params(v, "transform_json")?;
+                self.transform_json(params)
+            }
+            DataAction::ExportCsv => {
+                let params: ExportCsvParams = parse_params(v, "export_csv")?;
+                self.export_csv(params)
+            }
+            DataAction::ExtractMetadata => {
+                let params: ExtractMetadataParams = parse_params(v, "extract_metadata")?;
+                self.extract_metadata(params).await
+            }
+            DataAction::ExtractFeeds => {
+                let params: ExtractFeedsParams = parse_params(v, "extract_feeds")?;
+                self.extract_feeds(params).await
+            }
         }
     }
 
     #[tool(
         name = "secure",
-        description = "Cryptography, encrypted storage, and WebAuthn passkey management.\n\nActions:\n- encrypt {plaintext, password} — AES-256-GCM encryption\n- decrypt {ciphertext, password} — AES-256-GCM decryption\n- pkce — Generate PKCE S256 challenge pair\n- totp {secret} — Generate 6-digit TOTP code\n- kv_set {key, value} — Store encrypted key-value pair\n- kv_get {key} — Retrieve value by key\n- kv_list — List all stored keys\n- passkey_enable — Enable virtual WebAuthn authenticator\n- passkey_add {rp_id, user_name, credential_id?} — Add passkey credential\n- passkey_list — List stored passkeys\n- passkey_log — Get WebAuthn operation log\n- passkey_disable — Disable authenticator\n- passkey_remove {credential_id} — Remove passkey by ID"
+        description = "Cryptography, encrypted storage, WebAuthn passkey management, and authentication flows.\n\nActions:\n- encrypt {plaintext, password} — AES-256-GCM encryption\n- decrypt {ciphertext, password} — AES-256-GCM decryption\n- pkce — Generate PKCE S256 challenge pair\n- totp {secret} — Generate 6-digit TOTP code\n- kv_set {key, value} — Store encrypted key-value pair\n- kv_get {key} — Retrieve value by key\n- kv_list — List all stored keys\n- passkey_enable — Enable virtual WebAuthn authenticator\n- passkey_add {rp_id, user_name} — Add passkey credential\n- passkey_list — List stored passkeys\n- passkey_log — Get WebAuthn operation log\n- passkey_disable — Disable authenticator\n- passkey_remove {credential_id} — Remove passkey by ID\n- auth_oauth2 {auth_url, token_url, client_id} — OAuth2 authorization flow with PKCE\n- auth_session {name, export?, import_data?} — Export/import browser session\n- auth_form_login {url, username, password} — Automated form-based login\n- auth_mfa {mfa_type, totp_secret?, code?} — Handle MFA/2FA challenges\n- auth_status — Check authentication status\n- auth_logout — Clear all auth state\n- credential_store {label, username, password} — Store credentials in encrypted vault\n- credential_get {label} — Retrieve stored credentials"
     )]
     async fn tool_secure(
         &self,
@@ -789,12 +822,39 @@ impl OneCrawlMcp {
                 let params: PasskeyRemoveParams = parse_params(v, "passkey_remove")?;
                 self.auth_passkey_remove(params).await
             }
+            // Authentication flows
+            SecureAction::AuthOauth2 => {
+                let params: AuthOauth2Params = parse_params(v, "auth_oauth2")?;
+                self.auth_oauth2(params).await
+            }
+            SecureAction::AuthSession => {
+                let params: AuthSessionParams = parse_params(v, "auth_session")?;
+                self.auth_session(params).await
+            }
+            SecureAction::AuthFormLogin => {
+                let params: AuthFormLoginParams = parse_params(v, "auth_form_login")?;
+                self.auth_form_login(params).await
+            }
+            SecureAction::AuthMfa => {
+                let params: AuthMfaParams = parse_params(v, "auth_mfa")?;
+                self.auth_mfa(params).await
+            }
+            SecureAction::AuthStatus => self.auth_status_check().await,
+            SecureAction::AuthLogout => self.auth_logout().await,
+            SecureAction::CredentialStore => {
+                let params: CredentialStoreParams = parse_params(v, "credential_store")?;
+                self.credential_store(params)
+            }
+            SecureAction::CredentialGet => {
+                let params: CredentialGetParams = parse_params(v, "credential_get")?;
+                self.credential_get(params)
+            }
         }
     }
 
     #[tool(
         name = "computer",
-        description = "AI computer use protocol, smart element resolution, and browser pool management.\n\nActions:\n- act {action_type, coordinate?, text?, key?} — Perform computer action\n- observe {observation_type?} — Observe screen state\n- batch {actions} — Execute multiple actions in sequence\n- smart_find {description, strategy?} — Find element by description\n- smart_click {description} — Click element by description\n- smart_fill {description, value} — Fill input by description\n- pool_list — List browser pool instances\n- pool_status — Get pool status and stats"
+        description = "AI computer use protocol, smart element resolution, browser pool, and multi-browser fleet management.\n\nActions:\n- act {action_type, coordinate?, text?, key?} — Perform computer action\n- observe {observation_type?} — Observe screen state\n- batch {actions} — Execute multiple actions in sequence\n- smart_find {description, strategy?} — Find element by description\n- smart_click {description} — Click element by description\n- smart_fill {description, value} — Fill input by description\n- pool_list — List browser pool instances\n- pool_status — Get pool status and stats\n- fleet_spawn {count?, fleet_name?} — Launch multi-browser fleet\n- fleet_broadcast {fleet_name, action} — Send action to all fleet instances\n- fleet_collect {fleet_name, selector?, attribute?} — Collect data from all instances\n- fleet_destroy {fleet_name} — Terminate fleet\n- fleet_status — Get all fleet statuses\n- fleet_balance {fleet_name, urls} — Distribute URLs across fleet"
     )]
     async fn tool_computer(
         &self,
@@ -835,6 +895,28 @@ impl OneCrawlMcp {
             ComputerAction::PoolStatus => {
                 let params: PoolStatusParams = parse_params(v, "pool_status")?;
                 self.pool_status(params).await
+            }
+            // Multi-browser fleet
+            ComputerAction::FleetSpawn => {
+                let params: FleetSpawnParams = parse_params(v, "fleet_spawn")?;
+                self.fleet_spawn(params).await
+            }
+            ComputerAction::FleetBroadcast => {
+                let params: FleetBroadcastParams = parse_params(v, "fleet_broadcast")?;
+                self.fleet_broadcast(params).await
+            }
+            ComputerAction::FleetCollect => {
+                let params: FleetCollectParams = parse_params(v, "fleet_collect")?;
+                self.fleet_collect(params).await
+            }
+            ComputerAction::FleetDestroy => {
+                let params: FleetDestroyParams = parse_params(v, "fleet_destroy")?;
+                self.fleet_destroy(params).await
+            }
+            ComputerAction::FleetStatus => self.fleet_status().await,
+            ComputerAction::FleetBalance => {
+                let params: FleetBalanceParams = parse_params(v, "fleet_balance")?;
+                self.fleet_balance(params).await
             }
         }
     }

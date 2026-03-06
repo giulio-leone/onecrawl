@@ -182,6 +182,15 @@ action_enum!(DataAction, "data", [
     NetSdk => "net_sdk",
     NetMock => "net_mock",
     NetReplay => "net_replay",
+    // Structured data pipeline
+    ExtractSchema => "extract_schema",
+    ExtractTables => "extract_tables",
+    ExtractEntities => "extract_entities",
+    ClassifyContent => "classify_content",
+    TransformJson => "transform_json",
+    ExportCsv => "export_csv",
+    ExtractMetadata => "extract_metadata",
+    ExtractFeeds => "extract_feeds",
 ]);
 
 action_enum!(SecureAction, "secure", [
@@ -198,6 +207,15 @@ action_enum!(SecureAction, "secure", [
     PasskeyLog => "passkey_log",
     PasskeyDisable => "passkey_disable",
     PasskeyRemove => "passkey_remove",
+    // Authentication flows
+    AuthOauth2 => "auth_oauth2",
+    AuthSession => "auth_session",
+    AuthFormLogin => "auth_form_login",
+    AuthMfa => "auth_mfa",
+    AuthStatus => "auth_status",
+    AuthLogout => "auth_logout",
+    CredentialStore => "credential_store",
+    CredentialGet => "credential_get",
 ]);
 
 action_enum!(ComputerAction, "computer", [
@@ -209,6 +227,13 @@ action_enum!(ComputerAction, "computer", [
     SmartFill => "smart_fill",
     PoolList => "pool_list",
     PoolStatus => "pool_status",
+    // Multi-browser fleet
+    FleetSpawn => "fleet_spawn",
+    FleetBroadcast => "fleet_broadcast",
+    FleetCollect => "fleet_collect",
+    FleetDestroy => "fleet_destroy",
+    FleetStatus => "fleet_status",
+    FleetBalance => "fleet_balance",
 ]);
 
 action_enum!(MemoryAction, "memory", [
