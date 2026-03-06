@@ -196,7 +196,7 @@ cd packages/onecrawl-rust
 # Build all crates
 cargo build --workspace
 
-# Run tests (375 tests)
+# Run tests (427 tests)
 cargo test --workspace --exclude onecrawl-e2e
 
 # Build release binary
@@ -207,7 +207,7 @@ cargo build --release -p onecrawl-cli-rs
 
 | Metric | Value |
 |--------|-------|
-| Rust test suite | 375 tests |
+| Rust test suite | 427 tests |
 | Node.js test suite | 33 files, 3,995 lines |
 | CDP modules | 63 |
 | CLI commands | 200+ |
