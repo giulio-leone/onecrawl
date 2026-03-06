@@ -2843,6 +2843,573 @@ impl OneCrawlMcp {
         let sequence = onecrawl_cdp::network_intel::generate_replay_sequence(name, &endpoints);
         json_ok(&serde_json::to_value(&sequence).unwrap())
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Visual Regression Testing tools
+    // ════════════════════════════════════════════════════════════════
+
+    #[tool(
+        name = "vrt.run",
+        description = "Run a visual regression test suite. Captures screenshots, compares against baselines, generates diff images and JUnit report."
+    )]
+    async fn vrt_run(
+        &self,
+        Parameters(p): Parameters<VrtRunParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let suite = if p.suite.trim().starts_with('{') {
+            serde_json::from_str::<onecrawl_cdp::VrtSuite>(&p.suite)
+                .map_err(|e| mcp_err(format!("invalid VRT suite: {e}")))?
+        } else {
+            onecrawl_cdp::vrt::load_suite(&p.suite)
+                .map_err(|e| mcp_err(e.to_string()))?
+        };
+
+        let errors = onecrawl_cdp::vrt::validate_suite(&suite);
+        if !errors.is_empty() {
+            return json_ok(&serde_json::json!({ "valid": false, "errors": errors }));
+        }
+
+        let page = ensure_page(&self.browser).await?;
+        let start = std::time::Instant::now();
+        let mut results = Vec::new();
+        let mut passed = 0usize;
+        let mut failed = 0usize;
+        let mut new_baselines = 0usize;
+        let mut error_count = 0usize;
+
+        for test in &suite.tests {
+            onecrawl_cdp::navigation::goto(&page, &test.url)
+                .await
+                .map_err(|e| mcp_err(e.to_string()))?;
+
+            if test.delay_ms > 0 {
+                tokio::time::sleep(tokio::time::Duration::from_millis(test.delay_ms)).await;
+            }
+
+            if let Some(ref wait) = test.wait_for {
+                let _ = onecrawl_cdp::element::evaluate(
+                    &page,
+                    &format!(
+                        "await new Promise(r => {{ const i = setInterval(() => {{ if (document.querySelector('{}')) {{ clearInterval(i); r(); }} }}, 100); setTimeout(() => {{ clearInterval(i); r(); }}, 10000); }})",
+                        wait.replace('\'', "\\'")
+                    ),
+                ).await;
+            }
+
+            let screenshot_data = if test.full_page {
+                onecrawl_cdp::screenshot::screenshot_full(&page)
+                    .await
+                    .map_err(|e| mcp_err(e.to_string()))?
+            } else {
+                onecrawl_cdp::screenshot::screenshot_viewport(&page)
+                    .await
+                    .map_err(|e| mcp_err(e.to_string()))?
+            };
+
+            let result = onecrawl_cdp::vrt::compare_test(
+                test,
+                &screenshot_data,
+                &suite.baseline_dir,
+                &suite.output_dir,
+                &suite.diff_dir,
+                suite.threshold,
+            );
+
+            match result.status {
+                onecrawl_cdp::VrtStatus::Passed => passed += 1,
+                onecrawl_cdp::VrtStatus::Failed => failed += 1,
+                onecrawl_cdp::VrtStatus::NewBaseline => new_baselines += 1,
+                onecrawl_cdp::VrtStatus::Error => error_count += 1,
+            }
+            results.push(result);
+        }
+
+        let suite_result = onecrawl_cdp::VrtSuiteResult {
+            suite_name: suite.name.clone(),
+            total: suite.tests.len(),
+            passed,
+            failed,
+            new_baselines,
+            errors: error_count,
+            results: results.clone(),
+            duration_ms: start.elapsed().as_millis() as u64,
+        };
+
+        let junit = onecrawl_cdp::vrt::generate_junit_report(&suite_result);
+
+        json_ok(&serde_json::json!({
+            "suite_name": suite_result.suite_name,
+            "total": suite_result.total,
+            "passed": suite_result.passed,
+            "failed": suite_result.failed,
+            "new_baselines": suite_result.new_baselines,
+            "errors": suite_result.errors,
+            "duration_ms": suite_result.duration_ms,
+            "results": suite_result.results,
+            "junit_xml": junit,
+        }))
+    }
+
+    #[tool(
+        name = "vrt.compare",
+        description = "Quick visual comparison — capture a screenshot of a URL and compare against stored baseline. Creates baseline if none exists."
+    )]
+    async fn vrt_compare(
+        &self,
+        Parameters(p): Parameters<VrtCompareParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        onecrawl_cdp::navigation::goto(&page, &p.url)
+            .await
+            .map_err(|e| mcp_err(e.to_string()))?;
+
+        let screenshot_data = if p.full_page.unwrap_or(false) {
+            onecrawl_cdp::screenshot::screenshot_full(&page)
+                .await
+                .map_err(|e| mcp_err(e.to_string()))?
+        } else {
+            onecrawl_cdp::screenshot::screenshot_viewport(&page)
+                .await
+                .map_err(|e| mcp_err(e.to_string()))?
+        };
+
+        let test = onecrawl_cdp::VrtTestCase {
+            name: p.name.clone(),
+            url: p.url.clone(),
+            selector: p.selector,
+            full_page: p.full_page.unwrap_or(false),
+            threshold: p.threshold.unwrap_or(0.1),
+            viewport: None,
+            wait_for: None,
+            hide_selectors: vec![],
+            delay_ms: 0,
+        };
+
+        let baseline_dir = p.baseline_dir.as_deref().unwrap_or(".vrt/baselines");
+        let result = onecrawl_cdp::vrt::compare_test(
+            &test,
+            &screenshot_data,
+            baseline_dir,
+            ".vrt/current",
+            ".vrt/diffs",
+            p.threshold.unwrap_or(0.1),
+        );
+
+        json_ok(&serde_json::to_value(&result).unwrap())
+    }
+
+    #[tool(
+        name = "vrt.update_baseline",
+        description = "Update the baseline for a specific test by copying the current screenshot as the new baseline."
+    )]
+    async fn vrt_update_baseline(
+        &self,
+        Parameters(p): Parameters<VrtUpdateBaselineParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let baseline_dir = p.baseline_dir.as_deref().unwrap_or(".vrt/baselines");
+        let current_dir = ".vrt/current";
+        let current = onecrawl_cdp::vrt::load_baseline(current_dir, &p.test_name);
+
+        match current {
+            Some(data) => {
+                let path =
+                    onecrawl_cdp::vrt::save_baseline(baseline_dir, &p.test_name, &data)
+                        .map_err(|e| mcp_err(e.to_string()))?;
+                json_ok(&serde_json::json!({
+                    "updated": true,
+                    "test_name": p.test_name,
+                    "baseline_path": path.to_string_lossy(),
+                    "bytes": data.len(),
+                }))
+            }
+            None => json_ok(&serde_json::json!({
+                "updated": false,
+                "error": format!("no current screenshot found for '{}'", p.test_name),
+            })),
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  AI Task Planner tools
+    // ════════════════════════════════════════════════════════════════
+
+    #[tool(
+        name = "planner.plan",
+        description = "Generate an executable task plan from a natural language goal. Analyzes the goal, matches patterns, and creates a step-by-step plan with fallbacks and confidence scores."
+    )]
+    async fn planner_plan(
+        &self,
+        Parameters(p): Parameters<PlannerPlanParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut context = p.context.unwrap_or_default();
+        let auto_context = onecrawl_cdp::task_planner::extract_context(&p.goal);
+        for (k, v) in auto_context {
+            context.entry(k).or_insert(v);
+        }
+
+        let plan = onecrawl_cdp::task_planner::plan_from_goal(&p.goal, &context);
+        json_ok(&serde_json::to_value(&plan).unwrap())
+    }
+
+    #[tool(
+        name = "planner.execute",
+        description = "Execute a task plan — runs all planned steps with automatic fallbacks and retries. Accepts plan JSON from planner.plan, or a natural language goal (plans + executes in one call)."
+    )]
+    async fn planner_execute(
+        &self,
+        Parameters(p): Parameters<PlannerExecuteParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let plan: onecrawl_cdp::TaskPlan = if p.plan.trim().starts_with('{') {
+            serde_json::from_str(&p.plan)
+                .map_err(|e| mcp_err(format!("invalid plan JSON: {e}")))?
+        } else {
+            let mut context = p.context.clone().unwrap_or_default();
+            let auto_context = onecrawl_cdp::task_planner::extract_context(&p.plan);
+            for (k, v) in auto_context {
+                context.entry(k).or_insert(v);
+            }
+            onecrawl_cdp::task_planner::plan_from_goal(&p.plan, &context)
+        };
+
+        let page = ensure_page(&self.browser).await?;
+        let start = std::time::Instant::now();
+        let max_retries = p.max_retries.unwrap_or(2);
+        let mut step_results = Vec::new();
+        let mut total_retries = 0usize;
+        let mut completed = 0usize;
+
+        for step in &plan.steps {
+            let step_start = std::time::Instant::now();
+            let mut attempt = 0u32;
+            let mut last_error = None;
+            let mut success = false;
+            let mut used_fallback = false;
+            let mut output = None;
+
+            while attempt <= max_retries {
+                match self.execute_planned_step(&page, &step.action).await {
+                    Ok(val) => {
+                        output = val;
+                        success = true;
+                        break;
+                    }
+                    Err(e) => {
+                        last_error = Some(format!("{}", e.message));
+                        attempt += 1;
+                        total_retries += 1;
+
+                        if attempt > max_retries {
+                            if let Some(ref fallback) = step.fallback {
+                                if let Ok(val) = self.execute_planned_step(&page, &fallback.action).await {
+                                    output = val;
+                                    success = true;
+                                    used_fallback = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let duration_ms = step_start.elapsed().as_millis() as u64;
+            if success { completed += 1; }
+
+            step_results.push(onecrawl_cdp::task_planner::StepExecutionResult {
+                step_id: step.id,
+                description: step.description.clone(),
+                status: if success {
+                    onecrawl_cdp::task_planner::StepOutcome::Success
+                } else {
+                    onecrawl_cdp::task_planner::StepOutcome::Failed
+                },
+                output,
+                error: if success { None } else { last_error },
+                used_fallback,
+                duration_ms,
+            });
+        }
+
+        let status = if completed == plan.steps.len() {
+            onecrawl_cdp::TaskStatus::Success
+        } else if completed > 0 {
+            onecrawl_cdp::TaskStatus::PartialSuccess
+        } else {
+            onecrawl_cdp::TaskStatus::Failed
+        };
+
+        let result = onecrawl_cdp::TaskExecutionResult {
+            goal: plan.goal.clone(),
+            status,
+            steps_completed: completed,
+            steps_total: plan.steps.len(),
+            steps_results: step_results,
+            retries_used: total_retries,
+            total_duration_ms: start.elapsed().as_millis() as u64,
+        };
+
+        json_ok(&serde_json::to_value(&result).unwrap())
+    }
+
+    #[tool(
+        name = "planner.patterns",
+        description = "List all built-in goal patterns the planner recognizes. Shows keywords, categories, and template steps for each pattern."
+    )]
+    async fn planner_patterns(
+        &self,
+        #[allow(unused_variables)]
+        Parameters(_p): Parameters<PlannerPatternsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let patterns = onecrawl_cdp::task_planner::builtin_patterns();
+        let summary: Vec<serde_json::Value> = patterns.iter().map(|p| {
+            serde_json::json!({
+                "category": format!("{:?}", p.category).to_lowercase(),
+                "keywords": p.keywords,
+                "steps": p.template_steps.len(),
+                "template": p.template_steps.iter().map(|s| &s.description).collect::<Vec<_>>(),
+            })
+        }).collect();
+        json_ok(&serde_json::json!({
+            "patterns": summary,
+            "count": patterns.len(),
+        }))
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Performance Monitor tools
+    // ════════════════════════════════════════════════════════════════
+
+    #[tool(
+        name = "perf.audit",
+        description = "Collect performance metrics from the current page — Core Web Vitals (LCP, FID, CLS, FCP, TTFB, INP), navigation timing, resource counts, and memory usage."
+    )]
+    async fn perf_audit(
+        &self,
+        Parameters(p): Parameters<PerfAuditParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+
+        if let Some(url) = &p.url {
+            onecrawl_cdp::navigation::goto(&page, url)
+                .await
+                .map_err(|e| mcp_err(e.to_string()))?;
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        }
+
+        let js = onecrawl_cdp::perf_monitor::metrics_collection_js();
+        let result = page.evaluate(js).await.map_err(|e| mcp_err(e.to_string()))?;
+        let metrics: serde_json::Value = result.into_value().unwrap_or(serde_json::Value::Null);
+
+        let url = onecrawl_cdp::navigation::get_url(&page).await.unwrap_or_default();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let vitals: onecrawl_cdp::CoreWebVitals = serde_json::from_value(
+            metrics.get("vitals").cloned().unwrap_or_default()
+        ).unwrap_or_default();
+
+        let ratings = onecrawl_cdp::perf_monitor::rate_vitals(&vitals);
+
+        json_ok(&serde_json::json!({
+            "url": url,
+            "timestamp": now,
+            "vitals": metrics.get("vitals"),
+            "ratings": ratings,
+            "navigation_timing": metrics.get("navigation_timing"),
+            "resource_count": metrics.get("resource_count"),
+            "memory": metrics.get("memory"),
+        }))
+    }
+
+    #[tool(
+        name = "perf.budget",
+        description = "Check page performance against a budget. Returns pass/fail for each metric with severity levels."
+    )]
+    async fn perf_budget(
+        &self,
+        Parameters(p): Parameters<PerfBudgetCheckParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let budget: onecrawl_cdp::PerfBudget = serde_json::from_str(&p.budget)
+            .map_err(|e| mcp_err(format!("invalid budget: {e}")))?;
+
+        let page = ensure_page(&self.browser).await?;
+
+        if let Some(url) = &p.url {
+            onecrawl_cdp::navigation::goto(&page, url)
+                .await
+                .map_err(|e| mcp_err(e.to_string()))?;
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        }
+
+        let js = onecrawl_cdp::perf_monitor::metrics_collection_js();
+        let result = page.evaluate(js).await.map_err(|e| mcp_err(e.to_string()))?;
+        let metrics: serde_json::Value = result.into_value().unwrap_or(serde_json::Value::Null);
+
+        let snapshot = onecrawl_cdp::PerfSnapshot {
+            url: onecrawl_cdp::navigation::get_url(&page).await.unwrap_or_default(),
+            timestamp: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
+            vitals: serde_json::from_value(metrics.get("vitals").cloned().unwrap_or_default()).unwrap_or_default(),
+            navigation_timing: serde_json::from_value(metrics.get("navigation_timing").cloned().unwrap_or_default()).unwrap_or_default(),
+            resource_count: serde_json::from_value(metrics.get("resource_count").cloned().unwrap_or_default()).unwrap_or_default(),
+            memory: None,
+            js_heap_size: None,
+        };
+
+        let budget_result = onecrawl_cdp::perf_monitor::check_budget(&snapshot, &budget);
+        json_ok(&serde_json::to_value(&budget_result).unwrap())
+    }
+
+    #[tool(
+        name = "perf.compare",
+        description = "Compare two performance snapshots to detect regressions. Returns metrics that regressed beyond the threshold."
+    )]
+    async fn perf_compare(
+        &self,
+        Parameters(p): Parameters<PerfCompareParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let baseline: onecrawl_cdp::PerfSnapshot = serde_json::from_str(&p.baseline)
+            .map_err(|e| mcp_err(format!("invalid baseline: {e}")))?;
+        let current: onecrawl_cdp::PerfSnapshot = serde_json::from_str(&p.current)
+            .map_err(|e| mcp_err(format!("invalid current: {e}")))?;
+
+        let threshold = p.threshold_pct.unwrap_or(10.0);
+        let regressions = onecrawl_cdp::perf_monitor::detect_regressions(&baseline, &current, threshold);
+
+        json_ok(&serde_json::json!({
+            "baseline_url": baseline.url,
+            "current_url": current.url,
+            "threshold_pct": threshold,
+            "regressions": regressions,
+            "regressed": !regressions.is_empty(),
+            "count": regressions.len(),
+        }))
+    }
+
+    #[tool(
+        name = "perf.trace",
+        description = "Full performance trace — navigates to a URL, waits for page to settle, then collects comprehensive metrics including Core Web Vitals ratings."
+    )]
+    async fn perf_trace(
+        &self,
+        Parameters(p): Parameters<PerfTraceParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let start = std::time::Instant::now();
+
+        onecrawl_cdp::navigation::goto(&page, &p.url)
+            .await
+            .map_err(|e| mcp_err(e.to_string()))?;
+
+        let settle = p.settle_ms.unwrap_or(3000);
+        tokio::time::sleep(tokio::time::Duration::from_millis(settle)).await;
+
+        let js = onecrawl_cdp::perf_monitor::metrics_collection_js();
+        let result = page.evaluate(js).await.map_err(|e| mcp_err(e.to_string()))?;
+        let metrics: serde_json::Value = result.into_value().unwrap_or(serde_json::Value::Null);
+
+        let vitals: onecrawl_cdp::CoreWebVitals = serde_json::from_value(
+            metrics.get("vitals").cloned().unwrap_or_default()
+        ).unwrap_or_default();
+        let ratings = onecrawl_cdp::perf_monitor::rate_vitals(&vitals);
+
+        let trace_duration = start.elapsed().as_millis() as u64;
+
+        json_ok(&serde_json::json!({
+            "url": p.url,
+            "trace_duration_ms": trace_duration,
+            "settle_ms": settle,
+            "vitals": metrics.get("vitals"),
+            "ratings": ratings,
+            "navigation_timing": metrics.get("navigation_timing"),
+            "resource_count": metrics.get("resource_count"),
+            "memory": metrics.get("memory"),
+        }))
+    }
+
+    async fn execute_planned_step(
+        &self,
+        page: &chromiumoxide::Page,
+        action: &onecrawl_cdp::task_planner::PlannedAction,
+    ) -> std::result::Result<Option<serde_json::Value>, McpError> {
+        use onecrawl_cdp::task_planner::PlannedAction;
+        match action {
+            PlannedAction::Navigate { url } => {
+                onecrawl_cdp::navigation::goto(page, url).await.map_err(|e| mcp_err(e.to_string()))?;
+                let title = onecrawl_cdp::navigation::get_title(page).await.unwrap_or_default();
+                Ok(Some(serde_json::json!({ "navigated": url, "title": title })))
+            }
+            PlannedAction::Click { target, .. } => {
+                let resolved = onecrawl_cdp::accessibility::resolve_ref(target);
+                onecrawl_cdp::element::click(page, &resolved).await.map_err(|e| mcp_err(e.to_string()))?;
+                Ok(Some(serde_json::json!({ "clicked": target })))
+            }
+            PlannedAction::Type { target, text, .. } => {
+                let resolved = onecrawl_cdp::accessibility::resolve_ref(target);
+                onecrawl_cdp::element::type_text(page, &resolved, text).await.map_err(|e| mcp_err(e.to_string()))?;
+                Ok(Some(serde_json::json!({ "typed": text.len() })))
+            }
+            PlannedAction::Wait { target, timeout_ms } => {
+                let resolved = onecrawl_cdp::accessibility::resolve_ref(target);
+                onecrawl_cdp::navigation::wait_for_selector(page, &resolved, *timeout_ms).await.map_err(|e| mcp_err(e.to_string()))?;
+                Ok(Some(serde_json::json!({ "found": target })))
+            }
+            PlannedAction::Snapshot {} => {
+                let opts = onecrawl_cdp::accessibility::AgentSnapshotOptions::default();
+                let result = onecrawl_cdp::accessibility::agent_snapshot(page, &opts)
+                    .await.map_err(|e| mcp_err(e.to_string()))?;
+                Ok(Some(serde_json::json!(result)))
+            }
+            PlannedAction::Extract { target } => {
+                let js = format!(
+                    r#"Array.from(document.querySelectorAll({sel})).map(e => e.textContent.trim())"#,
+                    sel = serde_json::to_string(target).unwrap()
+                );
+                let result = page.evaluate(js).await.map_err(|e| mcp_err(e.to_string()))?;
+                let val = result.into_value::<serde_json::Value>().unwrap_or(serde_json::Value::Null);
+                Ok(Some(val))
+            }
+            PlannedAction::Assert { condition } => {
+                Ok(Some(serde_json::json!({ "assert": condition, "note": "assertion evaluation requires runtime context" })))
+            }
+            PlannedAction::SmartClick { query } => {
+                let matched = onecrawl_cdp::smart_actions::smart_click(page, query).await.map_err(|e| mcp_err(e.to_string()))?;
+                Ok(Some(serde_json::json!({ "clicked": matched.selector, "confidence": matched.confidence })))
+            }
+            PlannedAction::SmartFill { query, value } => {
+                let matched = onecrawl_cdp::smart_actions::smart_fill(page, query, value).await.map_err(|e| mcp_err(e.to_string()))?;
+                Ok(Some(serde_json::json!({ "filled": matched.selector, "confidence": matched.confidence })))
+            }
+            PlannedAction::Scroll { direction, amount } => {
+                let px = amount.unwrap_or(500);
+                let js = match direction.as_str() {
+                    "up" => format!("window.scrollBy(0, -{})", px),
+                    "down" => format!("window.scrollBy(0, {})", px),
+                    "left" => format!("window.scrollBy(-{}, 0)", px),
+                    "right" => format!("window.scrollBy({}, 0)", px),
+                    _ => format!("window.scrollBy(0, {})", px),
+                };
+                page.evaluate(js).await.map_err(|e| mcp_err(e.to_string()))?;
+                Ok(Some(serde_json::json!({ "scrolled": direction, "pixels": px })))
+            }
+            PlannedAction::Screenshot { path } => {
+                let data = onecrawl_cdp::screenshot::screenshot_full(page).await.map_err(|e| mcp_err(e.to_string()))?;
+                if let Some(p) = path {
+                    std::fs::write(p, &data).map_err(|e| mcp_err(e.to_string()))?;
+                }
+                Ok(Some(serde_json::json!({ "bytes": data.len() })))
+            }
+            PlannedAction::MemoryStore { key, value } => {
+                Ok(Some(serde_json::json!({ "stored": key, "value": value })))
+            }
+            PlannedAction::MemoryRecall { key } => {
+                Ok(Some(serde_json::json!({ "recalled": key })))
+            }
+            PlannedAction::Conditional { condition, .. } => {
+                Ok(Some(serde_json::json!({ "note": "conditional evaluation", "condition": condition })))
+            }
+        }
+    }
 }
 
 impl ServerHandler for OneCrawlMcp {

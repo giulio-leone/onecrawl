@@ -46,6 +46,7 @@ pub mod network_intel;
 pub mod network_log;
 pub mod page;
 pub mod page_watcher;
+pub mod perf_monitor;
 #[cfg(feature = "playwright")]
 pub mod playwright_backend;
 pub mod print;
@@ -73,6 +74,7 @@ pub mod stealth;
 pub mod streaming;
 pub mod structured_data;
 pub mod tabs;
+pub mod task_planner;
 pub mod throttle;
 pub mod tls_fingerprint;
 pub mod tracing_cdp;
@@ -82,6 +84,7 @@ pub mod safety;
 pub mod webauthn;
 pub mod websocket;
 pub mod workers;
+pub mod vrt;
 pub mod workflow;
 
 pub use browser_pool::{BrowserInstance, BrowserPool, BrowserStatus, SharedPool, new_shared_pool};
@@ -130,7 +133,9 @@ pub use passkey_store::{
 pub use websocket::WsRecorder;
 pub use skills::{SkillManifest, SkillRegistry, SkillTool};
 pub use workers::ServiceWorkerInfo;
+pub use vrt::{VrtComparisonResult, VrtStatus, VrtSuite, VrtSuiteResult, VrtTestCase};
 pub use workflow::{Workflow, WorkflowResult, Step, Action, StepResult, StepStatus};
+pub use task_planner::{TaskPlan, PlannedStep, PlannedAction, TaskExecutionResult, TaskStatus, GoalCategory};
 pub use safety::{SafetyCheck, SafetyPolicy, SafetyState};
 
 pub use captcha::{CaptchaConfig, CaptchaDetection, CaptchaResult, SolverConfig, SolverService, solve_via_api, load_solver_config};
@@ -144,6 +149,7 @@ pub use geofencing::GeoProfile;
 pub use http_client::{HttpRequest, HttpResponse};
 pub use link_graph::{LinkEdge, LinkGraph, LinkNode, LinkStats};
 pub use page_watcher::PageChange;
+pub use perf_monitor::{CoreWebVitals, PerfSnapshot, PerfBudget, BudgetResult, Regression};
 pub use proxy_health::{ProxyHealthConfig, ProxyHealthResult};
 pub use rate_limiter::{RateLimitConfig, RateLimitState, RateLimitStats};
 pub use request_queue::{QueueConfig, QueuedRequest, RequestResult};

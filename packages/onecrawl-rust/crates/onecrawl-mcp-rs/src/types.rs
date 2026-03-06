@@ -259,3 +259,92 @@ pub struct NetIntelReplayParams {
     #[schemars(description = "Name for the replay sequence")]
     pub name: Option<String>,
 }
+
+// ──────────────────── Visual Regression Testing params ─────────────────────
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct VrtRunParams {
+    #[schemars(description = "VRT suite definition as JSON, or path to suite JSON file")]
+    pub suite: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct VrtUpdateBaselineParams {
+    #[schemars(description = "Test name to update baseline for")]
+    pub test_name: String,
+    #[schemars(description = "Baseline directory (default: .vrt/baselines)")]
+    pub baseline_dir: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct VrtCompareParams {
+    #[schemars(description = "URL to capture and compare against baseline")]
+    pub url: String,
+    #[schemars(description = "Test name for baseline lookup")]
+    pub name: String,
+    #[schemars(description = "Mismatch threshold percentage (default: 0.1)")]
+    pub threshold: Option<f64>,
+    #[schemars(description = "CSS selector for element screenshot")]
+    pub selector: Option<String>,
+    #[schemars(description = "Capture full scrollable page")]
+    pub full_page: Option<bool>,
+    #[schemars(description = "Baseline directory")]
+    pub baseline_dir: Option<String>,
+}
+
+// ──────────────────── AI Task Planner params ─────────────────────
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct PlannerPlanParams {
+    #[schemars(description = "Natural language goal (e.g. 'log into Gmail and check inbox')")]
+    pub goal: String,
+    #[schemars(description = "Additional context as key-value pairs (url, credentials, etc.)")]
+    pub context: Option<std::collections::HashMap<String, String>>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct PlannerExecuteParams {
+    #[schemars(description = "Task plan JSON (from planner.plan output), or natural language goal")]
+    pub plan: String,
+    #[schemars(description = "Additional context/variables")]
+    pub context: Option<std::collections::HashMap<String, String>>,
+    #[schemars(description = "Maximum retries per step (default: 2)")]
+    pub max_retries: Option<u32>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct PlannerPatternsParams {}
+
+// ──────────────────── Performance Monitor params ─────────────────────
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct PerfAuditParams {
+    #[schemars(description = "URL to audit (navigates there first). If omitted, audits the current page.")]
+    pub url: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct PerfBudgetCheckParams {
+    #[schemars(description = "Budget definition as JSON")]
+    pub budget: String,
+    #[schemars(description = "URL to check (optional, uses current page if omitted)")]
+    pub url: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct PerfCompareParams {
+    #[schemars(description = "Baseline snapshot JSON (from perf.audit output)")]
+    pub baseline: String,
+    #[schemars(description = "Current snapshot JSON (from perf.audit output)")]
+    pub current: String,
+    #[schemars(description = "Regression threshold percentage (default: 10)")]
+    pub threshold_pct: Option<f64>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct PerfTraceParams {
+    #[schemars(description = "URL to trace (navigates + measures full lifecycle)")]
+    pub url: String,
+    #[schemars(description = "Wait time in ms after load for late metrics (default: 3000)")]
+    pub settle_ms: Option<u64>,
+}
