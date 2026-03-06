@@ -854,3 +854,196 @@ pub struct EmulateNetworkParams {
     #[schemars(description = "Simulate offline mode")]
     pub offline: Option<bool>,
 }
+
+// ──────────────── Tests ─────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn intercept_rule_default() {
+        let rule = InterceptRule::default();
+        assert_eq!(rule.response_status, 200);
+        assert!(rule.id.is_empty());
+        assert!(rule.response_headers.is_empty());
+    }
+
+    #[test]
+    fn intercept_rule_roundtrip() {
+        let mut headers = HashMap::new();
+        headers.insert("Content-Type".into(), "application/json".into());
+        let rule = InterceptRule {
+            id: "rule_1".into(),
+            url_pattern: "**/api/*".into(),
+            method: Some("GET".into()),
+            response_status: 404,
+            response_headers: headers,
+            response_body: r#"{"error":"not found"}"#.into(),
+        };
+        let json = serde_json::to_string(&rule).unwrap();
+        let restored: InterceptRule = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.id, "rule_1");
+        assert_eq!(restored.response_status, 404);
+        assert_eq!(restored.method.as_deref(), Some("GET"));
+    }
+
+    #[test]
+    fn intercept_enable_params_defaults() {
+        let p: InterceptEnableParams = serde_json::from_str("{}").unwrap();
+        assert!(p.patterns.is_none());
+    }
+
+    #[test]
+    fn intercept_add_rule_params_minimal() {
+        let p: InterceptAddRuleParams = serde_json::from_str(r#"{"url_pattern":"**/api/*"}"#).unwrap();
+        assert_eq!(p.url_pattern, "**/api/*");
+        assert!(p.status.is_none());
+        assert!(p.body.is_none());
+    }
+
+    #[test]
+    fn block_requests_params() {
+        let p: BlockRequestsParams = serde_json::from_str(r#"{"patterns":["*.png","*.jpg"],"resource_types":["image"]}"#).unwrap();
+        assert_eq!(p.patterns.len(), 2);
+        assert_eq!(p.resource_types.as_ref().unwrap()[0], "image");
+    }
+
+    #[test]
+    fn console_message_roundtrip() {
+        let msg = ConsoleMessage {
+            level: "error".into(),
+            text: "Uncaught TypeError".into(),
+            url: Some("https://example.com/app.js".into()),
+            line: Some(42),
+            timestamp_ms: 1700000000000,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let restored: ConsoleMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.level, "error");
+        assert_eq!(restored.line, Some(42));
+    }
+
+    #[test]
+    fn dialog_info_roundtrip() {
+        let info = DialogInfo {
+            dialog_type: "confirm".into(),
+            message: "Are you sure?".into(),
+            default_prompt: None,
+            was_handled: true,
+            response: Some("true".into()),
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        let restored: DialogInfo = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.dialog_type, "confirm");
+        assert!(restored.was_handled);
+    }
+
+    #[test]
+    fn page_error_roundtrip() {
+        let err = PageError {
+            message: "ReferenceError: x is not defined".into(),
+            url: Some("https://example.com".into()),
+            line: Some(10),
+            column: Some(5),
+            timestamp_ms: 1700000000000,
+        };
+        let json = serde_json::to_string(&err).unwrap();
+        let restored: PageError = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.column, Some(5));
+    }
+
+    #[test]
+    fn dialog_handle_params() {
+        let p: DialogHandleParams = serde_json::from_str(r#"{"accept":true,"prompt_text":"hello"}"#).unwrap();
+        assert!(p.accept);
+        assert_eq!(p.prompt_text.as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn console_filter_params() {
+        let p: ConsoleFilterParams = serde_json::from_str(r#"{"level":"error","limit":10}"#).unwrap();
+        assert_eq!(p.level.as_deref(), Some("error"));
+        assert_eq!(p.limit, Some(10));
+    }
+
+    #[test]
+    fn emulate_device_params_preset() {
+        let p: EmulateDeviceParams = serde_json::from_str(r#"{"device":"iphone-14"}"#).unwrap();
+        assert_eq!(p.device.as_deref(), Some("iphone-14"));
+        assert!(p.width.is_none());
+    }
+
+    #[test]
+    fn emulate_device_params_custom() {
+        let p: EmulateDeviceParams = serde_json::from_str(
+            r#"{"device":"custom","width":1920,"height":1080,"device_scale_factor":2.0,"has_touch":false}"#
+        ).unwrap();
+        assert_eq!(p.width, Some(1920));
+        assert_eq!(p.height, Some(1080));
+        assert_eq!(p.device_scale_factor, Some(2.0));
+        assert_eq!(p.has_touch, Some(false));
+    }
+
+    #[test]
+    fn emulate_geolocation_params() {
+        let p: EmulateGeolocationParams = serde_json::from_str(
+            r#"{"latitude":41.9028,"longitude":12.4964,"accuracy":10.0}"#
+        ).unwrap();
+        assert!((p.latitude - 41.9028).abs() < 0.001);
+        assert!((p.longitude - 12.4964).abs() < 0.001);
+        assert_eq!(p.accuracy, Some(10.0));
+    }
+
+    #[test]
+    fn emulate_timezone_params() {
+        let p: EmulateTimezoneParams = serde_json::from_str(r#"{"timezone_id":"Europe/Rome"}"#).unwrap();
+        assert_eq!(p.timezone_id, "Europe/Rome");
+    }
+
+    #[test]
+    fn emulate_media_params() {
+        let p: EmulateMediaParams = serde_json::from_str(
+            r#"{"color_scheme":"dark","reduced_motion":"reduce"}"#
+        ).unwrap();
+        assert_eq!(p.color_scheme.as_deref(), Some("dark"));
+        assert_eq!(p.reduced_motion.as_deref(), Some("reduce"));
+    }
+
+    #[test]
+    fn emulate_network_params_preset() {
+        let p: EmulateNetworkParams = serde_json::from_str(r#"{"preset":"3g"}"#).unwrap();
+        assert_eq!(p.preset.as_deref(), Some("3g"));
+        assert!(p.offline.is_none());
+    }
+
+    #[test]
+    fn emulate_network_params_offline() {
+        let p: EmulateNetworkParams = serde_json::from_str(r#"{"preset":"offline","offline":true}"#).unwrap();
+        assert_eq!(p.offline, Some(true));
+    }
+
+    #[test]
+    fn browser_state_default_fields() {
+        let state = BrowserState::default();
+        assert!(state.intercept_rules.is_empty());
+        assert!(!state.intercepting);
+        assert!(state.console_messages.is_empty());
+        assert!(!state.capturing_console);
+        assert!(state.last_dialog.is_none());
+        assert!(state.dialog_auto_response.is_none());
+        assert!(state.page_errors.is_empty());
+    }
+
+    #[test]
+    fn dialog_auto_response_serde() {
+        let resp = DialogAutoResponse {
+            accept: false,
+            prompt_text: Some("cancel".into()),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        let restored: DialogAutoResponse = serde_json::from_str(&json).unwrap();
+        assert!(!restored.accept);
+        assert_eq!(restored.prompt_text.as_deref(), Some("cancel"));
+    }
+}
