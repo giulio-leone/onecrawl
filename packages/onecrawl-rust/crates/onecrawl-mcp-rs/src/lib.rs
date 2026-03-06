@@ -1,3 +1,4 @@
+pub mod agent_error;
 pub mod cdp_tools;
 pub mod helpers;
 pub mod types;

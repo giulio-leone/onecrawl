@@ -47,14 +47,21 @@ pub async fn snapshot_watch(interval_ms: u64, selector: Option<&str>, count: usi
 pub async fn snapshot_agent(
     json_output: bool,
     interactive_only: bool,
-    _cursor: bool,
-    _compact: bool,
-    _depth: Option<usize>,
+    cursor: bool,
+    compact: bool,
+    depth: Option<usize>,
     scope_selector: Option<&str>,
 ) {
     let scope = scope_selector.map(|s| s.to_string());
+    let opts = onecrawl_cdp::accessibility::AgentSnapshotOptions {
+        interactive_only,
+        cursor,
+        compact,
+        depth,
+        selector: scope.clone(),
+    };
     with_page(|page| async move {
-        // If scope selector provided, scope to that element first
+        // If scope selector provided, validate the element exists
         if let Some(ref sel) = scope {
             let js = format!(
                 "document.querySelector({}) ? true : false",
@@ -65,22 +72,30 @@ pub async fn snapshot_agent(
                 return Err(format!("Scope selector not found: {sel}"));
             }
         }
-        let snap = onecrawl_cdp::accessibility::agent_snapshot(&page, interactive_only)
+        let snap = onecrawl_cdp::accessibility::agent_snapshot(&page, &opts)
             .await
             .map_err(|e| e.to_string())?;
         if json_output {
+            let stats = snap.stats();
             let out = serde_json::json!({
                 "success": true,
                 "data": {
                     "snapshot": snap.snapshot,
                     "refs": snap.refs,
-                    "total": snap.total
+                    "total": snap.total,
+                    "stats": {
+                        "lines": stats.lines,
+                        "chars": stats.chars,
+                        "estimated_tokens": stats.estimated_tokens,
+                        "total_refs": stats.total_refs,
+                        "interactive_refs": stats.interactive_refs
+                    }
                 }
             });
             println!("{}", serde_json::to_string_pretty(&out).unwrap_or_default());
         } else {
             println!("{}", snap.snapshot);
-            println!("\n{} {} elements tagged with @refs", "✓".green(), snap.total);
+            println!("\n{} {} elements tagged with @refs ({} interactive)", "✓".green(), snap.total, snap.interactive_count);
         }
         Ok(())
     })

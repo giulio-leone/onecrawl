@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  onecrawl:
+    build: .
+    container_name: onecrawl
+    ports:
+      - "9222:9222"  # CDP debugging
+      - "8080:8080"  # MCP server
+    environment:
+      - CHROME_PATH=/usr/bin/chromium
+      - ONECRAWL_HEADLESS=true
+    volumes:
+      - onecrawl-data:/data
+    command: ["mcp", "server", "--port", "8080"]
+    restart: unless-stopped
+
+volumes:
+  onecrawl-data:

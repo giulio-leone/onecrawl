@@ -19,6 +19,7 @@ rmcp = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
+futures = { workspace = true }
 onecrawl-core = { path = "../onecrawl-core" }
 onecrawl-crypto = { path = "../onecrawl-crypto" }
 onecrawl-parser = { path = "../onecrawl-parser" }

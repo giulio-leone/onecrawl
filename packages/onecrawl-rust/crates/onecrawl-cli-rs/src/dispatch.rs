@@ -1021,6 +1021,49 @@ pub(crate) async fn dispatch(command: Commands) {
             }
         }
 
+        // ── Daemon ─────────────────────────────────────────────────
+        Commands::Daemon { action } => match action {
+            DaemonAction::Start { headless } => commands::daemon::daemon_start(headless).await,
+            DaemonAction::Stop => commands::daemon::daemon_stop().await,
+            DaemonAction::Status => commands::daemon::daemon_status().await,
+            DaemonAction::Exec {
+                command,
+                args,
+                session,
+            } => commands::daemon::daemon_exec(&command, args, session).await,
+            DaemonAction::Run { headless } => {
+                if let Err(e) = commands::daemon::server::start_daemon(headless).await {
+                    eprintln!("daemon fatal: {e}");
+                    std::process::exit(1);
+                }
+            }
+        },
+
+        // ── Skills ────────────────────────────────────────────────
+        Commands::Skills { action } => match action {
+            SkillsAction::List => commands::skills::skills_list(),
+            SkillsAction::Info { name } => commands::skills::skills_info(&name),
+            SkillsAction::Discover { path } => commands::skills::skills_discover(&path),
+        },
+
+        // ── Live Streaming ───────────────────────────────────────────
+        Commands::Stream { action } => match action {
+            StreamAction::Start { width, height, format, quality } => {
+                commands::browser::stream_start(width, height, &format, quality).await
+            }
+            StreamAction::Stop => commands::browser::stream_stop().await,
+            StreamAction::Frame { output } => commands::browser::stream_frame(&output).await,
+        },
+
+        // ── Video Recording ─────────────────────────────────────────
+        Commands::Record { action } => match action {
+            RecordAction::Start { output, fps } => {
+                commands::browser::recording_start(&output, fps).await
+            }
+            RecordAction::Stop => commands::browser::recording_stop().await,
+            RecordAction::Status => commands::browser::recording_status().await,
+        },
+
         // ── Version ─────────────────────────────────────────────────
         Commands::Version => {
             println!("onecrawl {}", env!("CARGO_PKG_VERSION"));
@@ -1036,5 +1079,17 @@ pub(crate) async fn dispatch(command: Commands) {
             println!();
             println!("Profile: {}", if cfg!(debug_assertions) { "debug" } else { "release" });
         }
+
+        // ── iOS / Mobile Safari ────────────────────────────────────
+        Commands::Ios { action } => match action {
+            IosAction::Devices => commands::ios::devices(),
+            IosAction::Connect { wda_url, udid } => {
+                commands::ios::connect(&wda_url, udid.as_deref()).await
+            }
+            IosAction::Navigate { url } => commands::ios::navigate(&url).await,
+            IosAction::Tap { x, y } => commands::ios::tap(x, y).await,
+            IosAction::Screenshot { output } => commands::ios::screenshot(&output).await,
+            IosAction::Disconnect => commands::ios::disconnect().await,
+        },
         }
 }

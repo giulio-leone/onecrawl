@@ -10,20 +10,38 @@ pub async fn diff_snapshot(name: Option<&str>) {
     let baseline_name = name.unwrap_or("default").to_string();
     let path = format!("/tmp/onecrawl-diff-snap-{baseline_name}.json");
     with_page(|page| async move {
-        let snap = onecrawl_cdp::accessibility::agent_snapshot(&page, true)
+        let snap = onecrawl_cdp::accessibility::agent_snapshot(&page, &onecrawl_cdp::accessibility::AgentSnapshotOptions { interactive_only: true, ..Default::default() })
             .await
             .map_err(|e| e.to_string())?;
         if std::path::Path::new(&path).exists() {
             let saved = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
             let old: serde_json::Value = serde_json::from_str(&saved).unwrap_or_default();
-            let new = serde_json::json!({ "snapshot": snap.snapshot, "refs": snap.refs });
-            if old == new {
+            let old_text = old["snapshot"].as_str().unwrap_or("");
+            let new_text = &snap.snapshot;
+
+            let diff_result = onecrawl_cdp::snapshot_diff::diff_snapshots(old_text, new_text);
+
+            if !diff_result.changed {
                 println!("{} No diff — snapshot unchanged", "✓".green());
             } else {
-                println!("{} Snapshot changed:", "⚡".yellow());
-                println!("--- baseline ---\n{}", old["snapshot"].as_str().unwrap_or(""));
-                println!("--- current ---\n{}", snap.snapshot);
+                println!("{} Snapshot changed ({}+ {}− {}=):",
+                    "⚡".yellow(),
+                    format!("{}", diff_result.additions).green(),
+                    format!("{}", diff_result.removals).red(),
+                    diff_result.unchanged,
+                );
+                for line in diff_result.diff.lines() {
+                    if let Some(rest) = line.strip_prefix('+') {
+                        println!("{}", format!("+{rest}").green());
+                    } else if let Some(rest) = line.strip_prefix('-') {
+                        println!("{}", format!("-{rest}").red());
+                    } else {
+                        println!("{line}");
+                    }
+                }
             }
+
+            let new = serde_json::json!({ "snapshot": snap.snapshot, "refs": snap.refs });
             std::fs::write(&path, serde_json::to_string(&new).unwrap_or_default())
                 .map_err(|e| format!("write failed: {e}"))?;
         } else {
@@ -70,19 +88,34 @@ pub async fn diff_url(url1: &str, url2: &str) {
         page.evaluate(format!("window.location.href = {}", serde_json::to_string(&u1).unwrap_or_default()))
             .await.map_err(|e| e.to_string())?;
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        let snap1 = onecrawl_cdp::accessibility::agent_snapshot(&page, true)
+        let snap1 = onecrawl_cdp::accessibility::agent_snapshot(&page, &onecrawl_cdp::accessibility::AgentSnapshotOptions { interactive_only: true, ..Default::default() })
             .await.map_err(|e| e.to_string())?;
         page.evaluate(format!("window.location.href = {}", serde_json::to_string(&u2).unwrap_or_default()))
             .await.map_err(|e| e.to_string())?;
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        let snap2 = onecrawl_cdp::accessibility::agent_snapshot(&page, true)
+        let snap2 = onecrawl_cdp::accessibility::agent_snapshot(&page, &onecrawl_cdp::accessibility::AgentSnapshotOptions { interactive_only: true, ..Default::default() })
             .await.map_err(|e| e.to_string())?;
-        if snap1.snapshot == snap2.snapshot {
+
+        let diff_result = onecrawl_cdp::snapshot_diff::diff_snapshots(&snap1.snapshot, &snap2.snapshot);
+
+        if !diff_result.changed {
             println!("{} Pages are identical", "✓".green());
         } else {
-            println!("{} Pages differ:", "⚡".yellow());
-            println!("--- {} ---\n{}", u1, snap1.snapshot);
-            println!("--- {} ---\n{}", u2, snap2.snapshot);
+            println!("{} Pages differ ({}+ {}− {}=):",
+                "⚡".yellow(),
+                format!("{}", diff_result.additions).green(),
+                format!("{}", diff_result.removals).red(),
+                diff_result.unchanged,
+            );
+            for line in diff_result.diff.lines() {
+                if let Some(rest) = line.strip_prefix('+') {
+                    println!("{}", format!("+{rest}").green());
+                } else if let Some(rest) = line.strip_prefix('-') {
+                    println!("{}", format!("-{rest}").red());
+                } else {
+                    println!("{line}");
+                }
+            }
         }
         Ok(())
     })

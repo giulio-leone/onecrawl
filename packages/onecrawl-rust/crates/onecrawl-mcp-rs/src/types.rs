@@ -54,6 +54,47 @@ pub struct StoreGetRequest {
     pub key: String,
 }
 
+// ──────────────────── Screencast & Recording params ─────────────────────
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ScreencastStartParams {
+    #[schemars(description = "Image format: jpeg or png")]
+    pub format: Option<String>,
+    #[schemars(description = "Compression quality 0-100 (jpeg only)")]
+    pub quality: Option<u32>,
+    #[schemars(description = "Maximum width in pixels")]
+    pub max_width: Option<u32>,
+    #[schemars(description = "Maximum height in pixels")]
+    pub max_height: Option<u32>,
+    #[schemars(description = "Capture every N-th frame")]
+    pub every_nth_frame: Option<u32>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ScreencastStopParams {}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ScreencastFrameParams {
+    #[schemars(description = "Image format: jpeg or png (default: jpeg)")]
+    pub format: Option<String>,
+    #[schemars(description = "Compression quality 0-100")]
+    pub quality: Option<u32>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct RecordingStartParams {
+    #[schemars(description = "Output file path (e.g. recording.webm)")]
+    pub output: Option<String>,
+    #[schemars(description = "Frames per second")]
+    pub fps: Option<u32>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct RecordingStopParams {}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct RecordingStatusParams {}
+
 // ──────────────────────────── Response Types ────────────────────────────
 
 #[derive(serde::Serialize)]

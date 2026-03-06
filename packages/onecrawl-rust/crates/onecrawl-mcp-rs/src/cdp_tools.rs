@@ -16,6 +16,8 @@ pub struct BrowserState {
     pub snapshots: HashMap<String, onecrawl_cdp::DomSnapshot>,
     pub rate_limiter: Option<onecrawl_cdp::RateLimitState>,
     pub retry_queue: Option<onecrawl_cdp::RetryQueue>,
+    pub safety: Option<onecrawl_cdp::SafetyState>,
+    pub recording: Option<onecrawl_cdp::RecordingState>,
 }
 
 pub type SharedBrowser = Arc<Mutex<BrowserState>>;
@@ -284,6 +286,24 @@ pub struct RetryEnqueueParams {
 
 // ──────────────── Passkey / WebAuthn params ─────────────────
 
+// ──────────────── Accessibility Snapshot params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AgentSnapshotParams {
+    #[schemars(description = "Only include interactive elements (buttons, links, inputs)")]
+    pub interactive_only: Option<bool>,
+    #[schemars(description = "Include cursor-interactive elements (cursor:pointer, onclick, tabindex)")]
+    pub cursor: Option<bool>,
+    #[schemars(description = "Remove empty structural elements for minimal output")]
+    pub compact: Option<bool>,
+    #[schemars(description = "Max DOM depth to include")]
+    pub depth: Option<usize>,
+    #[schemars(description = "CSS selector to scope snapshot to a subtree")]
+    pub selector: Option<String>,
+}
+
+// ──────────────── Passkey / WebAuthn params ─────────────────
+
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct PasskeyEnableParams {
     #[schemars(description = "Protocol: 'ctap2' or 'u2f' (default ctap2)")]
@@ -331,4 +351,144 @@ pub struct PdfExportParams {
     pub format: Option<String>,
     #[schemars(description = "Landscape orientation (default false)")]
     pub landscape: Option<bool>,
+}
+
+// ──────────────── Snapshot Diff params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SnapshotDiffParams {
+    #[schemars(description = "Accessibility snapshot text before (from navigation.snapshot)")]
+    pub before: String,
+    #[schemars(description = "Accessibility snapshot text after (from navigation.snapshot)")]
+    pub after: String,
+}
+
+// ──────────────── Agent tools params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ChainCommand {
+    #[schemars(description = "Tool name to execute (e.g. 'navigation.click')")]
+    pub tool: String,
+    #[schemars(description = "Arguments as JSON object")]
+    pub args: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ExecuteChainParams {
+    #[schemars(description = "List of commands to execute in sequence")]
+    pub commands: Vec<ChainCommand>,
+    #[schemars(description = "Stop on first error (default: true)")]
+    pub stop_on_error: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ElementScreenshotParams {
+    #[schemars(description = "CSS selector or @ref (e.g. @e1) of the element to screenshot")]
+    pub selector: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ApiCaptureStartParams {
+    // no params needed — injects the interceptor
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ApiCaptureSummaryParams {
+    #[schemars(description = "Clear the captured log after reading (default: false)")]
+    pub clear: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IframeSnapshotParams {
+    #[schemars(description = "Zero-based index of the iframe to snapshot")]
+    pub index: usize,
+    #[schemars(description = "Only include interactive elements")]
+    pub interactive_only: Option<bool>,
+    #[schemars(description = "Remove empty structural elements for minimal output")]
+    pub compact: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IframeListParams {
+    // no params needed
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct RemoteCdpParams {
+    #[schemars(description = "WebSocket URL of the remote CDP endpoint (e.g. ws://127.0.0.1:9222/devtools/browser/...)")]
+    pub ws_url: String,
+    #[schemars(description = "Optional HTTP headers for the WebSocket handshake")]
+    pub headers: Option<HashMap<String, String>>,
+}
+
+// ──────────────── Safety Policy params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SafetyPolicySetParams {
+    #[schemars(description = "Allowed domains (if empty, all domains allowed)")]
+    pub allowed_domains: Option<Vec<String>>,
+    #[schemars(description = "Blocked domains")]
+    pub blocked_domains: Option<Vec<String>>,
+    #[schemars(description = "Blocked URL patterns (glob-style with * wildcards)")]
+    pub blocked_url_patterns: Option<Vec<String>>,
+    #[schemars(description = "Maximum actions per session (0 = unlimited)")]
+    pub max_actions: Option<usize>,
+    #[schemars(description = "Require confirmation for form submissions")]
+    pub confirm_form_submit: Option<bool>,
+    #[schemars(description = "Require confirmation for file uploads")]
+    pub confirm_file_upload: Option<bool>,
+    #[schemars(description = "Blocked commands")]
+    pub blocked_commands: Option<Vec<String>>,
+    #[schemars(description = "Allowed commands (if empty, all non-blocked allowed)")]
+    pub allowed_commands: Option<Vec<String>>,
+    #[schemars(description = "Rate limit: max actions per minute (0 = unlimited)")]
+    pub rate_limit_per_minute: Option<usize>,
+    #[schemars(description = "Path to a JSON policy file to load (overrides other fields)")]
+    pub policy_file: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SafetyStatusParams {
+    // no params needed
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SkillsListParams {
+    // no params needed
+}
+
+// ──────────────── iOS / Mobile Safari params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosDevicesParams {
+    // no params needed
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosConnectParams {
+    #[schemars(description = "WebDriverAgent URL (default: http://localhost:8100)")]
+    pub wda_url: Option<String>,
+    #[schemars(description = "Device UDID (auto-detect if omitted)")]
+    pub udid: Option<String>,
+    #[schemars(description = "Bundle ID to automate (default: com.apple.mobilesafari)")]
+    pub bundle_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosNavigateParams {
+    #[schemars(description = "URL to navigate to in Mobile Safari")]
+    pub url: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosTapParams {
+    #[schemars(description = "X coordinate")]
+    pub x: f64,
+    #[schemars(description = "Y coordinate")]
+    pub y: f64,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosScreenshotParams {
+    // no params needed — returns base64 image
 }

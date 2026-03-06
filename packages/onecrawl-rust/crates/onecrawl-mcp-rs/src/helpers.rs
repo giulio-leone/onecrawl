@@ -2,11 +2,19 @@
 
 use rmcp::{ErrorData as McpError, model::*};
 
+use crate::agent_error::AgentError;
 use crate::cdp_tools::SharedBrowser;
 
 /// Create an internal MCP error.
 pub fn mcp_err(msg: impl Into<String>) -> McpError {
     McpError::internal_error(msg.into(), None)
+}
+
+/// Create an MCP error from a structured [`AgentError`], serialised as JSON
+/// so that agent consumers receive machine-readable error metadata.
+pub fn agent_err(err: AgentError) -> McpError {
+    let json = serde_json::to_string(&err).unwrap_or_else(|_| err.message.clone());
+    McpError::internal_error(json, None)
 }
 
 /// Ensure browser session + page are initialised, return a clone of the page handle.

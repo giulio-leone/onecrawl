@@ -303,12 +303,39 @@ pub async fn audit_accessibility(page: &Page) -> Result<AccessibilityAudit> {
     }
 }
 
+/// Options for `agent_snapshot()`.
+#[derive(Debug, Clone, Default)]
+pub struct AgentSnapshotOptions {
+    /// Only include interactive elements (buttons, links, inputs).
+    pub interactive_only: bool,
+    /// Include cursor-interactive elements (cursor:pointer, onclick, tabindex)
+    /// that are not already interactive by ARIA role or tag.
+    pub cursor: bool,
+    /// Remove empty structural elements for minimal output.
+    pub compact: bool,
+    /// Maximum DOM depth to include.
+    pub depth: Option<usize>,
+    /// CSS selector to scope snapshot to a subtree.
+    pub selector: Option<String>,
+}
+
 /// Agent-mode snapshot: tags interactive elements with `data-onecrawl-ref` attributes,
 /// returns a compact text snapshot + refs map for AI-driven automation.
 ///
 /// After calling this, `@e1` resolves to `[data-onecrawl-ref="e1"]` in any selector.
-pub async fn agent_snapshot(page: &Page, interactive_only: bool) -> Result<AgentSnapshot> {
-    let interactive_only_js = if interactive_only { "true" } else { "false" };
+pub async fn agent_snapshot(page: &Page, opts: &AgentSnapshotOptions) -> Result<AgentSnapshot> {
+    let interactive_only_js = if opts.interactive_only { "true" } else { "false" };
+    let cursor_js = if opts.cursor { "true" } else { "false" };
+    let compact_js = if opts.compact { "true" } else { "false" };
+    let depth_js = match opts.depth {
+        Some(d) => d.to_string(),
+        None => "null".to_string(),
+    };
+    let scope_js = match &opts.selector {
+        Some(s) => serde_json::to_string(s).unwrap_or_else(|_| "null".to_string()),
+        None => "null".to_string(),
+    };
+
     let js = format!(
         r#"
         (() => {{
@@ -317,6 +344,15 @@ pub async fn agent_snapshot(page: &Page, interactive_only: bool) -> Result<Agent
                 'listbox','option','menuitem','menuitemcheckbox','menuitemradio','tab','treeitem',
                 'slider','spinbutton','switch','searchbox','gridcell']);
             const CONTENT_TAGS = new Set(['h1','h2','h3','h4','h5','h6','p','li','td','th','span','div','section','article','main','nav','header','footer']);
+            const STRUCTURAL_ROLES = new Set(['generic','group','list','table','row','rowgroup',
+                'columnheader','rowheader','cell','grid','treegrid','toolbar','separator',
+                'presentation','none','directory','document','feed','figure','region']);
+
+            const interactiveOnly = {interactive_only_js};
+            const cursorMode = {cursor_js};
+            const compactMode = {compact_js};
+            const maxDepth = {depth_js};
+            const scopeSelector = {scope_js};
 
             function isVisible(el) {{
                 const r = el.getBoundingClientRect();
@@ -331,6 +367,33 @@ pub async fn agent_snapshot(page: &Page, interactive_only: bool) -> Result<Agent
                 return INTERACTIVE_TAGS.has(tag) || INTERACTIVE_ROLES.has(role)
                     || el.hasAttribute('onclick') || el.hasAttribute('tabindex')
                     || (el.getAttribute('tabindex') !== null && parseInt(el.getAttribute('tabindex')) >= 0);
+            }}
+
+            function isCursorInteractive(el) {{
+                if (!cursorMode) return false;
+                if (isInteractive(el)) return false;
+                const s = window.getComputedStyle(el);
+                const hasCursorPointer = s.cursor === 'pointer';
+                const hasOnclick = el.hasAttribute('onclick');
+                const hasTabindex = el.hasAttribute('tabindex') && parseInt(el.getAttribute('tabindex')) >= 0;
+                if (!hasCursorPointer && !hasOnclick && !hasTabindex) return false;
+                // Skip elements that inherit cursor:pointer from a parent
+                if (hasCursorPointer && !hasOnclick && !hasTabindex) {{
+                    const parent = el.parentElement;
+                    if (parent) {{
+                        const ps = window.getComputedStyle(parent);
+                        if (ps.cursor === 'pointer') return false;
+                    }}
+                }}
+                return true;
+            }}
+
+            function getCursorRole(el) {{
+                const hasTabindex = el.hasAttribute('tabindex') && parseInt(el.getAttribute('tabindex')) >= 0;
+                const s = window.getComputedStyle(el);
+                if (el.hasAttribute('onclick') || s.cursor === 'pointer') return 'clickable';
+                if (hasTabindex) return 'focusable';
+                return 'clickable';
             }}
 
             function getName(el) {{
@@ -364,6 +427,27 @@ pub async fn agent_snapshot(page: &Page, interactive_only: bool) -> Result<Agent
                 return tag;
             }}
 
+            function getSelector(el, role, name) {{
+                const tag = el.tagName.toLowerCase();
+                const escapedName = name.replace(/"/g, '\\"');
+                if (INTERACTIVE_ROLES.has(role) || ['button','link','checkbox','radio','textbox','combobox','heading','img','navigation','main'].includes(role)) {{
+                    if (name && name !== tag) {{
+                        return `getByRole('${{role}}', {{ name: "${{escapedName}}", exact: true }})`;
+                    }}
+                    return `getByRole('${{role}}')`;
+                }}
+                if (el.getAttribute('aria-label')) {{
+                    return `getByLabel("${{escapedName}}", {{ exact: true }})`;
+                }}
+                if (el.getAttribute('placeholder')) {{
+                    return `getByPlaceholder("${{el.getAttribute('placeholder').replace(/"/g, '\\"')}}", {{ exact: true }})`;
+                }}
+                if (name && name.length <= 40 && name !== tag) {{
+                    return `getByText("${{escapedName}}", {{ exact: true }})`;
+                }}
+                return `locator('${{tag}}')`;
+            }}
+
             function getExtra(el) {{
                 const tag = el.tagName.toLowerCase();
                 if (tag === 'input') {{
@@ -382,41 +466,74 @@ pub async fn agent_snapshot(page: &Page, interactive_only: bool) -> Result<Agent
                 return '';
             }}
 
+            function getDepth(el, root) {{
+                let depth = 0;
+                let node = el;
+                while (node && node !== root) {{
+                    depth++;
+                    node = node.parentElement;
+                }}
+                return depth;
+            }}
+
             // Clear previous refs
             document.querySelectorAll('[data-onecrawl-ref]').forEach(el => {{
                 el.removeAttribute('data-onecrawl-ref');
             }});
 
-            const interactiveOnly = {interactive_only_js};
-            const allEls = Array.from(document.querySelectorAll('*'));
+            const root = scopeSelector ? document.querySelector(scopeSelector) : document.body;
+            if (!root) return {{ snapshot: '', refs: {{}}, total: 0 }};
+
+            const allEls = Array.from(root.querySelectorAll('*'));
             const refs = {{}};
             let counter = 0;
+            let interactiveCount = 0;
             const lines = [];
 
             allEls.forEach(el => {{
                 if (!isVisible(el)) return;
+
+                if (maxDepth !== null && getDepth(el, root) > maxDepth) return;
+
                 const isInt = isInteractive(el);
+                const isCursorInt = isCursorInteractive(el);
                 const tag = el.tagName.toLowerCase();
                 const isContent = CONTENT_TAGS.has(tag) && el.textContent?.trim().length > 2;
-                if (interactiveOnly && !isInt) return;
-                if (!isInt && !isContent) return;
+
+                if (interactiveOnly && !isInt && !isCursorInt) return;
+                if (!isInt && !isCursorInt && !isContent) return;
                 // Skip if children already cover this (avoid redundant wrappers)
-                if (!isInt && el.querySelector('button,a,input,textarea,select')) return;
+                if (!isInt && !isCursorInt && el.querySelector('button,a,input,textarea,select')) return;
+
+                const role = isCursorInt ? getCursorRole(el) : getRole(el);
+                const name = getName(el);
+
+                // Compact mode: skip structural elements with no name and no ref'd children
+                if (compactMode && !isInt && !isCursorInt) {{
+                    const mappedRole = getRole(el);
+                    if (STRUCTURAL_ROLES.has(mappedRole) && (!name || name === tag)) {{
+                        return;
+                    }}
+                }}
 
                 counter++;
                 const refId = 'e' + counter;
                 el.setAttribute('data-onecrawl-ref', refId);
-                const role = getRole(el);
-                const name = getName(el);
+                const selector = getSelector(el, role, name);
                 const extra = getExtra(el);
-                refs[refId] = {{ role, name, tag }};
+                refs[refId] = {{ role, name, tag, selector }};
+                if (isInt || isCursorInt) interactiveCount++;
                 lines.push(`[${{refId}}] ${{role}} "${{name}}"${{extra}}`);
             }});
 
-            return {{ snapshot: lines.join('\n'), refs, total: counter }};
+            return {{ snapshot: lines.join('\n'), refs, total: counter, interactiveCount }};
         }})()
         "#,
-        interactive_only_js = interactive_only_js
+        interactive_only_js = interactive_only_js,
+        cursor_js = cursor_js,
+        compact_js = compact_js,
+        depth_js = depth_js,
+        scope_js = scope_js
     );
 
     let result = page
@@ -424,10 +541,25 @@ pub async fn agent_snapshot(page: &Page, interactive_only: bool) -> Result<Agent
         .await
         .map_err(|e| Error::Cdp(format!("agent_snapshot failed: {e}")))?;
 
-    match result.into_value::<AgentSnapshot>() {
-        Ok(v) => Ok(v),
+    match result.into_value::<AgentSnapshotRaw>() {
+        Ok(raw) => Ok(AgentSnapshot {
+            snapshot: raw.snapshot,
+            refs: raw.refs,
+            total: raw.total,
+            interactive_count: raw.interactive_count.unwrap_or(0),
+        }),
         Err(e) => Err(Error::Cdp(format!("agent_snapshot parse error: {e}"))),
     }
+}
+
+/// Internal deserialization target for JS result (camelCase from JS).
+#[derive(Debug, Deserialize)]
+struct AgentSnapshotRaw {
+    snapshot: String,
+    refs: std::collections::HashMap<String, AgentRef>,
+    total: usize,
+    #[serde(rename = "interactiveCount")]
+    interactive_count: Option<usize>,
 }
 
 /// Result of an agent-mode snapshot.
@@ -439,6 +571,9 @@ pub struct AgentSnapshot {
     pub refs: std::collections::HashMap<String, AgentRef>,
     /// Total number of elements tagged.
     pub total: usize,
+    /// Number of interactive (actionable) elements in the snapshot.
+    #[serde(default)]
+    pub interactive_count: usize,
 }
 
 /// Metadata for a single agent ref.
@@ -447,6 +582,38 @@ pub struct AgentRef {
     pub role: String,
     pub name: String,
     pub tag: String,
+    /// Playwright-style selector, e.g. `getByRole('button', { name: "Submit", exact: true })`.
+    #[serde(default)]
+    pub selector: String,
+}
+
+/// Statistics for an agent snapshot.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotStats {
+    pub lines: usize,
+    pub chars: usize,
+    /// Approximate token count (chars / 4).
+    pub estimated_tokens: usize,
+    pub total_refs: usize,
+    pub interactive_refs: usize,
+}
+
+impl AgentSnapshot {
+    /// Compute statistics for this snapshot.
+    pub fn stats(&self) -> SnapshotStats {
+        let chars = self.snapshot.len();
+        SnapshotStats {
+            lines: if self.snapshot.is_empty() {
+                0
+            } else {
+                self.snapshot.lines().count()
+            },
+            chars,
+            estimated_tokens: chars / 4,
+            total_refs: self.total,
+            interactive_refs: self.interactive_count,
+        }
+    }
 }
 
 /// Resolve an agent ref selector (`@e1`) to a CSS selector.

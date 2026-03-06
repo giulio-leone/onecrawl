@@ -13,6 +13,21 @@ pub struct DiffResult {
     pub height: u32,
 }
 
+/// Result of an in-browser pixel-level visual comparison with diff image output.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PixelDiffResult {
+    /// PNG bytes of the diff visualisation (red = different, dimmed = same)
+    pub diff_image: Vec<u8>,
+    /// Total pixel count
+    pub total_pixels: u64,
+    /// Number of pixels that differ beyond the threshold
+    pub different_pixels: u64,
+    /// Percentage of pixels that differ (0.0–100.0)
+    pub difference_percentage: f64,
+    /// Per-channel threshold used for comparison (0.0–1.0)
+    pub threshold: f64,
+}
+
 /// Compare two PNG screenshots byte-by-byte.
 pub fn compare_screenshots(baseline: &[u8], current: &[u8]) -> Result<DiffResult> {
     let baseline_len = baseline.len();
@@ -80,4 +95,121 @@ pub async fn visual_regression(page: &Page, baseline_path: &Path) -> Result<Diff
     let baseline = std::fs::read(baseline_path)
         .map_err(|e| Error::Cdp(format!("read baseline failed: {e}")))?;
     compare_screenshots(&baseline, &current)
+}
+
+/// Perform in-browser pixel-level comparison of two PNG images via Canvas.
+///
+/// Injects JS that decodes both images, draws them onto off-screen canvases,
+/// iterates every pixel, and produces a diff image (red = different, dimmed = same).
+/// `threshold` controls per-channel sensitivity (0.0 = exact, default 0.05).
+pub async fn pixel_diff(
+    page: &Page,
+    baseline: &[u8],
+    current: &[u8],
+    threshold: Option<f64>,
+) -> Result<PixelDiffResult> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
+
+    let baseline_b64 = B64.encode(baseline);
+    let current_b64 = B64.encode(current);
+    let thresh = threshold.unwrap_or(0.05);
+
+    let js = format!(
+        r#"(async () => {{
+    const thresh = {thresh};
+    function b64ToImg(b64) {{
+        return new Promise((resolve, reject) => {{
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = 'data:image/png;base64,' + b64;
+        }});
+    }}
+    const [imgA, imgB] = await Promise.all([
+        b64ToImg("{baseline_b64}"),
+        b64ToImg("{current_b64}")
+    ]);
+    const w = Math.max(imgA.width, imgB.width);
+    const h = Math.max(imgA.height, imgB.height);
+    const cA = new OffscreenCanvas(w, h);
+    const cB = new OffscreenCanvas(w, h);
+    const cD = new OffscreenCanvas(w, h);
+    const ctxA = cA.getContext('2d');
+    const ctxB = cB.getContext('2d');
+    const ctxD = cD.getContext('2d');
+    ctxA.drawImage(imgA, 0, 0);
+    ctxB.drawImage(imgB, 0, 0);
+    const dA = ctxA.getImageData(0, 0, w, h);
+    const dB = ctxB.getImageData(0, 0, w, h);
+    const dD = ctxD.createImageData(w, h);
+    const t = thresh * 255;
+    let diffCount = 0;
+    const total = w * h;
+    for (let i = 0; i < dA.data.length; i += 4) {{
+        const dr = Math.abs(dA.data[i] - dB.data[i]);
+        const dg = Math.abs(dA.data[i+1] - dB.data[i+1]);
+        const db = Math.abs(dA.data[i+2] - dB.data[i+2]);
+        if (dr > t || dg > t || db > t) {{
+            dD.data[i]   = 255;
+            dD.data[i+1] = 0;
+            dD.data[i+2] = 0;
+            dD.data[i+3] = 255;
+            diffCount++;
+        }} else {{
+            dD.data[i]   = Math.round(dA.data[i] * 0.3);
+            dD.data[i+1] = Math.round(dA.data[i+1] * 0.3);
+            dD.data[i+2] = Math.round(dA.data[i+2] * 0.3);
+            dD.data[i+3] = 255;
+        }}
+    }}
+    ctxD.putImageData(dD, 0, 0);
+    const blob = await cD.convertToBlob({{ type: 'image/png' }});
+    const buf = await blob.arrayBuffer();
+    const arr = new Uint8Array(buf);
+    let b = '';
+    const chunk = 8192;
+    for (let i = 0; i < arr.length; i += chunk) {{
+        b += String.fromCharCode.apply(null, arr.subarray(i, i + chunk));
+    }}
+    const diffB64 = btoa(b);
+    return JSON.stringify({{
+        diff_b64: diffB64,
+        total_pixels: total,
+        different_pixels: diffCount,
+        difference_percentage: total > 0 ? (diffCount / total) * 100 : 0
+    }});
+}})()"#
+    );
+
+    let val = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Cdp(format!("pixel_diff JS failed: {e}")))?;
+
+    let json_str: String =
+        serde_json::from_value(val.into_value().unwrap_or(serde_json::json!("")))
+            .unwrap_or_default();
+
+    #[derive(Deserialize)]
+    struct JsResult {
+        diff_b64: String,
+        total_pixels: u64,
+        different_pixels: u64,
+        difference_percentage: f64,
+    }
+
+    let parsed: JsResult = serde_json::from_str(&json_str)
+        .map_err(|e| Error::Cdp(format!("pixel_diff parse result: {e}")))?;
+
+    let diff_image = B64
+        .decode(&parsed.diff_b64)
+        .map_err(|e| Error::Cdp(format!("pixel_diff decode image: {e}")))?;
+
+    Ok(PixelDiffResult {
+        diff_image,
+        total_pixels: parsed.total_pixels,
+        different_pixels: parsed.different_pixels,
+        difference_percentage: parsed.difference_percentage,
+        threshold: thresh,
+    })
 }

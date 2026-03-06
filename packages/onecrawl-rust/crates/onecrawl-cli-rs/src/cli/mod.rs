@@ -8,23 +8,31 @@ pub(crate) struct Cli {
 }
 mod auth;
 mod crawl;
+mod daemon;
 mod dom;
 mod interaction;
+mod ios;
 mod media;
 mod monitoring;
 mod network;
+mod skills;
 mod storage;
+mod streaming_video;
 mod tabs;
 mod utility;
 
 pub(crate) use auth::{CaptchaAction, AuthAction, StealthAction, AntibotAction, AuthStateAction};
 pub(crate) use crawl::{PipelineAction, StructuredAction, AdaptiveAction, SpiderAction, RobotsAction, GraphAction};
+pub(crate) use daemon::DaemonAction;
 pub(crate) use dom::{FingerprintAction, EmulateAction, DomAction, IframeAction, AdvancedEmulationAction, WindowAction, SetAction};
 pub(crate) use interaction::{SelectAction, NavAction, KeyboardAction, MouseAction, FindAction};
+pub(crate) use ios::IosAction;
 pub(crate) use media::{SnapshotAction, ScreenshotDiffAction, PrintAction, ExtractAction, DiffAction};
 pub(crate) use monitoring::{CoverageAction, AccessibilityAction, PerfAction, ConsoleAction, DialogAction, WorkerAction, PageWatcherAction};
 pub(crate) use network::{DomainAction, HttpAction, NetworkAction, HarAction, WsAction, ThrottleAction, NetworkLogAction, ProxyAction, ProxyHealthAction, InterceptCommandAction};
+pub(crate) use skills::SkillsAction;
 pub(crate) use storage::{CookieJarAction, CookieAction, WebStorageAction};
+pub(crate) use streaming_video::{StreamAction, RecordAction};
 pub(crate) use tabs::{TabAction, DownloadAction};
 pub(crate) use utility::{RateLimitAction, RetryAction, ScheduleAction, PoolAction, BenchAction, GeoAction, RequestAction};
 
@@ -818,6 +826,41 @@ pub(crate) enum Commands {
         /// Transport mode
         #[arg(short, long, default_value = "stdio")]
         transport: String,
+    },
+
+    // ── Daemon ──────────────────────────────────────────────────
+    /// Persistent browser daemon (sub-100ms IPC)
+    Daemon {
+        #[command(subcommand)]
+        action: DaemonAction,
+    },
+
+    // ── Skills ──────────────────────────────────────────────────
+    /// Manage reusable browser automation skill packages
+    Skills {
+        #[command(subcommand)]
+        action: SkillsAction,
+    },
+
+    // ── Live Streaming ───────────────────────────────────────────
+    /// Live browser screencast via CDP
+    Stream {
+        #[command(subcommand)]
+        action: StreamAction,
+    },
+
+    // ── Video Recording ─────────────────────────────────────────
+    /// Record browser session as frame sequence
+    Record {
+        #[command(subcommand)]
+        action: RecordAction,
+    },
+
+    // ── iOS / Mobile Safari ────────────────────────────────────
+    /// iOS Safari automation via WebDriverAgent
+    Ios {
+        #[command(subcommand)]
+        action: IosAction,
     },
 
     // ── Version ─────────────────────────────────────────────────

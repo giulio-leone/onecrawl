@@ -237,6 +237,12 @@ pub use media::{
     auth_state_rename,
     auth_state_clear,
     auth_state_clean,
+    stream_start,
+    stream_stop,
+    stream_frame,
+    recording_start,
+    recording_stop,
+    recording_status,
 };
 pub use monitoring::{
     coverage_js_start,
