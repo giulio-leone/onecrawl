@@ -91,6 +91,17 @@ action_enum!(BrowserAction, "browser", [
     EmulateTimezone => "emulate_timezone",
     EmulateMedia => "emulate_media",
     EmulateNetwork => "emulate_network",
+    Drag => "drag",
+    Hover => "hover",
+    Keyboard => "keyboard",
+    Select => "select",
+    Upload => "upload",
+    DownloadWait => "download_wait",
+    DownloadList => "download_list",
+    DownloadSetDir => "download_set_dir",
+    ShadowQuery => "shadow_query",
+    ShadowText => "shadow_text",
+    DeepQuery => "deep_query",
 ]);
 
 action_enum!(CrawlAction, "crawl", [
@@ -267,8 +278,11 @@ mod tests {
             "console_start", "console_get", "console_clear", "dialog_handle",
             "dialog_get", "errors_get", "emulate_device", "emulate_geolocation",
             "emulate_timezone", "emulate_media", "emulate_network",
+            "drag", "hover", "keyboard", "select",
+            "upload", "download_wait", "download_list", "download_set_dir",
+            "shadow_query", "shadow_text", "deep_query",
         ];
-        assert_eq!(actions.len(), 58);
+        assert_eq!(actions.len(), 69);
         for a in &actions {
             assert!(BrowserAction::parse(a).is_ok(), "failed to parse: {a}");
         }

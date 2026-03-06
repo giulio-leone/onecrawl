@@ -855,7 +855,81 @@ pub struct EmulateNetworkParams {
     pub offline: Option<bool>,
 }
 
-// ──────────────── Tests ─────────────────
+// ──────────────── Drag, Hover, Keyboard, Select params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct DragParams {
+    #[schemars(description = "CSS selector of source element")]
+    pub source: String,
+    #[schemars(description = "CSS selector of target element")]
+    pub target: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct HoverParams {
+    #[schemars(description = "CSS selector of element to hover")]
+    pub selector: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct KeyboardParams {
+    #[schemars(description = "Key combo string (e.g. 'Control+a', 'Shift+Tab', 'Enter', 'Escape')")]
+    pub keys: String,
+    #[schemars(description = "CSS selector to focus before sending keys")]
+    pub selector: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SelectParams {
+    #[schemars(description = "CSS selector of <select> element")]
+    pub selector: String,
+    #[schemars(description = "Option value to select")]
+    pub value: Option<String>,
+    #[schemars(description = "Option visible text to select")]
+    pub text: Option<String>,
+    #[schemars(description = "Option index to select (0-based)")]
+    pub index: Option<usize>,
+}
+
+// ──────────────── File Upload/Download params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct UploadParams {
+    #[schemars(description = "CSS selector of <input type='file'> element")]
+    pub selector: String,
+    #[schemars(description = "Absolute path to file to upload")]
+    pub file_path: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct DownloadWaitParams {
+    #[schemars(description = "Timeout in ms (default: 30000)")]
+    pub timeout: Option<u64>,
+    #[schemars(description = "Download directory to monitor")]
+    pub dir: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct DownloadSetDirParams {
+    #[schemars(description = "Directory path for downloads")]
+    pub path: String,
+}
+
+// ──────────────── Shadow DOM params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ShadowQueryParams {
+    #[schemars(description = "CSS selector of shadow host element")]
+    pub host_selector: String,
+    #[schemars(description = "CSS selector within the shadow root")]
+    pub inner_selector: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct DeepQueryParams {
+    #[schemars(description = "CSS selector using >>> for shadow-piercing (e.g. 'my-element >>> .inner')")]
+    pub selector: String,
+}
 
 #[cfg(test)]
 mod tests {
@@ -1045,5 +1119,45 @@ mod tests {
         let restored: DialogAutoResponse = serde_json::from_str(&json).unwrap();
         assert!(!restored.accept);
         assert_eq!(restored.prompt_text.as_deref(), Some("cancel"));
+    }
+
+    #[test]
+    fn drag_params() {
+        let p: DragParams = serde_json::from_str(r##"{"source":"#item1","target":"#dropzone"}"##).unwrap();
+        assert_eq!(p.source, "#item1");
+        assert_eq!(p.target, "#dropzone");
+    }
+
+    #[test]
+    fn keyboard_params() {
+        let p: KeyboardParams = serde_json::from_str(r##"{"keys":"Control+a","selector":"#editor"}"##).unwrap();
+        assert_eq!(p.keys, "Control+a");
+        assert_eq!(p.selector.as_deref(), Some("#editor"));
+    }
+
+    #[test]
+    fn select_params_by_value() {
+        let p: SelectParams = serde_json::from_str(r##"{"selector":"#country","value":"it"}"##).unwrap();
+        assert_eq!(p.value.as_deref(), Some("it"));
+        assert!(p.text.is_none());
+    }
+
+    #[test]
+    fn upload_params() {
+        let p: UploadParams = serde_json::from_str(r#"{"selector":"input[type=file]","file_path":"/tmp/doc.pdf"}"#).unwrap();
+        assert_eq!(p.file_path, "/tmp/doc.pdf");
+    }
+
+    #[test]
+    fn shadow_query_params() {
+        let p: ShadowQueryParams = serde_json::from_str(r#"{"host_selector":"my-element","inner_selector":".inner-btn"}"#).unwrap();
+        assert_eq!(p.host_selector, "my-element");
+        assert_eq!(p.inner_selector, ".inner-btn");
+    }
+
+    #[test]
+    fn deep_query_params() {
+        let p: DeepQueryParams = serde_json::from_str(r#"{"selector":"my-element >>> .inner"}"#).unwrap();
+        assert!(p.selector.contains(">>>"));
     }
 }

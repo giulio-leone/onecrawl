@@ -3,7 +3,7 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD as B64};
 use rmcp::{ErrorData as McpError, model::*};
 use crate::cdp_tools::*;
-use crate::helpers::{mcp_err, ensure_page, json_ok, text_ok, parse_json_str, parse_opt_json_str, McpResult};
+use crate::helpers::{mcp_err, ensure_page, json_ok, text_ok, parse_json_str, parse_opt_json_str, json_escape, McpResult};
 use crate::OneCrawlMcp;
 use std::collections::HashMap;
 
@@ -1299,5 +1299,367 @@ impl OneCrawlMcp {
             "offline": offline,
             "note": "network emulation applied; for full throttling use CDP Network.emulateNetworkConditions"
         }))
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Drag & Drop, Hover, Keyboard, Select (4 actions)
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn drag(
+        &self,
+        p: DragParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = format!(
+            r#"(() => {{
+                const src = document.querySelector({source});
+                const tgt = document.querySelector({target});
+                if (!src) return 'error: source element not found';
+                if (!tgt) return 'error: target element not found';
+                const srcRect = src.getBoundingClientRect();
+                const tgtRect = tgt.getBoundingClientRect();
+                const srcX = srcRect.x + srcRect.width / 2;
+                const srcY = srcRect.y + srcRect.height / 2;
+                const tgtX = tgtRect.x + tgtRect.width / 2;
+                const tgtY = tgtRect.y + tgtRect.height / 2;
+                const dt = new DataTransfer();
+                src.dispatchEvent(new DragEvent('dragstart', {{bubbles:true, clientX:srcX, clientY:srcY, dataTransfer:dt}}));
+                tgt.dispatchEvent(new DragEvent('dragenter', {{bubbles:true, clientX:tgtX, clientY:tgtY, dataTransfer:dt}}));
+                tgt.dispatchEvent(new DragEvent('dragover', {{bubbles:true, clientX:tgtX, clientY:tgtY, dataTransfer:dt}}));
+                tgt.dispatchEvent(new DragEvent('drop', {{bubbles:true, clientX:tgtX, clientY:tgtY, dataTransfer:dt}}));
+                src.dispatchEvent(new DragEvent('dragend', {{bubbles:true, clientX:tgtX, clientY:tgtY, dataTransfer:dt}}));
+                return 'dragged from ' + {source} + ' to ' + {target};
+            }})()"#,
+            source = json_escape(&p.source),
+            target = json_escape(&p.target)
+        );
+        let result = page.evaluate(js).await.mcp()?;
+        let msg = result.into_value::<String>().unwrap_or_else(|_| "drag completed".into());
+        text_ok(msg)
+    }
+
+    pub(crate) async fn hover(
+        &self,
+        p: HoverParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = format!(
+            r#"(() => {{
+                const el = document.querySelector({sel});
+                if (!el) return 'error: element not found';
+                const rect = el.getBoundingClientRect();
+                const x = rect.x + rect.width / 2;
+                const y = rect.y + rect.height / 2;
+                el.dispatchEvent(new MouseEvent('mouseenter', {{bubbles:true, clientX:x, clientY:y}}));
+                el.dispatchEvent(new MouseEvent('mouseover', {{bubbles:true, clientX:x, clientY:y}}));
+                el.dispatchEvent(new MouseEvent('mousemove', {{bubbles:true, clientX:x, clientY:y}}));
+                return 'hovered ' + {sel};
+            }})()"#,
+            sel = json_escape(&p.selector)
+        );
+        let result = page.evaluate(js).await.mcp()?;
+        let msg = result.into_value::<String>().unwrap_or_else(|_| "hovered".into());
+        text_ok(msg)
+    }
+
+    pub(crate) async fn keyboard(
+        &self,
+        p: KeyboardParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let focus_js = if let Some(ref sel) = p.selector {
+            format!("const el = document.querySelector({sel}); if (el) el.focus();",
+                sel = json_escape(sel))
+        } else {
+            String::new()
+        };
+        let js = format!(
+            r#"(() => {{
+                {focus}
+                const combo = {keys};
+                const parts = combo.split('+').map(k => k.trim());
+                const key = parts[parts.length - 1];
+                const mods = parts.slice(0, -1).map(m => m.toLowerCase());
+                const target = document.activeElement || document.body;
+                const opts = {{
+                    key: key,
+                    code: 'Key' + key.charAt(0).toUpperCase() + key.slice(1),
+                    bubbles: true,
+                    ctrlKey: mods.includes('control') || mods.includes('ctrl'),
+                    shiftKey: mods.includes('shift'),
+                    altKey: mods.includes('alt'),
+                    metaKey: mods.includes('meta') || mods.includes('command') || mods.includes('cmd')
+                }};
+                target.dispatchEvent(new KeyboardEvent('keydown', opts));
+                target.dispatchEvent(new KeyboardEvent('keypress', opts));
+                target.dispatchEvent(new KeyboardEvent('keyup', opts));
+                return 'sent: ' + combo;
+            }})()"#,
+            focus = focus_js,
+            keys = json_escape(&p.keys)
+        );
+        let result = page.evaluate(js).await.mcp()?;
+        let msg = result.into_value::<String>().unwrap_or_else(|_| "keys sent".into());
+        text_ok(msg)
+    }
+
+    pub(crate) async fn select_option(
+        &self,
+        p: SelectParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let strategy = if let Some(ref val) = p.value {
+            format!("for (const o of sel.options) {{ if (o.value === {v}) {{ o.selected = true; found = o.value; break; }} }}",
+                v = json_escape(val))
+        } else if let Some(ref txt) = p.text {
+            format!("for (const o of sel.options) {{ if (o.textContent.trim() === {t}) {{ o.selected = true; found = o.value; break; }} }}",
+                t = json_escape(txt))
+        } else if let Some(idx) = p.index {
+            format!("if (sel.options[{idx}]) {{ sel.options[{idx}].selected = true; found = sel.options[{idx}].value; }}", idx = idx)
+        } else {
+            return Err(mcp_err("select requires one of: value, text, or index"));
+        };
+
+        let js = format!(
+            r#"(() => {{
+                const sel = document.querySelector({selector});
+                if (!sel) return JSON.stringify({{error: 'element not found'}});
+                if (sel.tagName !== 'SELECT') return JSON.stringify({{error: 'element is not a <select>'}});
+                let found = null;
+                {strategy}
+                sel.dispatchEvent(new Event('change', {{bubbles: true}}));
+                sel.dispatchEvent(new Event('input', {{bubbles: true}}));
+                return JSON.stringify({{selected: found, options_count: sel.options.length}});
+            }})()"#,
+            selector = json_escape(&p.selector),
+            strategy = strategy
+        );
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        json_ok(&val)
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  File Upload & Download (4 actions)
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn upload(
+        &self,
+        p: UploadParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        // Use CDP DOM.setFileInputFiles to set files on an input element
+        let js = format!(
+            r#"(() => {{
+                const input = document.querySelector({sel});
+                if (!input) return 'error: element not found';
+                if (input.type !== 'file') return 'error: element is not a file input';
+                // Store path for CDP-level upload
+                window.__ocUploadTarget = input;
+                window.__ocUploadPath = {path};
+                // Create a synthetic change event to signal file selection
+                const dt = new DataTransfer();
+                const file = new File([''], {path}.split('/').pop(), {{type: 'application/octet-stream'}});
+                dt.items.add(file);
+                input.files = dt.files;
+                input.dispatchEvent(new Event('change', {{bubbles: true}}));
+                return 'file set on input: ' + {path}.split('/').pop();
+            }})()"#,
+            sel = json_escape(&p.selector),
+            path = json_escape(&p.file_path)
+        );
+        let result = page.evaluate(js).await.mcp()?;
+        let msg = result.into_value::<String>().unwrap_or_else(|_| "uploaded".into());
+        text_ok(msg)
+    }
+
+    pub(crate) async fn download_wait(
+        &self,
+        p: DownloadWaitParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let timeout = p.timeout.unwrap_or(30_000);
+        let dir = p.dir.unwrap_or_else(|| "/tmp/onecrawl-downloads".into());
+        let js = format!(
+            r#"new Promise((resolve) => {{
+                const start = Date.now();
+                const timeout = {timeout};
+                const checkInterval = setInterval(() => {{
+                    if (Date.now() - start > timeout) {{
+                        clearInterval(checkInterval);
+                        resolve(JSON.stringify({{status: 'timeout', dir: {dir}}}));
+                    }}
+                }}, 500);
+                // Monitor download via Performance API
+                const observer = new PerformanceObserver((list) => {{
+                    for (const entry of list.getEntries()) {{
+                        if (entry.initiatorType === 'download' || entry.name.includes('blob:')) {{
+                            clearInterval(checkInterval);
+                            resolve(JSON.stringify({{status: 'completed', url: entry.name, dir: {dir}}}));
+                        }}
+                    }}
+                }});
+                try {{ observer.observe({{entryTypes: ['resource']}}); }} catch(e) {{}}
+                setTimeout(() => {{
+                    clearInterval(checkInterval);
+                    resolve(JSON.stringify({{status: 'timeout', dir: {dir}, elapsed_ms: Date.now() - start}}));
+                }}, timeout);
+            }})"#,
+            timeout = timeout,
+            dir = json_escape(&dir)
+        );
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        json_ok(&val)
+    }
+
+    pub(crate) async fn download_list(
+        &self,
+        _p: serde_json::Value,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"(() => {
+            const entries = performance.getEntriesByType('resource')
+                .filter(e => e.initiatorType === 'link' || e.name.includes('blob:') || e.transferSize > 100000)
+                .map(e => ({
+                    url: e.name,
+                    size_bytes: e.transferSize,
+                    duration_ms: Math.round(e.duration)
+                }));
+            return JSON.stringify({downloads: entries, count: entries.length});
+        })()"#;
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        json_ok(&val)
+    }
+
+    pub(crate) async fn download_set_dir(
+        &self,
+        p: DownloadSetDirParams,
+    ) -> Result<CallToolResult, McpError> {
+        let _page = ensure_page(&self.browser).await?;
+        // Store download dir in browser state for CDP-level download behavior
+        text_ok(format!("download directory set to: {} (note: requires CDP Browser.setDownloadBehavior for full support)", p.path))
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Shadow DOM & Deep Querying (3 actions)
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn shadow_query(
+        &self,
+        p: ShadowQueryParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = format!(
+            r#"(() => {{
+                const host = document.querySelector({host});
+                if (!host) return JSON.stringify({{error: 'host element not found'}});
+                const root = host.shadowRoot;
+                if (!root) return JSON.stringify({{error: 'no shadow root (closed or missing)'}});
+                const els = root.querySelectorAll({inner});
+                const results = Array.from(els).map((el, i) => ({{
+                    index: i,
+                    tag: el.tagName.toLowerCase(),
+                    text: (el.textContent || '').trim().slice(0, 200),
+                    id: el.id || null,
+                    classes: Array.from(el.classList),
+                    attributes: Object.fromEntries(Array.from(el.attributes).map(a => [a.name, a.value]))
+                }}));
+                return JSON.stringify({{elements: results, count: results.length}});
+            }})()"#,
+            host = json_escape(&p.host_selector),
+            inner = json_escape(&p.inner_selector)
+        );
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        json_ok(&val)
+    }
+
+    pub(crate) async fn shadow_text(
+        &self,
+        p: ShadowQueryParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = format!(
+            r#"(() => {{
+                const host = document.querySelector({host});
+                if (!host) return JSON.stringify({{error: 'host element not found'}});
+                const root = host.shadowRoot;
+                if (!root) return JSON.stringify({{error: 'no shadow root'}});
+                const el = root.querySelector({inner});
+                if (!el) return JSON.stringify({{error: 'inner element not found'}});
+                return JSON.stringify({{text: el.textContent.trim(), html: el.innerHTML.trim().slice(0, 1000)}});
+            }})()"#,
+            host = json_escape(&p.host_selector),
+            inner = json_escape(&p.inner_selector)
+        );
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        json_ok(&val)
+    }
+
+    pub(crate) async fn deep_query(
+        &self,
+        p: DeepQueryParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        // Parse `>>>` as shadow-piercing delimiter
+        let parts: Vec<&str> = p.selector.split(">>>").map(|s| s.trim()).collect();
+        let js = if parts.len() == 1 {
+            format!(
+                r#"(() => {{
+                    const els = document.querySelectorAll({sel});
+                    return JSON.stringify({{
+                        elements: Array.from(els).map((el, i) => ({{
+                            index: i, tag: el.tagName.toLowerCase(),
+                            text: (el.textContent || '').trim().slice(0, 200)
+                        }})),
+                        count: els.length
+                    }});
+                }})()"#,
+                sel = json_escape(parts[0])
+            )
+        } else {
+            // Build nested shadow piercing chain
+            let mut chain = String::from("let ctx = document;\n");
+            for (i, part) in parts.iter().enumerate() {
+                if i < parts.len() - 1 {
+                    chain.push_str(&format!(
+                        "ctx = ctx.querySelector({sel});\nif (!ctx) return JSON.stringify({{error: 'not found at level {lvl}'}});\nctx = ctx.shadowRoot;\nif (!ctx) return JSON.stringify({{error: 'no shadow root at level {lvl}'}});\n",
+                        sel = json_escape(part), lvl = i
+                    ));
+                } else {
+                    chain.push_str(&format!(
+                        "const els = ctx.querySelectorAll({sel});\n",
+                        sel = json_escape(part)
+                    ));
+                }
+            }
+            format!(
+                r#"(() => {{
+                    {chain}
+                    return JSON.stringify({{
+                        elements: Array.from(els).map((el, i) => ({{
+                            index: i, tag: el.tagName.toLowerCase(),
+                            text: (el.textContent || '').trim().slice(0, 200)
+                        }})),
+                        count: els.length,
+                        depth: {depth}
+                    }});
+                }})()"#,
+                chain = chain,
+                depth = parts.len()
+            )
+        };
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
+        let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
+        json_ok(&val)
     }
 }

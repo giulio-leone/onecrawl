@@ -176,7 +176,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "browser",
-        description = "Browser navigation, interaction, extraction, multi-tab, DOM events, session, network interception, console/dialog capture, device emulation.\n\nActions:\n- goto {url} — Navigate to URL\n- click {selector} — Click element\n- type {selector, text} — Type into input\n- screenshot {selector?, full_page?} — Screenshot\n- pdf {landscape?} — Export PDF\n- back / forward / reload — Navigation\n- wait {selector, timeout_ms?} — Wait for element\n- evaluate {js} — Execute JavaScript\n- snapshot {interactive_only?, compact?, depth?} — Accessibility snapshot\n- css {selector} / xpath {expression} / find_text {text} — Query\n- text / html / markdown {selector?} — Extract content\n- structured — JSON-LD/OG\n- stream {start_url, selector, next_selector?} — Paginated extraction\n- detect_forms / fill_form {fields, submit?} — Forms\n- snapshot_diff {before, after} — Diff snapshots\n- parse_a11y / parse_selector / parse_text / parse_links {html} — Offline parsing\n- new_tab {url?} / list_tabs / switch_tab {index} / close_tab {index?} — Multi-tab\n- observe_mutations / get_mutations / stop_mutations — DOM observer\n- wait_for_event {event, selector?, timeout?} — DOM events\n- cookies_get / cookies_set / cookies_clear — Cookies\n- storage_get / storage_set — localStorage/sessionStorage\n- export_session / import_session — Session state\n- intercept_enable {patterns?} — Start request interception\n- intercept_add_rule {url_pattern, status?, headers?, body?} — Mock responses\n- intercept_remove_rule {rule_id} — Remove rule\n- intercept_list — List active rules\n- intercept_disable — Stop interception\n- block_requests {patterns, resource_types?} — Block URLs\n- console_start — Capture console messages\n- console_get {level?, limit?} — Get messages\n- console_clear — Clear messages\n- dialog_handle {accept, prompt_text?} — Auto-handle dialogs\n- dialog_get — Get last dialog\n- errors_get — Get page errors\n- emulate_device {device?, width?, height?} — Device emulation\n- emulate_geolocation {latitude, longitude} — GPS spoofing\n- emulate_timezone {timezone_id} — Timezone override\n- emulate_media {color_scheme?, reduced_motion?} — Media features\n- emulate_network {preset?} — Network throttling"
+        description = "Browser navigation, interaction, extraction, multi-tab, DOM events, session, network interception, console/dialog, device emulation, drag/drop, file upload, shadow DOM.\n\nActions:\n- goto {url} — Navigate to URL\n- click {selector} — Click element\n- type {selector, text} — Type into input\n- screenshot {selector?, full_page?} — Screenshot\n- pdf {landscape?} — Export PDF\n- back / forward / reload — Navigation\n- wait {selector, timeout_ms?} — Wait for element\n- evaluate {js} — Execute JavaScript\n- snapshot {interactive_only?, compact?, depth?} — A11y snapshot\n- css / xpath / find_text — Query elements\n- text / html / markdown / structured — Extract content\n- stream — Paginated extraction\n- detect_forms / fill_form — Forms\n- snapshot_diff — Diff snapshots\n- parse_a11y / parse_selector / parse_text / parse_links — Offline\n- new_tab / list_tabs / switch_tab / close_tab — Multi-tab\n- observe_mutations / get_mutations / stop_mutations / wait_for_event — DOM\n- cookies_get / cookies_set / cookies_clear — Cookies\n- storage_get / storage_set / export_session / import_session — Storage\n- intercept_enable / intercept_add_rule / intercept_remove_rule / intercept_list / intercept_disable / block_requests — Network\n- console_start / console_get / console_clear / dialog_handle / dialog_get / errors_get — Debug\n- emulate_device / emulate_geolocation / emulate_timezone / emulate_media / emulate_network — Emulation\n- drag {source, target} — Drag and drop\n- hover {selector} — Mouse hover\n- keyboard {keys, selector?} — Keyboard shortcuts\n- select {selector, value?, text?, index?} — Select dropdown option\n- upload {selector, file_path} — File upload\n- download_wait / download_list / download_set_dir — Downloads\n- shadow_query / shadow_text {host_selector, inner_selector} — Shadow DOM\n- deep_query {selector} — Pierce shadow DOM with >>>"
     )]
     async fn tool_browser(
         &self,
@@ -384,6 +384,50 @@ impl OneCrawlMcp {
             BrowserAction::EmulateNetwork => {
                 let params: EmulateNetworkParams = parse_params(v, "emulate_network")?;
                 self.emulate_network(params).await
+            }
+            // Drag & Drop, Hover, Keyboard, Select
+            BrowserAction::Drag => {
+                let params: DragParams = parse_params(v, "drag")?;
+                self.drag(params).await
+            }
+            BrowserAction::Hover => {
+                let params: HoverParams = parse_params(v, "hover")?;
+                self.hover(params).await
+            }
+            BrowserAction::Keyboard => {
+                let params: KeyboardParams = parse_params(v, "keyboard")?;
+                self.keyboard(params).await
+            }
+            BrowserAction::Select => {
+                let params: SelectParams = parse_params(v, "select")?;
+                self.select_option(params).await
+            }
+            // File Upload & Download
+            BrowserAction::Upload => {
+                let params: UploadParams = parse_params(v, "upload")?;
+                self.upload(params).await
+            }
+            BrowserAction::DownloadWait => {
+                let params: DownloadWaitParams = parse_params(v, "download_wait")?;
+                self.download_wait(params).await
+            }
+            BrowserAction::DownloadList => self.download_list(v).await,
+            BrowserAction::DownloadSetDir => {
+                let params: DownloadSetDirParams = parse_params(v, "download_set_dir")?;
+                self.download_set_dir(params).await
+            }
+            // Shadow DOM
+            BrowserAction::ShadowQuery => {
+                let params: ShadowQueryParams = parse_params(v, "shadow_query")?;
+                self.shadow_query(params).await
+            }
+            BrowserAction::ShadowText => {
+                let params: ShadowQueryParams = parse_params(v, "shadow_text")?;
+                self.shadow_text(params).await
+            }
+            BrowserAction::DeepQuery => {
+                let params: DeepQueryParams = parse_params(v, "deep_query")?;
+                self.deep_query(params).await
             }
         }
     }
