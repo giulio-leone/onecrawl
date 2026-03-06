@@ -175,7 +175,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "browser",
-        description = "Browser navigation, interaction, content extraction, multi-tab, DOM events, and session management.\n\nActions:\n- goto {url} — Navigate to URL\n- click {selector} — Click element\n- type {selector, text} — Type into input\n- screenshot {selector?, full_page?} — Screenshot\n- pdf {landscape?} — Export PDF\n- back — Navigate back\n- forward — Navigate forward\n- reload — Reload\n- wait {selector, timeout_ms?} — Wait for element\n- evaluate {js} — Execute JavaScript\n- snapshot {interactive_only?, compact?, depth?} — Accessibility snapshot\n- css {selector} — CSS query\n- xpath {expression} — XPath query\n- find_text {text, tag?} — Find by text\n- text {selector?} — Extract text\n- html {selector?} — Extract HTML\n- markdown {selector?} — Extract Markdown\n- structured — Extract JSON-LD/OG\n- stream {start_url, selector, next_selector?, max_pages?} — Paginated extraction\n- detect_forms — Detect forms\n- fill_form {form_selector?, fields, submit?} — Fill form\n- snapshot_diff {before, after} — Diff snapshots\n- parse_a11y {html} — Parse a11y tree offline\n- parse_selector {html, selector} — CSS query offline\n- parse_text {html} — Extract text offline\n- parse_links {html} — Extract links offline\n- new_tab {url?} — Open new tab\n- list_tabs — List all tabs\n- switch_tab {index} — Switch active tab\n- close_tab {index?} — Close tab\n- observe_mutations {selector?, child_list?, attributes?, subtree?} — Start mutation observer\n- get_mutations — Get recorded mutations\n- stop_mutations — Stop mutation observer\n- wait_for_event {event, selector?, timeout?} — Wait for DOM event\n- cookies_get {domain?, name?} — Get cookies\n- cookies_set {name, value, domain, path?, secure?, http_only?} — Set cookie\n- cookies_clear {domain?} — Clear cookies\n- storage_get {key, storage_type?} — Get localStorage/sessionStorage\n- storage_set {key, value, storage_type?} — Set storage\n- export_session {cookies?, local_storage?, session_storage?} — Export session state\n- import_session {state} — Import session state"
+        description = "Browser navigation, interaction, extraction, multi-tab, DOM events, session, network interception, console/dialog capture, device emulation.\n\nActions:\n- goto {url} — Navigate to URL\n- click {selector} — Click element\n- type {selector, text} — Type into input\n- screenshot {selector?, full_page?} — Screenshot\n- pdf {landscape?} — Export PDF\n- back / forward / reload — Navigation\n- wait {selector, timeout_ms?} — Wait for element\n- evaluate {js} — Execute JavaScript\n- snapshot {interactive_only?, compact?, depth?} — Accessibility snapshot\n- css {selector} / xpath {expression} / find_text {text} — Query\n- text / html / markdown {selector?} — Extract content\n- structured — JSON-LD/OG\n- stream {start_url, selector, next_selector?} — Paginated extraction\n- detect_forms / fill_form {fields, submit?} — Forms\n- snapshot_diff {before, after} — Diff snapshots\n- parse_a11y / parse_selector / parse_text / parse_links {html} — Offline parsing\n- new_tab {url?} / list_tabs / switch_tab {index} / close_tab {index?} — Multi-tab\n- observe_mutations / get_mutations / stop_mutations — DOM observer\n- wait_for_event {event, selector?, timeout?} — DOM events\n- cookies_get / cookies_set / cookies_clear — Cookies\n- storage_get / storage_set — localStorage/sessionStorage\n- export_session / import_session — Session state\n- intercept_enable {patterns?} — Start request interception\n- intercept_add_rule {url_pattern, status?, headers?, body?} — Mock responses\n- intercept_remove_rule {rule_id} — Remove rule\n- intercept_list — List active rules\n- intercept_disable — Stop interception\n- block_requests {patterns, resource_types?} — Block URLs\n- console_start — Capture console messages\n- console_get {level?, limit?} — Get messages\n- console_clear — Clear messages\n- dialog_handle {accept, prompt_text?} — Auto-handle dialogs\n- dialog_get — Get last dialog\n- errors_get — Get page errors\n- emulate_device {device?, width?, height?} — Device emulation\n- emulate_geolocation {latitude, longitude} — GPS spoofing\n- emulate_timezone {timezone_id} — Timezone override\n- emulate_media {color_scheme?, reduced_motion?} — Media features\n- emulate_network {preset?} — Network throttling"
     )]
     async fn tool_browser(
         &self,
@@ -330,6 +330,59 @@ impl OneCrawlMcp {
                 let params: SessionImportParams = parse_params(v, "import_session")?;
                 self.session_import(params).await
             }
+            // Network Interception
+            "intercept_enable" => {
+                let params: InterceptEnableParams = parse_params(v, "intercept_enable")?;
+                self.intercept_enable(params).await
+            }
+            "intercept_add_rule" => {
+                let params: InterceptAddRuleParams = parse_params(v, "intercept_add_rule")?;
+                self.intercept_add_rule(params).await
+            }
+            "intercept_remove_rule" => {
+                let params: InterceptRemoveRuleParams = parse_params(v, "intercept_remove_rule")?;
+                self.intercept_remove_rule(params).await
+            }
+            "intercept_list" => self.intercept_list(v).await,
+            "intercept_disable" => self.intercept_disable(v).await,
+            "block_requests" => {
+                let params: BlockRequestsParams = parse_params(v, "block_requests")?;
+                self.block_requests(params).await
+            }
+            // Console, Dialog & Error Capture
+            "console_start" => self.console_start(v).await,
+            "console_get" => {
+                let params: ConsoleFilterParams = parse_params(v, "console_get")?;
+                self.console_get(params).await
+            }
+            "console_clear" => self.console_clear(v).await,
+            "dialog_handle" => {
+                let params: DialogHandleParams = parse_params(v, "dialog_handle")?;
+                self.dialog_handle(params).await
+            }
+            "dialog_get" => self.dialog_get(v).await,
+            "errors_get" => self.errors_get(v).await,
+            // Device Emulation
+            "emulate_device" => {
+                let params: EmulateDeviceParams = parse_params(v, "emulate_device")?;
+                self.emulate_device(params).await
+            }
+            "emulate_geolocation" => {
+                let params: EmulateGeolocationParams = parse_params(v, "emulate_geolocation")?;
+                self.emulate_geolocation(params).await
+            }
+            "emulate_timezone" => {
+                let params: EmulateTimezoneParams = parse_params(v, "emulate_timezone")?;
+                self.emulate_timezone(params).await
+            }
+            "emulate_media" => {
+                let params: EmulateMediaParams = parse_params(v, "emulate_media")?;
+                self.emulate_media(params).await
+            }
+            "emulate_network" => {
+                let params: EmulateNetworkParams = parse_params(v, "emulate_network")?;
+                self.emulate_network(params).await
+            }
             other => Err(mcp_err(format!(
                 "unknown browser action: {other}. Available: goto, click, type, screenshot, pdf, \
                  back, forward, reload, wait, evaluate, snapshot, css, xpath, find_text, text, \
@@ -337,7 +390,11 @@ impl OneCrawlMcp {
                  parse_a11y, parse_selector, parse_text, parse_links, new_tab, list_tabs, \
                  switch_tab, close_tab, observe_mutations, get_mutations, stop_mutations, \
                  wait_for_event, cookies_get, cookies_set, cookies_clear, storage_get, \
-                 storage_set, export_session, import_session"
+                 storage_set, export_session, import_session, intercept_enable, \
+                 intercept_add_rule, intercept_remove_rule, intercept_list, intercept_disable, \
+                 block_requests, console_start, console_get, console_clear, dialog_handle, \
+                 dialog_get, errors_get, emulate_device, emulate_geolocation, emulate_timezone, \
+                 emulate_media, emulate_network"
             )))
         }
     }

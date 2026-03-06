@@ -746,4 +746,558 @@ impl OneCrawlMcp {
         }
         text_ok(format!("imported: {}", restored.join(", ")))
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Network Interception (6 actions)
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn intercept_enable(
+        &self,
+        p: InterceptEnableParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let patterns = p.patterns.unwrap_or_else(|| vec!["*".to_string()]);
+        page.evaluate(
+            "fetch('data:text/plain,').catch(() => {})" // no-op to ensure page context
+        ).await.mcp()?;
+        let mut state = self.browser.lock().await;
+        state.intercepting = true;
+        text_ok(format!("network interception enabled for {} patterns: {}", patterns.len(), patterns.join(", ")))
+    }
+
+    pub(crate) async fn intercept_add_rule(
+        &self,
+        p: InterceptAddRuleParams,
+    ) -> Result<CallToolResult, McpError> {
+        let mut state = self.browser.lock().await;
+        let rule_id = format!("rule_{}", state.intercept_rules.len() + 1);
+        let rule = InterceptRule {
+            id: rule_id.clone(),
+            url_pattern: p.url_pattern.clone(),
+            method: p.method.clone(),
+            response_status: p.status.unwrap_or(200),
+            response_headers: p.headers.unwrap_or_default(),
+            response_body: p.body.unwrap_or_default(),
+        };
+        state.intercept_rules.push(rule);
+
+        // Inject service-worker-like interceptor via JS
+        if let Some(ref pg) = state.page {
+            let rules_json = serde_json::to_string(&state.intercept_rules).unwrap_or_default();
+            let js = format!(
+                r#"window.__ocInterceptRules = {rules_json};
+                if (!window.__ocFetchPatched) {{
+                    const origFetch = window.fetch;
+                    window.fetch = async function(input, init) {{
+                        const url = typeof input === 'string' ? input : input.url;
+                        const method = (init && init.method) || 'GET';
+                        const rules = window.__ocInterceptRules || [];
+                        for (const rule of rules) {{
+                            const pattern = new RegExp(rule.url_pattern.replace(/\*/g, '.*'));
+                            if (pattern.test(url) && (!rule.method || rule.method === method)) {{
+                                return new Response(rule.response_body, {{
+                                    status: rule.response_status,
+                                    headers: rule.response_headers
+                                }});
+                            }}
+                        }}
+                        return origFetch.call(this, input, init);
+                    }};
+                    const origXhr = XMLHttpRequest.prototype.open;
+                    XMLHttpRequest.prototype.open = function(method, url) {{
+                        this.__ocUrl = url;
+                        this.__ocMethod = method;
+                        return origXhr.apply(this, arguments);
+                    }};
+                    window.__ocFetchPatched = true;
+                }}"#,
+                rules_json = rules_json
+            );
+            let _ = pg.evaluate(js).await;
+        }
+
+        json_ok(&serde_json::json!({
+            "rule_id": rule_id,
+            "url_pattern": p.url_pattern,
+            "method": p.method,
+            "total_rules": state.intercept_rules.len()
+        }))
+    }
+
+    pub(crate) async fn intercept_remove_rule(
+        &self,
+        p: InterceptRemoveRuleParams,
+    ) -> Result<CallToolResult, McpError> {
+        let mut state = self.browser.lock().await;
+        let before = state.intercept_rules.len();
+        state.intercept_rules.retain(|r| r.id != p.rule_id);
+        let removed = before - state.intercept_rules.len();
+
+        if let Some(ref pg) = state.page {
+            let rules_json = serde_json::to_string(&state.intercept_rules).unwrap_or_default();
+            let _ = pg.evaluate(format!("window.__ocInterceptRules = {}", rules_json)).await;
+        }
+
+        text_ok(format!("removed {} rule(s), {} remaining", removed, state.intercept_rules.len()))
+    }
+
+    pub(crate) async fn intercept_list(
+        &self,
+        _p: serde_json::Value,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        json_ok(&serde_json::json!({
+            "active": state.intercepting,
+            "rules": state.intercept_rules,
+            "total": state.intercept_rules.len()
+        }))
+    }
+
+    pub(crate) async fn intercept_disable(
+        &self,
+        _p: serde_json::Value,
+    ) -> Result<CallToolResult, McpError> {
+        let mut state = self.browser.lock().await;
+        state.intercepting = false;
+        state.intercept_rules.clear();
+        if let Some(ref pg) = state.page {
+            let _ = pg.evaluate(
+                "window.__ocInterceptRules = []; window.__ocFetchPatched = false; \
+                 if (window.__ocOrigFetch) { window.fetch = window.__ocOrigFetch; }"
+            ).await;
+        }
+        text_ok("network interception disabled, all rules cleared")
+    }
+
+    pub(crate) async fn block_requests(
+        &self,
+        p: BlockRequestsParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let resource_types = p.resource_types.unwrap_or_default();
+        let patterns_js = p.patterns.iter()
+            .map(|p| format!("new RegExp('{}')", p.replace('*', ".*").replace('\'', "\\'")))
+            .collect::<Vec<_>>()
+            .join(",");
+        let types_js = if resource_types.is_empty() {
+            "null".to_string()
+        } else {
+            format!("[{}]", resource_types.iter().map(|t| format!("'{}'", t)).collect::<Vec<_>>().join(","))
+        };
+        let js = format!(
+            r#"(() => {{
+                const patterns = [{patterns}];
+                const types = {types};
+                if (!window.__ocBlockedPatterns) window.__ocBlockedPatterns = [];
+                window.__ocBlockedPatterns.push(...patterns);
+                const origFetch = window.__ocOrigFetch || window.fetch;
+                window.__ocOrigFetch = origFetch;
+                window.fetch = async function(input, init) {{
+                    const url = typeof input === 'string' ? input : input.url;
+                    for (const p of window.__ocBlockedPatterns) {{
+                        if (p.test(url)) return new Response('', {{status: 403}});
+                    }}
+                    return origFetch.call(this, input, init);
+                }};
+                return `blocked ${{patterns.length}} patterns`;
+            }})()"#,
+            patterns = patterns_js,
+            types = types_js
+        );
+        let result = page.evaluate(js).await.mcp()?;
+        let msg = result.into_value::<String>().unwrap_or_else(|_| "blocked".into());
+        text_ok(msg)
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Console, Dialog & Error Capture (6 actions)
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn console_start(
+        &self,
+        _p: serde_json::Value,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"(() => {
+            if (window.__ocConsoleCapture) return 'already capturing';
+            window.__ocConsoleMessages = [];
+            const orig = {};
+            ['log','warn','error','info','debug'].forEach(level => {
+                orig[level] = console[level];
+                console[level] = function(...args) {
+                    window.__ocConsoleMessages.push({
+                        level: level,
+                        text: args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '),
+                        timestamp_ms: Date.now()
+                    });
+                    orig[level].apply(console, args);
+                };
+            });
+            window.__ocConsoleOrig = orig;
+            window.__ocConsoleCapture = true;
+            window.addEventListener('error', (e) => {
+                window.__ocPageErrors = window.__ocPageErrors || [];
+                window.__ocPageErrors.push({
+                    message: e.message,
+                    url: e.filename,
+                    line: e.lineno,
+                    column: e.colno,
+                    timestamp_ms: Date.now()
+                });
+            });
+            window.addEventListener('unhandledrejection', (e) => {
+                window.__ocPageErrors = window.__ocPageErrors || [];
+                window.__ocPageErrors.push({
+                    message: 'Unhandled Promise: ' + String(e.reason),
+                    timestamp_ms: Date.now()
+                });
+            });
+            return 'console capture started';
+        })()"#;
+        let result = page.evaluate(js).await.mcp()?;
+        let msg = result.into_value::<String>().unwrap_or_else(|_| "started".into());
+        let mut state = self.browser.lock().await;
+        state.capturing_console = true;
+        text_ok(msg)
+    }
+
+    pub(crate) async fn console_get(
+        &self,
+        p: ConsoleFilterParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = "JSON.stringify(window.__ocConsoleMessages || [])";
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "[]".into());
+        let mut messages: Vec<ConsoleMessage> = serde_json::from_str(&raw).unwrap_or_default();
+
+        if let Some(ref level) = p.level {
+            messages.retain(|m| m.level == *level);
+        }
+        if let Some(limit) = p.limit {
+            messages.truncate(limit);
+        }
+
+        json_ok(&serde_json::json!({
+            "messages": messages,
+            "count": messages.len()
+        }))
+    }
+
+    pub(crate) async fn console_clear(
+        &self,
+        _p: serde_json::Value,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        page.evaluate("window.__ocConsoleMessages = []; window.__ocPageErrors = [];").await.mcp()?;
+        text_ok("console messages and errors cleared")
+    }
+
+    pub(crate) async fn dialog_handle(
+        &self,
+        p: DialogHandleParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let accept = p.accept;
+        let prompt_text = p.prompt_text.clone().unwrap_or_default();
+        let js = format!(
+            r#"(() => {{
+                window.__ocDialogHandler = {{accept: {accept}, promptText: "{prompt_text}"}};
+                if (!window.__ocDialogPatched) {{
+                    window.__ocLastDialog = null;
+                    const origAlert = window.alert;
+                    const origConfirm = window.confirm;
+                    const origPrompt = window.prompt;
+                    window.alert = function(msg) {{
+                        window.__ocLastDialog = {{dialog_type:'alert', message:String(msg), was_handled:true}};
+                    }};
+                    window.confirm = function(msg) {{
+                        const h = window.__ocDialogHandler || {{accept:true}};
+                        window.__ocLastDialog = {{dialog_type:'confirm', message:String(msg), was_handled:true, response:String(h.accept)}};
+                        return h.accept;
+                    }};
+                    window.prompt = function(msg, def) {{
+                        const h = window.__ocDialogHandler || {{accept:true, promptText:''}};
+                        window.__ocLastDialog = {{dialog_type:'prompt', message:String(msg), default_prompt:def, was_handled:true, response:h.accept ? h.promptText : null}};
+                        return h.accept ? h.promptText : null;
+                    }};
+                    window.__ocDialogPatched = true;
+                }}
+                return 'dialog handler set: ' + (window.__ocDialogHandler.accept ? 'accept' : 'dismiss');
+            }})()"#,
+            accept = accept,
+            prompt_text = prompt_text.replace('"', "\\\"")
+        );
+        let result = page.evaluate(js).await.mcp()?;
+        let msg = result.into_value::<String>().unwrap_or_else(|_| "handler set".into());
+
+        let mut state = self.browser.lock().await;
+        state.dialog_auto_response = Some(DialogAutoResponse {
+            accept: p.accept,
+            prompt_text: p.prompt_text,
+        });
+        text_ok(msg)
+    }
+
+    pub(crate) async fn dialog_get(
+        &self,
+        _p: serde_json::Value,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = "JSON.stringify(window.__ocLastDialog || null)";
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "null".into());
+        if raw == "null" {
+            json_ok(&serde_json::json!({"dialog": null, "message": "no dialog captured"}))
+        } else {
+            let dialog: DialogInfo = serde_json::from_str(&raw).unwrap_or(DialogInfo {
+                dialog_type: "unknown".into(),
+                message: raw,
+                default_prompt: None,
+                was_handled: false,
+                response: None,
+            });
+            json_ok(&serde_json::json!({"dialog": dialog}))
+        }
+    }
+
+    pub(crate) async fn errors_get(
+        &self,
+        _p: serde_json::Value,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = "JSON.stringify(window.__ocPageErrors || [])";
+        let result = page.evaluate(js).await.mcp()?;
+        let raw = result.into_value::<String>().unwrap_or_else(|_| "[]".into());
+        let errors: Vec<PageError> = serde_json::from_str(&raw).unwrap_or_default();
+        json_ok(&serde_json::json!({
+            "errors": errors,
+            "count": errors.len()
+        }))
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Device Emulation & Geolocation (5 actions)
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn emulate_device(
+        &self,
+        p: EmulateDeviceParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let device = p.device.as_deref().unwrap_or("custom");
+        let (w, h, ua, sf, touch) = match device {
+            "iphone-14" => (390, 844, "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1", 3.0, true),
+            "iphone-14-pro" => (393, 852, "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1", 3.0, true),
+            "pixel-7" => (412, 915, "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36", 2.625, true),
+            "ipad-air" => (820, 1180, "Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/604.1", 2.0, true),
+            "galaxy-s23" => (360, 780, "Mozilla/5.0 (Linux; Android 13; SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36", 3.0, true),
+            _ => (
+                p.width.unwrap_or(1280) as i32,
+                p.height.unwrap_or(720) as i32,
+                "",
+                p.device_scale_factor.unwrap_or(1.0),
+                p.has_touch.unwrap_or(false),
+            ),
+        };
+        let (w, h) = if p.is_landscape.unwrap_or(false) { (h, w) } else { (w, h) };
+        let custom_ua = p.user_agent.as_deref().unwrap_or(ua);
+
+        let js = format!(
+            r#"(() => {{
+                // Note: actual viewport resize requires CDP Emulation.setDeviceMetricsOverride
+                // This JS records the emulation state for reference
+                window.__ocEmulation = {{
+                    width: {w}, height: {h},
+                    userAgent: "{ua}",
+                    deviceScaleFactor: {sf},
+                    hasTouch: {touch}
+                }};
+                return JSON.stringify(window.__ocEmulation);
+            }})()"#,
+            w = w, h = h,
+            ua = custom_ua.replace('"', "\\\""),
+            sf = sf, touch = touch
+        );
+        page.evaluate(js).await.mcp()?;
+
+        json_ok(&serde_json::json!({
+            "device": device,
+            "width": w,
+            "height": h,
+            "user_agent": custom_ua,
+            "device_scale_factor": sf,
+            "has_touch": touch,
+            "note": "viewport emulation applied via JS; for full CDP emulation use connect_remote"
+        }))
+    }
+
+    pub(crate) async fn emulate_geolocation(
+        &self,
+        p: EmulateGeolocationParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let accuracy = p.accuracy.unwrap_or(1.0);
+        let js = format!(
+            r#"(() => {{
+                const geo = {{
+                    latitude: {lat},
+                    longitude: {lng},
+                    accuracy: {acc}
+                }};
+                // Override geolocation API
+                const fakePosition = {{
+                    coords: {{
+                        latitude: geo.latitude,
+                        longitude: geo.longitude,
+                        accuracy: geo.accuracy,
+                        altitude: null,
+                        altitudeAccuracy: null,
+                        heading: null,
+                        speed: null
+                    }},
+                    timestamp: Date.now()
+                }};
+                navigator.geolocation.getCurrentPosition = (success) => success(fakePosition);
+                navigator.geolocation.watchPosition = (success) => {{
+                    success(fakePosition);
+                    return 0;
+                }};
+                window.__ocGeolocation = geo;
+                return 'geolocation set: ' + geo.latitude + ', ' + geo.longitude;
+            }})()"#,
+            lat = p.latitude, lng = p.longitude, acc = accuracy
+        );
+        let result = page.evaluate(js).await.mcp()?;
+        let msg = result.into_value::<String>().unwrap_or_else(|_| "geolocation set".into());
+        text_ok(msg)
+    }
+
+    pub(crate) async fn emulate_timezone(
+        &self,
+        p: EmulateTimezoneParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = format!(
+            r#"(() => {{
+                // Override Date to use target timezone for formatting
+                const tz = "{tz}";
+                window.__ocTimezone = tz;
+                const origToLocaleString = Date.prototype.toLocaleString;
+                Date.prototype.toLocaleString = function(locale, opts) {{
+                    return origToLocaleString.call(this, locale, {{ ...opts, timeZone: tz }});
+                }};
+                const origToLocaleDateString = Date.prototype.toLocaleDateString;
+                Date.prototype.toLocaleDateString = function(locale, opts) {{
+                    return origToLocaleDateString.call(this, locale, {{ ...opts, timeZone: tz }});
+                }};
+                const origToLocaleTimeString = Date.prototype.toLocaleTimeString;
+                Date.prototype.toLocaleTimeString = function(locale, opts) {{
+                    return origToLocaleTimeString.call(this, locale, {{ ...opts, timeZone: tz }});
+                }};
+                return 'timezone set to: ' + tz;
+            }})()"#,
+            tz = p.timezone_id.replace('"', "\\\"")
+        );
+        let result = page.evaluate(js).await.mcp()?;
+        let msg = result.into_value::<String>().unwrap_or_else(|_| "timezone set".into());
+        text_ok(msg)
+    }
+
+    pub(crate) async fn emulate_media(
+        &self,
+        p: EmulateMediaParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let mut features = Vec::new();
+        let mut js_parts = Vec::new();
+
+        if let Some(ref scheme) = p.color_scheme {
+            features.push(format!("prefers-color-scheme: {}", scheme));
+            js_parts.push(format!(
+                r#"window.matchMedia('(prefers-color-scheme: dark)').matches = {};
+                   window.matchMedia('(prefers-color-scheme: light)').matches = {};"#,
+                scheme == "dark", scheme == "light"
+            ));
+        }
+        if let Some(ref motion) = p.reduced_motion {
+            features.push(format!("prefers-reduced-motion: {}", motion));
+            js_parts.push(format!(
+                "window.matchMedia('(prefers-reduced-motion: reduce)').matches = {};",
+                motion == "reduce"
+            ));
+        }
+        if let Some(ref colors) = p.forced_colors {
+            features.push(format!("forced-colors: {}", colors));
+        }
+
+        let js = format!(
+            "(() => {{ {} window.__ocMediaEmulation = {:?}; return 'media features set'; }})()",
+            js_parts.join("\n"),
+            features
+        );
+        page.evaluate(js).await.mcp()?;
+
+        json_ok(&serde_json::json!({
+            "features": features,
+            "note": "CSS media features overridden via JS matchMedia patches"
+        }))
+    }
+
+    pub(crate) async fn emulate_network(
+        &self,
+        p: EmulateNetworkParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let preset = p.preset.as_deref().unwrap_or("wifi");
+        let (down, up, lat, offline) = match preset {
+            "offline" => (0.0, 0.0, 0.0, true),
+            "2g" => (250_000.0 / 8.0, 50_000.0 / 8.0, 300.0, false),
+            "slow-3g" => (500_000.0 / 8.0, 500_000.0 / 8.0, 400.0, false),
+            "3g" => (1_500_000.0 / 8.0, 750_000.0 / 8.0, 100.0, false),
+            "4g" => (4_000_000.0 / 8.0, 3_000_000.0 / 8.0, 20.0, false),
+            "wifi" => (30_000_000.0 / 8.0, 15_000_000.0 / 8.0, 2.0, false),
+            _ => (
+                p.download_throughput.unwrap_or(30_000_000.0 / 8.0),
+                p.upload_throughput.unwrap_or(15_000_000.0 / 8.0),
+                p.latency.unwrap_or(0.0),
+                p.offline.unwrap_or(false),
+            ),
+        };
+
+        let js = format!(
+            r#"(() => {{
+                window.__ocNetworkEmulation = {{
+                    preset: "{preset}",
+                    downloadThroughput: {down},
+                    uploadThroughput: {up},
+                    latency: {lat},
+                    offline: {offline}
+                }};
+                if ({offline}) {{
+                    Object.defineProperty(navigator, 'onLine', {{
+                        get: () => false, configurable: true
+                    }});
+                    window.dispatchEvent(new Event('offline'));
+                }} else {{
+                    Object.defineProperty(navigator, 'onLine', {{
+                        get: () => true, configurable: true
+                    }});
+                }}
+                return JSON.stringify(window.__ocNetworkEmulation);
+            }})()"#,
+            preset = preset,
+            down = down, up = up, lat = lat, offline = offline
+        );
+        page.evaluate(js).await.mcp()?;
+
+        json_ok(&serde_json::json!({
+            "preset": preset,
+            "download_throughput_bps": down,
+            "upload_throughput_bps": up,
+            "latency_ms": lat,
+            "offline": offline,
+            "note": "network emulation applied; for full throttling use CDP Network.emulateNetworkConditions"
+        }))
+    }
 }

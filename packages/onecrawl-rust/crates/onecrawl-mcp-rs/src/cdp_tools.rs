@@ -25,6 +25,15 @@ pub struct BrowserState {
     pub memory: Option<onecrawl_cdp::AgentMemory>,
     pub mutation_buffer: Vec<serde_json::Value>,
     pub observing_mutations: bool,
+    // Network interception
+    pub intercept_rules: Vec<InterceptRule>,
+    pub intercepting: bool,
+    // Console & dialog capture
+    pub console_messages: Vec<ConsoleMessage>,
+    pub capturing_console: bool,
+    pub last_dialog: Option<DialogInfo>,
+    pub dialog_auto_response: Option<DialogAutoResponse>,
+    pub page_errors: Vec<PageError>,
 }
 
 pub type SharedBrowser = Arc<Mutex<BrowserState>>;
@@ -674,4 +683,174 @@ pub struct SessionExportParams {
 pub struct SessionImportParams {
     #[schemars(description = "Session state JSON (from export_session)")]
     pub state: String,
+}
+
+// ──────────────── Network Interception types & params ─────────────────
+
+#[derive(Debug, Clone, serde::Serialize, Deserialize)]
+pub struct InterceptRule {
+    pub id: String,
+    pub url_pattern: String,
+    pub method: Option<String>,
+    pub response_status: u16,
+    pub response_headers: HashMap<String, String>,
+    pub response_body: String,
+}
+
+impl Default for InterceptRule {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            url_pattern: String::new(),
+            method: None,
+            response_status: 200,
+            response_headers: HashMap::new(),
+            response_body: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct InterceptEnableParams {
+    #[schemars(description = "URL patterns to intercept (glob syntax, e.g. '**/api/*')")]
+    pub patterns: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct InterceptAddRuleParams {
+    #[schemars(description = "URL pattern to match (glob syntax)")]
+    pub url_pattern: String,
+    #[schemars(description = "HTTP method to match (GET, POST, etc.) — omit to match all")]
+    pub method: Option<String>,
+    #[schemars(description = "Mock response HTTP status code")]
+    pub status: Option<u16>,
+    #[schemars(description = "Mock response headers as JSON object")]
+    pub headers: Option<HashMap<String, String>>,
+    #[schemars(description = "Mock response body")]
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct InterceptRemoveRuleParams {
+    #[schemars(description = "Rule ID to remove (from intercept_add_rule response)")]
+    pub rule_id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct BlockRequestsParams {
+    #[schemars(description = "URL patterns to block (glob syntax)")]
+    pub patterns: Vec<String>,
+    #[schemars(description = "Resource types to block: 'image', 'stylesheet', 'script', 'font', 'media'")]
+    pub resource_types: Option<Vec<String>>,
+}
+
+// ──────────────── Console, Dialog & Error types & params ─────────────────
+
+#[derive(Debug, Clone, serde::Serialize, Deserialize)]
+pub struct ConsoleMessage {
+    pub level: String,
+    pub text: String,
+    pub url: Option<String>,
+    pub line: Option<u32>,
+    pub timestamp_ms: u64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, Deserialize)]
+pub struct DialogInfo {
+    pub dialog_type: String,
+    pub message: String,
+    pub default_prompt: Option<String>,
+    pub was_handled: bool,
+    pub response: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, Deserialize)]
+pub struct DialogAutoResponse {
+    pub accept: bool,
+    pub prompt_text: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, Deserialize)]
+pub struct PageError {
+    pub message: String,
+    pub url: Option<String>,
+    pub line: Option<u32>,
+    pub column: Option<u32>,
+    pub timestamp_ms: u64,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct DialogHandleParams {
+    #[schemars(description = "Accept (true) or dismiss (false) dialogs")]
+    pub accept: bool,
+    #[schemars(description = "Text to enter for prompt() dialogs")]
+    pub prompt_text: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ConsoleFilterParams {
+    #[schemars(description = "Filter by level: 'log', 'warn', 'error', 'info'")]
+    pub level: Option<String>,
+    #[schemars(description = "Max number of messages to return")]
+    pub limit: Option<usize>,
+}
+
+// ──────────────── Device Emulation params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct EmulateDeviceParams {
+    #[schemars(description = "Preset device: 'iphone-14', 'iphone-14-pro', 'pixel-7', 'ipad-air', 'galaxy-s23', or 'custom'")]
+    pub device: Option<String>,
+    #[schemars(description = "Custom viewport width (for device='custom')")]
+    pub width: Option<u32>,
+    #[schemars(description = "Custom viewport height (for device='custom')")]
+    pub height: Option<u32>,
+    #[schemars(description = "Custom user agent string")]
+    pub user_agent: Option<String>,
+    #[schemars(description = "Device scale factor (default: 1)")]
+    pub device_scale_factor: Option<f64>,
+    #[schemars(description = "Emulate touch events")]
+    pub has_touch: Option<bool>,
+    #[schemars(description = "Landscape orientation")]
+    pub is_landscape: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct EmulateGeolocationParams {
+    #[schemars(description = "Latitude")]
+    pub latitude: f64,
+    #[schemars(description = "Longitude")]
+    pub longitude: f64,
+    #[schemars(description = "Accuracy in meters (default: 1)")]
+    pub accuracy: Option<f64>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct EmulateTimezoneParams {
+    #[schemars(description = "Timezone ID (e.g. 'America/New_York', 'Europe/Rome', 'Asia/Tokyo')")]
+    pub timezone_id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct EmulateMediaParams {
+    #[schemars(description = "prefers-color-scheme: 'light', 'dark', or 'no-preference'")]
+    pub color_scheme: Option<String>,
+    #[schemars(description = "prefers-reduced-motion: 'reduce' or 'no-preference'")]
+    pub reduced_motion: Option<String>,
+    #[schemars(description = "forced-colors: 'active' or 'none'")]
+    pub forced_colors: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct EmulateNetworkParams {
+    #[schemars(description = "Preset: 'offline', '2g', 'slow-3g', '3g', '4g', 'wifi', or 'custom'")]
+    pub preset: Option<String>,
+    #[schemars(description = "Download throughput in bytes/sec (for preset='custom')")]
+    pub download_throughput: Option<f64>,
+    #[schemars(description = "Upload throughput in bytes/sec (for preset='custom')")]
+    pub upload_throughput: Option<f64>,
+    #[schemars(description = "Latency in ms (for preset='custom')")]
+    pub latency: Option<f64>,
+    #[schemars(description = "Simulate offline mode")]
+    pub offline: Option<bool>,
 }
