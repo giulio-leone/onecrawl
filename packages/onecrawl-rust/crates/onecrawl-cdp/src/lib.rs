@@ -4,6 +4,8 @@
 
 pub mod accessibility;
 pub mod adaptive;
+pub mod browser_pool;
+pub mod computer_use;
 pub mod adaptive_fetch;
 pub mod advanced_emulation;
 pub mod antibot;
@@ -62,6 +64,7 @@ pub mod session_pool;
 pub mod shell;
 pub mod skills;
 pub mod sitemap;
+pub mod smart_actions;
 pub mod snapshot;
 pub mod spider;
 pub mod stealth;
@@ -77,6 +80,9 @@ pub mod safety;
 pub mod webauthn;
 pub mod websocket;
 pub mod workers;
+
+pub use browser_pool::{BrowserInstance, BrowserPool, BrowserStatus, SharedPool, new_shared_pool};
+pub use smart_actions::SmartMatch;
 
 pub use accessibility::AccessibilityAudit;
 pub use adaptive::{ElementFingerprint, ElementMatch, TrackedElement};

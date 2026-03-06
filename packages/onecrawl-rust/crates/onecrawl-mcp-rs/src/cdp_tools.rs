@@ -19,6 +19,7 @@ pub struct BrowserState {
     pub safety: Option<onecrawl_cdp::SafetyState>,
     pub recording: Option<onecrawl_cdp::RecordingState>,
     pub ios_client: Option<onecrawl_cdp::ios::IosClient>,
+    pub pool: onecrawl_cdp::BrowserPool,
 }
 
 pub type SharedBrowser = Arc<Mutex<BrowserState>>;
@@ -492,4 +493,64 @@ pub struct IosTapParams {
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct IosScreenshotParams {
     // no params needed — returns base64 image
+}
+
+// ──────────────── Computer Use Protocol params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ComputerUseActionParams {
+    #[schemars(
+        description = "Action to perform. JSON object with a \"type\" field. Types: click (with x,y or selector or ref), type (text), key (key name), scroll (x, y, delta_x, delta_y), navigate (url), wait (ms), screenshot, observe, evaluate (expression), fill (selector, value), select (selector, value), drag (from_x, from_y, to_x, to_y), done (result), fail (reason)"
+    )]
+    pub action: serde_json::Value,
+    #[schemars(description = "Include screenshot in observation (default: false)")]
+    pub include_screenshot: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ComputerUseObserveParams {
+    #[schemars(description = "Include base64 screenshot in observation")]
+    pub include_screenshot: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ComputerUseBatchParams {
+    #[schemars(
+        description = "List of actions to execute in sequence. Each action is a JSON object with a \"type\" field."
+    )]
+    pub actions: Vec<serde_json::Value>,
+    #[schemars(description = "Include screenshots between actions (default: false)")]
+    pub include_screenshots: Option<bool>,
+    #[schemars(description = "Stop on first error (default: true)")]
+    pub stop_on_error: Option<bool>,
+}
+
+// ──────────────── Browser Pool params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct PoolListParams {}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct PoolStatusParams {}
+
+// ──────────────── Smart Actions params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SmartFindParams {
+    #[schemars(description = "Fuzzy text, CSS selector, or element description to search for")]
+    pub query: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SmartClickParams {
+    #[schemars(description = "Fuzzy text, CSS selector, or element description to click")]
+    pub query: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SmartFillParams {
+    #[schemars(description = "Fuzzy text, CSS selector, or element description of the input to fill")]
+    pub query: String,
+    #[schemars(description = "Value to type into the matched input")]
+    pub value: String,
 }
