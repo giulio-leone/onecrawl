@@ -1,6 +1,6 @@
 # OneCrawl MCP API Reference
 
-> **10 consolidated tools • 148 actions • Action-based dispatch**
+> **10 consolidated tools • 159 actions • Action-based dispatch**
 
 All browser automation, crawling, scraping, security, and AI orchestration capabilities are accessed through 10 super-tools. Each tool accepts a uniform `{ action, params }` interface.
 
@@ -10,7 +10,7 @@ All browser automation, crawling, scraping, security, and AI orchestration capab
 
 | Tool | Actions | Description |
 |------|:-------:|-------------|
-| [`browser`](#1-browser) | 58 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage, network interception, console & errors, device emulation |
+| [`browser`](#1-browser) | 69 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage, network interception, console & errors, device emulation, file operations, shadow DOM |
 | [`crawl`](#2-crawl) | 5 | Web crawling, robots.txt, sitemaps, DOM snapshots |
 | [`agent`](#3-agent) | 21 | Command chains, API capture, iframes, remote CDP, safety, screencast, recording, iOS |
 | [`stealth`](#4-stealth) | 5 | Anti-detection patches, fingerprinting, CAPTCHA detection |
@@ -117,6 +117,20 @@ A headless Chromium browser is launched automatically on the first call that req
 | `emulate_timezone` | `{timezone_id}` | Override timezone (e.g. 'America/New_York') |
 | `emulate_media` | `{color_scheme?, reduced_motion?, forced_colors?}` | Override CSS media features |
 | `emulate_network` | `{preset?, download_throughput?, upload_throughput?, latency?, offline?}` | Throttle network (presets: offline, 2g, 3g, 4g, wifi, etc.) or custom |
+| | | **Interaction** |
+| `drag` | `{source, target}` | Drag and drop between elements |
+| `hover` | `{selector}` | Mouse hover on element |
+| `keyboard` | `{keys, selector?}` | Send keyboard shortcuts/key combinations |
+| `select` | `{selector, value?, text?, index?}` | Select dropdown option by value, text, or index |
+| | | **File Operations** |
+| `upload` | `{selector, file_path}` | Set file on a file input element |
+| `download_wait` | `{timeout?, dir?}` | Wait for download to complete |
+| `download_list` | — | List detected downloads |
+| `download_set_dir` | `{path}` | Set download directory |
+| | | **Shadow DOM** |
+| `shadow_query` | `{host_selector, inner_selector}` | Query inside shadow DOM |
+| `shadow_text` | `{host_selector, inner_selector}` | Get text content from shadow DOM element |
+| `deep_query` | `{selector}` | Pierce multiple shadow DOM layers with `>>>` delimiter |
 
 #### Action Details
 
@@ -954,6 +968,231 @@ Simulate network conditions using a preset or custom throughput/latency values.
 | `offline` | boolean | | Simulate offline mode |
 
 **Response:** `"network emulation — <preset or custom>"`
+</details>
+
+<details>
+<summary><strong><code>drag</code></strong> — Drag and drop between elements</summary>
+
+Perform a drag-and-drop operation from a source element to a target element. Dispatches mousedown, mousemove, and mouseup events.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `source` | string | ✅ | CSS selector of the element to drag |
+| `target` | string | ✅ | CSS selector of the drop target element |
+
+**Response:** `"dragged <source> → <target>"`
+
+**Example:**
+
+```json
+{"action":"drag","params":{"source":"#item1","target":"#dropzone"}}
+```
+</details>
+
+<details>
+<summary><strong><code>hover</code></strong> — Mouse hover on element</summary>
+
+Move the mouse over an element, dispatching `mouseenter`, `mouseover`, and `mousemove` events. Useful for triggering hover menus, tooltips, or CSS `:hover` states.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | ✅ | CSS selector of the element to hover |
+
+**Response:** `"hovered <selector>"`
+
+**Example:**
+
+```json
+{"action":"hover","params":{"selector":".menu-trigger"}}
+```
+</details>
+
+<details>
+<summary><strong><code>keyboard</code></strong> — Send keyboard shortcuts/key combinations</summary>
+
+Send keyboard shortcuts or key combinations to the page or a specific element. Key names follow the Playwright key format (e.g. `Control+a`, `Enter`, `Shift+Tab`, `Meta+c`).
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `keys` | string | ✅ | Key combination (e.g. `"Control+a"`, `"Enter"`, `"Shift+Tab"`) |
+| `selector` | string | | CSS selector to focus before sending keys (omit for active element) |
+
+**Response:** `"keyboard <keys> sent"`
+
+**Example:**
+
+```json
+{"action":"keyboard","params":{"keys":"Control+a","selector":"#editor"}}
+```
+</details>
+
+<details>
+<summary><strong><code>select</code></strong> — Select dropdown option</summary>
+
+Select an option in a `<select>` element by value, visible text, or numeric index.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | ✅ | CSS selector of the `<select>` element |
+| `value` | string | | Option `value` attribute to select |
+| `text` | string | | Visible text of the option to select |
+| `index` | number | | Zero-based index of the option to select |
+
+**Response:** `{"selected":"<value>","options_count":<n>}`
+
+**Example:**
+
+```json
+{"action":"select","params":{"selector":"#country","value":"it"}}
+```
+</details>
+
+<details>
+<summary><strong><code>upload</code></strong> — Set file on input element</summary>
+
+Set a file on a `<input type="file">` element. The file must be accessible on the local filesystem.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | ✅ | CSS selector of the file input element |
+| `file_path` | string | ✅ | Absolute path to the file to upload |
+
+**Response:** `"file set on <selector> — <filename>"`
+
+**Example:**
+
+```json
+{"action":"upload","params":{"selector":"input[type=file]","file_path":"/tmp/doc.pdf"}}
+```
+</details>
+
+<details>
+<summary><strong><code>download_wait</code></strong> — Wait for download to complete</summary>
+
+Wait for a browser-initiated download to finish. Returns download metadata once complete or times out.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `timeout` | number | | Timeout in milliseconds (default `30000`) |
+| `dir` | string | | Directory to save the download |
+
+**Response:** `{"status":"completed","url":"<url>","dir":"<path>"}`
+
+**Example:**
+
+```json
+{"action":"download_wait","params":{"timeout":10000}}
+```
+</details>
+
+<details>
+<summary><strong><code>download_list</code></strong> — List detected downloads</summary>
+
+List all downloads detected via the Performance API during the current session.
+
+**Params:** None.
+
+**Response:** `{"downloads":[{"url":"...","size_bytes":...,"duration_ms":...}],"count":<n>}`
+
+**Example:**
+
+```json
+{"action":"download_list","params":{}}
+```
+</details>
+
+<details>
+<summary><strong><code>download_set_dir</code></strong> — Set download directory</summary>
+
+Configure the directory where browser downloads are saved.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `path` | string | ✅ | Absolute path to the download directory |
+
+**Response:** `"download dir set to <path>"`
+
+**Example:**
+
+```json
+{"action":"download_set_dir","params":{"path":"/tmp/downloads"}}
+```
+</details>
+
+<details>
+<summary><strong><code>shadow_query</code></strong> — Query inside shadow DOM</summary>
+
+Query elements inside a shadow DOM tree. First locates the shadow host, then queries within its shadow root.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `host_selector` | string | ✅ | CSS selector of the shadow host element |
+| `inner_selector` | string | ✅ | CSS selector to query inside the shadow root |
+
+**Response:** `{"elements":[{"index":0,"tag":"...","text":"...","id":"...","classes":[],"attributes":{}}],"count":<n>}`
+
+**Example:**
+
+```json
+{"action":"shadow_query","params":{"host_selector":"my-element","inner_selector":".inner-btn"}}
+```
+</details>
+
+<details>
+<summary><strong><code>shadow_text</code></strong> — Get text from shadow DOM element</summary>
+
+Extract text content and inner HTML from an element inside a shadow DOM tree.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `host_selector` | string | ✅ | CSS selector of the shadow host element |
+| `inner_selector` | string | ✅ | CSS selector of the target element inside the shadow root |
+
+**Response:** `{"text":"...","html":"..."}`
+
+**Example:**
+
+```json
+{"action":"shadow_text","params":{"host_selector":"my-element","inner_selector":".title"}}
+```
+</details>
+
+<details>
+<summary><strong><code>deep_query</code></strong> — Pierce multiple shadow DOM layers</summary>
+
+Query elements across multiple shadow DOM boundaries using the `>>>` delimiter. Each segment pierces one shadow root, enabling deep traversal of nested web components.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | ✅ | Piercing selector using `>>>` to cross shadow boundaries (e.g. `"my-app >>> .inner >>> button"`) |
+
+**Response:** `{"elements":[{"index":0,"tag":"...","text":"...","id":"...","classes":[],"attributes":{},"depth":<n>}],"count":<n>}`
+
+**Example:**
+
+```json
+{"action":"deep_query","params":{"selector":"my-app >>> .content >>> button"}}
+```
 </details>
 
 ---

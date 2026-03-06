@@ -13,10 +13,10 @@ packages/onecrawl-rust/
 │   ├── onecrawl-storage/    # Encrypted key-value store (sled)
 │   ├── onecrawl-cdp/        # Chrome DevTools Protocol — 63 modules (chromiumoxide)
 │   ├── onecrawl-server/     # HTTP REST API with multi-instance management (axum)
-│   ├── onecrawl-cli-rs/     # Native CLI — 200+ commands (clap)
-│   └── onecrawl-mcp-rs/     # MCP server — 43 tools (rmcp, stdio + SSE)
+│   ├── onecrawl-cli-rs/     # Native CLI — 200+ commands (clap v4)
+│   └── onecrawl-mcp-rs/     # MCP server — 10 super-tools, 159 actions (rmcp)
 ├── bindings/
-│   ├── napi/                # Node.js via NAPI-RS → @onecrawl/native
+│   ├── napi/                # Node.js via NAPI-RS → @onecrawl/native (307 methods)
 │   └── python/              # Python via PyO3 → onecrawl
 └── Cargo.toml               # Workspace root
 ```
@@ -27,13 +27,17 @@ packages/onecrawl-rust/
 |----------|-----------|
 | **Browser** | Launch, connect, stealth mode, proxy rotation, fingerprint evasion |
 | **CDP** | 63 modules: DOM, Network, CSS, Performance, Accessibility, Profiler, Tracing, WebAuthn… |
-| **Navigation** | goto, back, forward, reload, wait-for-navigation, screenshot, PDF |
-| **Scraping** | CSS selectors, XPath, accessibility tree, readability extraction |
-| **Crawling** | Spider, sitemap, link graph, robots.txt, search engines |
-| **Auth** | WebAuthn/Passkey virtual authenticator, cookie management, session persistence |
+| **Navigation** | goto, back, forward, reload, wait, screenshot, PDF, multi-tab |
+| **Interaction** | click, type, drag & drop, hover, keyboard shortcuts, select, file upload |
+| **Scraping** | CSS selectors, XPath, accessibility tree, shadow DOM piercing, streaming extraction |
+| **Crawling** | Spider, sitemap, link graph, robots.txt, DOM snapshot diff |
+| **Network** | Request interception, mock responses, URL blocking, console capture, dialog handling |
+| **Emulation** | Device emulation, geolocation, timezone, media features, network throttling |
+| **Auth** | WebAuthn/Passkey virtual authenticator, cookie/session management, import/export |
 | **Crypto** | AES-256-GCM encryption, PKCE, TOTP, PBKDF2 key derivation |
+| **AI Agent** | Agent memory, workflow DSL, task planner, visual regression testing, performance monitor |
 | **Server** | Multi-instance Chrome, profiles, tabs, accessibility snapshots, action API |
-| **MCP** | 43 tools with dot-separated namespacing for AI agent orchestration |
+| **MCP** | 10 super-tools with 159 actions for AI agent orchestration |
 
 ## Installation
 
@@ -51,11 +55,12 @@ npm install @onecrawl/native
 ```
 
 ```javascript
-const { NativeBrowser } = require('@onecrawl/native');
+import { NativeBrowser } from '@onecrawl/native';
 
-const browser = await NativeBrowser.launch({ headless: true, stealth: true });
+const browser = await NativeBrowser.launch(true); // headless
 await browser.goto('https://example.com');
-const html = await browser.content();
+const title = await browser.getTitle();
+const screenshot = await browser.screenshot(); // Buffer
 await browser.close();
 ```
 
@@ -149,17 +154,39 @@ curl http://localhost:9867/instances/{id}/tabs/{tab}/text
 
 ## MCP Integration
 
-43 tools organized by namespace:
+10 super-tools with 159 total actions, using action-based dispatch:
 
-| Namespace | Tools |
-|-----------|-------|
-| `navigation.*` | goto, back, forward, reload, wait_for_navigation, screenshot, pdf |
-| `scraping.*` | css, xpath, accessibility_tree, readability, extract_links, extract_media |
-| `crawling.*` | spider, sitemap, link_graph, robots, search_engine |
-| `stealth.*` | enable, disable, rotate_fingerprint, proxy_health |
-| `data.*` | cookies_get, cookies_set, cookies_clear, storage_get, storage_set |
-| `automation.*` | click, type, fill, select, hover, scroll, keyboard, mouse |
-| `auth.*` | passkey_enable, passkey_create, passkey_get, passkey_remove, passkey_sign_count, passkey_log |
+```json
+{"action": "goto", "params": {"url": "https://example.com"}}
+```
+
+| Super-Tool | Actions | Highlights |
+|------------|---------|------------|
+| **browser** | 69 | Navigation, interaction, extraction, multi-tab, DOM events, session, network interception, console/dialog, device emulation, drag/drop, file upload, shadow DOM |
+| **crawl** | 5 | Spider, robots.txt, sitemap, DOM snapshot/diff |
+| **agent** | 21 | Stealth, fingerprint, anti-bot detection, proxy health, CAPTCHA |
+| **stealth** | 5 | Enable/disable stealth, rotate fingerprint, proxy health |
+| **data** | 10 | Cookies, storage, session import/export, structured data |
+| **secure** | 13 | WebAuthn/Passkey, vault, import from Bitwarden/1Password |
+| **computer** | 8 | AI computer-use: coordinate clicks, mouse, keyboard, screenshot |
+| **memory** | 6 | Agent memory: store, recall, search, forget, list, export |
+| **automate** | 7 | Workflow DSL: run, validate, list, templates |
+| **perf** | 7 | Performance: audit, metrics, budget, trace, VRT comparison |
+
+> Full API reference: [`docs/MCP_API_REFERENCE.md`](docs/MCP_API_REFERENCE.md)
+
+## Node.js Bindings
+
+`@onecrawl/native` exposes **307 methods** via NAPI-RS (direct FFI, no child process overhead):
+
+| Class/Module | Methods | Description |
+|-------------|---------|-------------|
+| **NativeBrowser** | 290 | Full browser control: navigation, interaction, scraping, crawling, emulation, auth, network, performance |
+| **NativeStore** | 7 | Encrypted key-value store (sled) |
+| **Crypto** | 6 | AES-256-GCM, PKCE, TOTP, PBKDF2 |
+| **Parser** | 4 | A11y tree, CSS selector, text/link extraction |
+
+Features: TypeScript types (`index.d.ts`), async/await, Buffer support, 33 test files (3,995 lines), 8-platform cross-compilation.
 
 ## Development
 
@@ -169,26 +196,25 @@ cd packages/onecrawl-rust
 # Build all crates
 cargo build --workspace
 
-# Run tests (248 tests)
-cargo test --workspace
+# Run tests (375 tests)
+cargo test --workspace --exclude onecrawl-e2e
 
-# Clippy (0 warnings)
-cargo clippy --workspace
-
-# Build release binary (5.8MB optimized)
+# Build release binary
 cargo build --release -p onecrawl-cli-rs
 ```
 
-## Performance
+## Metrics
 
 | Metric | Value |
 |--------|-------|
-| Release binary | 5.8 MB (LTO + strip) |
-| Incremental build | ~1.7s |
-| Test suite | 248 tests |
+| Rust test suite | 375 tests |
+| Node.js test suite | 33 files, 3,995 lines |
 | CDP modules | 63 |
 | CLI commands | 200+ |
-| MCP tools | 43 |
+| MCP super-tools | 10 (159 actions) |
+| NAPI methods | 307 |
+| Handler modules | 10 (split architecture) |
+| Enum-dispatched actions | 159 (compile-time exhaustive) |
 
 ## License
 
