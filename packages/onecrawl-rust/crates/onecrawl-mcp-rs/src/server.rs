@@ -10,8 +10,24 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::cdp_tools::*;
-use crate::helpers::{mcp_err, ensure_page, json_ok, text_ok};
+use crate::helpers::{mcp_err, ensure_page, json_ok, text_ok, parse_params, parse_json_str, parse_opt_json_str, McpResult};
 use crate::types::*;
+
+// ──────────────────────────── Helpers ────────────────────────────
+
+fn parse_memory_category(s: Option<&str>) -> Option<onecrawl_cdp::MemoryCategory> {
+    match s {
+        Some("page_visit") => Some(onecrawl_cdp::MemoryCategory::PageVisit),
+        Some("element_pattern") => Some(onecrawl_cdp::MemoryCategory::ElementPattern),
+        Some("domain_strategy") => Some(onecrawl_cdp::MemoryCategory::DomainStrategy),
+        Some("retry_knowledge") => Some(onecrawl_cdp::MemoryCategory::RetryKnowledge),
+        Some("user_preference") => Some(onecrawl_cdp::MemoryCategory::UserPreference),
+        Some("selector_mapping") => Some(onecrawl_cdp::MemoryCategory::SelectorMapping),
+        Some("error_pattern") => Some(onecrawl_cdp::MemoryCategory::ErrorPattern),
+        Some("custom") => Some(onecrawl_cdp::MemoryCategory::Custom),
+        _ => None,
+    }
+}
 
 // ──────────────────────────── Server ────────────────────────────
 
@@ -40,7 +56,7 @@ impl OneCrawlMcp {
             std::path::Path::new(self.store_path.as_ref()),
             &self.store_password,
         )
-        .map_err(|e| mcp_err(e.to_string()))
+        .mcp()
     }
 
     /// Internal dispatch for `agent.execute_chain`.
@@ -188,117 +204,95 @@ impl OneCrawlMcp {
         let v = p.params;
         match action.as_str() {
             "goto" => {
-                let params: NavigateParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("goto: {e}")))?;
+                let params: NavigateParams = parse_params(v, "goto")?;
                 self.navigation_goto(params).await
             }
             "click" => {
-                let params: ClickParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("click: {e}")))?;
+                let params: ClickParams = parse_params(v, "click")?;
                 self.navigation_click(params).await
             }
             "type" => {
-                let params: TypeTextParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("type: {e}")))?;
+                let params: TypeTextParams = parse_params(v, "type")?;
                 self.navigation_type(params).await
             }
             "screenshot" => {
-                let params: ScreenshotParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("screenshot: {e}")))?;
+                let params: ScreenshotParams = parse_params(v, "screenshot")?;
                 self.navigation_screenshot(params).await
             }
             "pdf" => {
-                let params: PdfExportParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("pdf: {e}")))?;
+                let params: PdfExportParams = parse_params(v, "pdf")?;
                 self.navigation_pdf(params).await
             }
             "back" => self.navigation_back().await,
             "forward" => self.navigation_forward().await,
             "reload" => self.navigation_reload().await,
             "wait" => {
-                let params: WaitForSelectorParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("wait: {e}")))?;
+                let params: WaitForSelectorParams = parse_params(v, "wait")?;
                 self.navigation_wait(params).await
             }
             "evaluate" => {
-                let params: EvaluateJsParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("evaluate: {e}")))?;
+                let params: EvaluateJsParams = parse_params(v, "evaluate")?;
                 self.navigation_evaluate(params).await
             }
             "snapshot" => {
-                let params: AgentSnapshotParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("snapshot: {e}")))?;
+                let params: AgentSnapshotParams = parse_params(v, "snapshot")?;
                 self.navigation_snapshot(params).await
             }
             "css" => {
-                let params: CssSelectorParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("css: {e}")))?;
+                let params: CssSelectorParams = parse_params(v, "css")?;
                 self.scraping_css(params).await
             }
             "xpath" => {
-                let params: XPathParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("xpath: {e}")))?;
+                let params: XPathParams = parse_params(v, "xpath")?;
                 self.scraping_xpath(params).await
             }
             "find_text" => {
-                let params: FindByTextParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("find_text: {e}")))?;
+                let params: FindByTextParams = parse_params(v, "find_text")?;
                 self.scraping_find_text(params).await
             }
             "text" => {
-                let params: ExtractTextParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("text: {e}")))?;
+                let params: ExtractTextParams = parse_params(v, "text")?;
                 self.scraping_text(params).await
             }
             "html" => {
-                let params: ExtractHtmlParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("html: {e}")))?;
+                let params: ExtractHtmlParams = parse_params(v, "html")?;
                 self.scraping_html(params).await
             }
             "markdown" => {
-                let params: ExtractMarkdownParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("markdown: {e}")))?;
+                let params: ExtractMarkdownParams = parse_params(v, "markdown")?;
                 self.scraping_markdown(params).await
             }
             "structured" => self.scraping_structured().await,
             "stream" => {
-                let params: StreamExtractParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("stream: {e}")))?;
+                let params: StreamExtractParams = parse_params(v, "stream")?;
                 self.scraping_stream(params).await
             }
             "detect_forms" => {
-                let params: DetectFormsParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("detect_forms: {e}")))?;
+                let params: DetectFormsParams = parse_params(v, "detect_forms")?;
                 self.scraping_detect_forms(params).await
             }
             "fill_form" => {
-                let params: FillFormParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("fill_form: {e}")))?;
+                let params: FillFormParams = parse_params(v, "fill_form")?;
                 self.scraping_fill_form(params).await
             }
             "snapshot_diff" => {
-                let params: SnapshotDiffParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("snapshot_diff: {e}")))?;
+                let params: SnapshotDiffParams = parse_params(v, "snapshot_diff")?;
                 self.scraping_snapshot_diff(params).await
             }
             "parse_a11y" => {
-                let params: HtmlRequest = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("parse_a11y: {e}")))?;
+                let params: HtmlRequest = parse_params(v, "parse_a11y")?;
                 self.parse_accessibility_tree(params)
             }
             "parse_selector" => {
-                let params: SelectorRequest = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("parse_selector: {e}")))?;
+                let params: SelectorRequest = parse_params(v, "parse_selector")?;
                 self.query_selector(params)
             }
             "parse_text" => {
-                let params: HtmlRequest = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("parse_text: {e}")))?;
+                let params: HtmlRequest = parse_params(v, "parse_text")?;
                 self.html_extract_text(params)
             }
             "parse_links" => {
-                let params: HtmlRequest = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("parse_links: {e}")))?;
+                let params: HtmlRequest = parse_params(v, "parse_links")?;
                 self.html_extract_links(params)
             }
             other => Err(mcp_err(format!(
@@ -322,28 +316,23 @@ impl OneCrawlMcp {
         let v = p.params;
         match action.as_str() {
             "spider" => {
-                let params: SpiderCrawlParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("spider: {e}")))?;
+                let params: SpiderCrawlParams = parse_params(v, "spider")?;
                 self.crawling_spider(params).await
             }
             "robots" => {
-                let params: CheckRobotsParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("robots: {e}")))?;
+                let params: CheckRobotsParams = parse_params(v, "robots")?;
                 self.crawling_robots(params).await
             }
             "sitemap" => {
-                let params: GenerateSitemapParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("sitemap: {e}")))?;
+                let params: GenerateSitemapParams = parse_params(v, "sitemap")?;
                 self.crawling_sitemap(params)
             }
             "dom_snapshot" => {
-                let params: TakeSnapshotParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("dom_snapshot: {e}")))?;
+                let params: TakeSnapshotParams = parse_params(v, "dom_snapshot")?;
                 self.crawling_snapshot(params).await
             }
             "dom_compare" => {
-                let params: CompareSnapshotsParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("dom_compare: {e}")))?;
+                let params: CompareSnapshotsParams = parse_params(v, "dom_compare")?;
                 self.crawling_compare(params).await
             }
             other => Err(mcp_err(format!(
@@ -364,108 +353,87 @@ impl OneCrawlMcp {
         let v = p.params;
         match action.as_str() {
             "execute_chain" => {
-                let params: ExecuteChainParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("execute_chain: {e}")))?;
+                let params: ExecuteChainParams = parse_params(v, "execute_chain")?;
                 self.agent_execute_chain(params).await
             }
             "element_screenshot" => {
-                let params: ElementScreenshotParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("element_screenshot: {e}")))?;
+                let params: ElementScreenshotParams = parse_params(v, "element_screenshot")?;
                 self.agent_element_screenshot(params).await
             }
             "api_capture_start" => {
-                let params: ApiCaptureStartParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("api_capture_start: {e}")))?;
+                let params: ApiCaptureStartParams = parse_params(v, "api_capture_start")?;
                 self.agent_api_capture_start(params).await
             }
             "api_capture_summary" => {
-                let params: ApiCaptureSummaryParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("api_capture_summary: {e}")))?;
+                let params: ApiCaptureSummaryParams = parse_params(v, "api_capture_summary")?;
                 self.agent_api_capture_summary(params).await
             }
             "iframe_list" => {
-                let params: IframeListParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("iframe_list: {e}")))?;
+                let params: IframeListParams = parse_params(v, "iframe_list")?;
                 self.agent_iframe_list(params).await
             }
             "iframe_snapshot" => {
-                let params: IframeSnapshotParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("iframe_snapshot: {e}")))?;
+                let params: IframeSnapshotParams = parse_params(v, "iframe_snapshot")?;
                 self.agent_iframe_snapshot(params).await
             }
             "connect_remote" => {
-                let params: RemoteCdpParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("connect_remote: {e}")))?;
+                let params: RemoteCdpParams = parse_params(v, "connect_remote")?;
                 self.agent_connect_remote(params).await
             }
             "safety_set" => {
-                let params: SafetyPolicySetParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("safety_set: {e}")))?;
+                let params: SafetyPolicySetParams = parse_params(v, "safety_set")?;
                 self.agent_safety_policy_set(params).await
             }
             "safety_status" => {
-                let params: SafetyStatusParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("safety_status: {e}")))?;
+                let params: SafetyStatusParams = parse_params(v, "safety_status")?;
                 self.agent_safety_status(params).await
             }
             "skills_list" => {
-                let params: SkillsListParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("skills_list: {e}")))?;
+                let params: SkillsListParams = parse_params(v, "skills_list")?;
                 self.agent_skills_list(params)
             }
             "screencast_start" => {
-                let params: ScreencastStartParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("screencast_start: {e}")))?;
+                let params: ScreencastStartParams = parse_params(v, "screencast_start")?;
                 self.agent_screencast_start(params).await
             }
             "screencast_stop" => {
-                let params: ScreencastStopParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("screencast_stop: {e}")))?;
+                let params: ScreencastStopParams = parse_params(v, "screencast_stop")?;
                 self.agent_screencast_stop(params).await
             }
             "screencast_frame" => {
-                let params: ScreencastFrameParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("screencast_frame: {e}")))?;
+                let params: ScreencastFrameParams = parse_params(v, "screencast_frame")?;
                 self.agent_screencast_frame(params).await
             }
             "recording_start" => {
-                let params: RecordingStartParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("recording_start: {e}")))?;
+                let params: RecordingStartParams = parse_params(v, "recording_start")?;
                 self.agent_recording_start(params).await
             }
             "recording_stop" => {
-                let params: RecordingStopParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("recording_stop: {e}")))?;
+                let params: RecordingStopParams = parse_params(v, "recording_stop")?;
                 self.agent_recording_stop(params).await
             }
             "recording_status" => {
-                let params: RecordingStatusParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("recording_status: {e}")))?;
+                let params: RecordingStatusParams = parse_params(v, "recording_status")?;
                 self.agent_recording_status(params).await
             }
             "ios_devices" => {
-                let params: IosDevicesParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("ios_devices: {e}")))?;
+                let params: IosDevicesParams = parse_params(v, "ios_devices")?;
                 self.agent_ios_devices(params).await
             }
             "ios_connect" => {
-                let params: IosConnectParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("ios_connect: {e}")))?;
+                let params: IosConnectParams = parse_params(v, "ios_connect")?;
                 self.agent_ios_connect(params).await
             }
             "ios_navigate" => {
-                let params: IosNavigateParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("ios_navigate: {e}")))?;
+                let params: IosNavigateParams = parse_params(v, "ios_navigate")?;
                 self.agent_ios_navigate(params).await
             }
             "ios_tap" => {
-                let params: IosTapParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("ios_tap: {e}")))?;
+                let params: IosTapParams = parse_params(v, "ios_tap")?;
                 self.agent_ios_tap(params).await
             }
             "ios_screenshot" => {
-                let params: IosScreenshotParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("ios_screenshot: {e}")))?;
+                let params: IosScreenshotParams = parse_params(v, "ios_screenshot")?;
                 self.agent_ios_screenshot(params).await
             }
             other => Err(mcp_err(format!(
@@ -486,28 +454,23 @@ impl OneCrawlMcp {
         let v = p.params;
         match action.as_str() {
             "inject" => {
-                let params: InjectStealthParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("inject: {e}")))?;
+                let params: InjectStealthParams = parse_params(v, "inject")?;
                 self.stealth_inject(params).await
             }
             "test" => {
-                let params: BotDetectionTestParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("test: {e}")))?;
+                let params: BotDetectionTestParams = parse_params(v, "test")?;
                 self.stealth_test(params).await
             }
             "fingerprint" => {
-                let params: ApplyFingerprintParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("fingerprint: {e}")))?;
+                let params: ApplyFingerprintParams = parse_params(v, "fingerprint")?;
                 self.stealth_fingerprint(params).await
             }
             "block_domains" => {
-                let params: BlockDomainsParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("block_domains: {e}")))?;
+                let params: BlockDomainsParams = parse_params(v, "block_domains")?;
                 self.stealth_block_domains(params).await
             }
             "detect_captcha" => {
-                let params: DetectCaptchaParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("detect_captcha: {e}")))?;
+                let params: DetectCaptchaParams = parse_params(v, "detect_captcha")?;
                 self.stealth_detect_captcha(params).await
             }
             other => Err(mcp_err(format!(
@@ -528,53 +491,43 @@ impl OneCrawlMcp {
         let v = p.params;
         match action.as_str() {
             "pipeline" => {
-                let params: PipelineExecuteParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("pipeline: {e}")))?;
+                let params: PipelineExecuteParams = parse_params(v, "pipeline")?;
                 self.data_pipeline(params)
             }
             "http_get" => {
-                let params: HttpGetParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("http_get: {e}")))?;
+                let params: HttpGetParams = parse_params(v, "http_get")?;
                 self.data_http_get(params).await
             }
             "http_post" => {
-                let params: HttpPostParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("http_post: {e}")))?;
+                let params: HttpPostParams = parse_params(v, "http_post")?;
                 self.data_http_post(params).await
             }
             "links" => {
-                let params: ExtractLinksParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("links: {e}")))?;
+                let params: ExtractLinksParams = parse_params(v, "links")?;
                 self.data_links(params).await
             }
             "graph" => {
-                let params: AnalyzeGraphParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("graph: {e}")))?;
+                let params: AnalyzeGraphParams = parse_params(v, "graph")?;
                 self.data_graph(params)
             }
             "net_capture" => {
-                let params: NetIntelCaptureParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("net_capture: {e}")))?;
+                let params: NetIntelCaptureParams = parse_params(v, "net_capture")?;
                 self.net_capture(params).await
             }
             "net_analyze" => {
-                let params: NetIntelAnalyzeParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("net_analyze: {e}")))?;
+                let params: NetIntelAnalyzeParams = parse_params(v, "net_analyze")?;
                 self.net_analyze(params).await
             }
             "net_sdk" => {
-                let params: NetIntelSdkParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("net_sdk: {e}")))?;
+                let params: NetIntelSdkParams = parse_params(v, "net_sdk")?;
                 self.net_sdk(params).await
             }
             "net_mock" => {
-                let params: NetIntelMockParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("net_mock: {e}")))?;
+                let params: NetIntelMockParams = parse_params(v, "net_mock")?;
                 self.net_mock(params).await
             }
             "net_replay" => {
-                let params: NetIntelReplayParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("net_replay: {e}")))?;
+                let params: NetIntelReplayParams = parse_params(v, "net_replay")?;
                 self.net_replay(params).await
             }
             other => Err(mcp_err(format!(
@@ -595,60 +548,49 @@ impl OneCrawlMcp {
         let v = p.params;
         match action.as_str() {
             "encrypt" => {
-                let params: EncryptRequest = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("encrypt: {e}")))?;
+                let params: EncryptRequest = parse_params(v, "encrypt")?;
                 self.encrypt(params)
             }
             "decrypt" => {
-                let params: DecryptRequest = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("decrypt: {e}")))?;
+                let params: DecryptRequest = parse_params(v, "decrypt")?;
                 self.decrypt(params)
             }
             "pkce" => self.generate_pkce(),
             "totp" => {
-                let params: TotpRequest = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("totp: {e}")))?;
+                let params: TotpRequest = parse_params(v, "totp")?;
                 self.generate_totp(params)
             }
             "kv_set" => {
-                let params: StoreSetRequest = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("kv_set: {e}")))?;
+                let params: StoreSetRequest = parse_params(v, "kv_set")?;
                 self.store_set(params)
             }
             "kv_get" => {
-                let params: StoreGetRequest = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("kv_get: {e}")))?;
+                let params: StoreGetRequest = parse_params(v, "kv_get")?;
                 self.store_get(params)
             }
             "kv_list" => self.store_list(),
             "passkey_enable" => {
-                let params: PasskeyEnableParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("passkey_enable: {e}")))?;
+                let params: PasskeyEnableParams = parse_params(v, "passkey_enable")?;
                 self.auth_passkey_enable(params).await
             }
             "passkey_add" => {
-                let params: PasskeyAddParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("passkey_add: {e}")))?;
+                let params: PasskeyAddParams = parse_params(v, "passkey_add")?;
                 self.auth_passkey_add(params).await
             }
             "passkey_list" => {
-                let params: PasskeyListParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("passkey_list: {e}")))?;
+                let params: PasskeyListParams = parse_params(v, "passkey_list")?;
                 self.auth_passkey_list(params).await
             }
             "passkey_log" => {
-                let params: PasskeyLogParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("passkey_log: {e}")))?;
+                let params: PasskeyLogParams = parse_params(v, "passkey_log")?;
                 self.auth_passkey_log(params).await
             }
             "passkey_disable" => {
-                let params: PasskeyDisableParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("passkey_disable: {e}")))?;
+                let params: PasskeyDisableParams = parse_params(v, "passkey_disable")?;
                 self.auth_passkey_disable(params).await
             }
             "passkey_remove" => {
-                let params: PasskeyRemoveParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("passkey_remove: {e}")))?;
+                let params: PasskeyRemoveParams = parse_params(v, "passkey_remove")?;
                 self.auth_passkey_remove(params).await
             }
             other => Err(mcp_err(format!(
@@ -669,43 +611,35 @@ impl OneCrawlMcp {
         let v = p.params;
         match action.as_str() {
             "act" => {
-                let params: ComputerUseActionParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("act: {e}")))?;
+                let params: ComputerUseActionParams = parse_params(v, "act")?;
                 self.computer_act(params).await
             }
             "observe" => {
-                let params: ComputerUseObserveParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("observe: {e}")))?;
+                let params: ComputerUseObserveParams = parse_params(v, "observe")?;
                 self.computer_observe(params).await
             }
             "batch" => {
-                let params: ComputerUseBatchParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("batch: {e}")))?;
+                let params: ComputerUseBatchParams = parse_params(v, "batch")?;
                 self.computer_batch(params).await
             }
             "smart_find" => {
-                let params: SmartFindParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("smart_find: {e}")))?;
+                let params: SmartFindParams = parse_params(v, "smart_find")?;
                 self.smart_find(params).await
             }
             "smart_click" => {
-                let params: SmartClickParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("smart_click: {e}")))?;
+                let params: SmartClickParams = parse_params(v, "smart_click")?;
                 self.smart_click(params).await
             }
             "smart_fill" => {
-                let params: SmartFillParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("smart_fill: {e}")))?;
+                let params: SmartFillParams = parse_params(v, "smart_fill")?;
                 self.smart_fill(params).await
             }
             "pool_list" => {
-                let params: PoolListParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("pool_list: {e}")))?;
+                let params: PoolListParams = parse_params(v, "pool_list")?;
                 self.pool_list(params).await
             }
             "pool_status" => {
-                let params: PoolStatusParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("pool_status: {e}")))?;
+                let params: PoolStatusParams = parse_params(v, "pool_status")?;
                 self.pool_status(params).await
             }
             other => Err(mcp_err(format!(
@@ -726,33 +660,27 @@ impl OneCrawlMcp {
         let v = p.params;
         match action.as_str() {
             "store" => {
-                let params: MemoryStoreParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("store: {e}")))?;
+                let params: MemoryStoreParams = parse_params(v, "store")?;
                 self.memory_store(params).await
             }
             "recall" => {
-                let params: MemoryRecallParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("recall: {e}")))?;
+                let params: MemoryRecallParams = parse_params(v, "recall")?;
                 self.memory_recall(params).await
             }
             "search" => {
-                let params: MemorySearchParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("search: {e}")))?;
+                let params: MemorySearchParams = parse_params(v, "search")?;
                 self.memory_search(params).await
             }
             "forget" => {
-                let params: MemoryForgetParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("forget: {e}")))?;
+                let params: MemoryForgetParams = parse_params(v, "forget")?;
                 self.memory_forget(params).await
             }
             "domain_strategy" => {
-                let params: MemoryDomainStrategyParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("domain_strategy: {e}")))?;
+                let params: MemoryDomainStrategyParams = parse_params(v, "domain_strategy")?;
                 self.memory_domain_strategy(params).await
             }
             "stats" => {
-                let params: MemoryStatsParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("stats: {e}")))?;
+                let params: MemoryStatsParams = parse_params(v, "stats")?;
                 self.memory_stats(params).await
             }
             other => Err(mcp_err(format!(
@@ -773,38 +701,31 @@ impl OneCrawlMcp {
         let v = p.params;
         match action.as_str() {
             "workflow_validate" => {
-                let params: WorkflowValidateParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("workflow_validate: {e}")))?;
+                let params: WorkflowValidateParams = parse_params(v, "workflow_validate")?;
                 self.workflow_validate(params).await
             }
             "workflow_run" => {
-                let params: WorkflowRunParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("workflow_run: {e}")))?;
+                let params: WorkflowRunParams = parse_params(v, "workflow_run")?;
                 self.workflow_run(params).await
             }
             "plan" => {
-                let params: PlannerPlanParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("plan: {e}")))?;
+                let params: PlannerPlanParams = parse_params(v, "plan")?;
                 self.planner_plan(params).await
             }
             "execute" => {
-                let params: PlannerExecuteParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("execute: {e}")))?;
+                let params: PlannerExecuteParams = parse_params(v, "execute")?;
                 self.planner_execute(params).await
             }
             "patterns" => {
-                let params: PlannerPatternsParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("patterns: {e}")))?;
+                let params: PlannerPatternsParams = parse_params(v, "patterns")?;
                 self.planner_patterns(params).await
             }
             "rate_limit" => {
-                let params: RateLimitCheckParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("rate_limit: {e}")))?;
+                let params: RateLimitCheckParams = parse_params(v, "rate_limit")?;
                 self.automation_rate_limit(params).await
             }
             "retry" => {
-                let params: RetryEnqueueParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("retry: {e}")))?;
+                let params: RetryEnqueueParams = parse_params(v, "retry")?;
                 self.automation_retry(params).await
             }
             other => Err(mcp_err(format!(
@@ -825,38 +746,31 @@ impl OneCrawlMcp {
         let v = p.params;
         match action.as_str() {
             "audit" => {
-                let params: PerfAuditParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("audit: {e}")))?;
+                let params: PerfAuditParams = parse_params(v, "audit")?;
                 self.perf_audit(params).await
             }
             "budget" => {
-                let params: PerfBudgetCheckParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("budget: {e}")))?;
+                let params: PerfBudgetCheckParams = parse_params(v, "budget")?;
                 self.perf_budget(params).await
             }
             "compare" => {
-                let params: PerfCompareParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("compare: {e}")))?;
+                let params: PerfCompareParams = parse_params(v, "compare")?;
                 self.perf_compare(params).await
             }
             "trace" => {
-                let params: PerfTraceParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("trace: {e}")))?;
+                let params: PerfTraceParams = parse_params(v, "trace")?;
                 self.perf_trace(params).await
             }
             "vrt_run" => {
-                let params: VrtRunParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("vrt_run: {e}")))?;
+                let params: VrtRunParams = parse_params(v, "vrt_run")?;
                 self.vrt_run(params).await
             }
             "vrt_compare" => {
-                let params: VrtCompareParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("vrt_compare: {e}")))?;
+                let params: VrtCompareParams = parse_params(v, "vrt_compare")?;
                 self.vrt_compare(params).await
             }
             "vrt_update" => {
-                let params: VrtUpdateBaselineParams = serde_json::from_value(v)
-                    .map_err(|e| mcp_err(format!("vrt_update: {e}")))?;
+                let params: VrtUpdateBaselineParams = parse_params(v, "vrt_update")?;
                 self.vrt_update_baseline(params).await
             }
             other => Err(mcp_err(format!(
@@ -872,17 +786,17 @@ impl OneCrawlMcp {
         req: EncryptRequest,
     ) -> Result<CallToolResult, McpError> {
         let payload = onecrawl_crypto::encrypt(req.plaintext.as_bytes(), &req.password)
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
 
         let salt = B64
             .decode(&payload.salt)
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         let nonce = B64
             .decode(&payload.nonce)
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         let ct = B64
             .decode(&payload.ciphertext)
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
 
         let mut packed = Vec::with_capacity(salt.len() + nonce.len() + ct.len());
         packed.extend_from_slice(&salt);
@@ -915,7 +829,7 @@ impl OneCrawlMcp {
         };
 
         let plaintext = onecrawl_crypto::decrypt(&payload, &req.password)
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
 
         let text = String::from_utf8(plaintext).unwrap_or_else(|e| B64.encode(e.into_bytes()));
 
@@ -924,7 +838,7 @@ impl OneCrawlMcp {
 
     fn generate_pkce(&self) -> Result<CallToolResult, McpError> {
         let challenge =
-            onecrawl_crypto::generate_pkce_challenge().map_err(|e| mcp_err(e.to_string()))?;
+            onecrawl_crypto::generate_pkce_challenge().mcp()?;
         json_ok(&PkceResponse {
             code_verifier: &challenge.code_verifier,
             code_challenge: &challenge.code_challenge,
@@ -940,7 +854,7 @@ impl OneCrawlMcp {
             ..Default::default()
         };
         let code =
-            onecrawl_crypto::totp::generate_totp(&config).map_err(|e| mcp_err(e.to_string()))?;
+            onecrawl_crypto::totp::generate_totp(&config).mcp()?;
         Ok(CallToolResult::success(vec![Content::text(code)]))
     }
 
@@ -951,7 +865,7 @@ impl OneCrawlMcp {
         req: HtmlRequest,
     ) -> Result<CallToolResult, McpError> {
         let tree = onecrawl_parser::get_accessibility_tree(&req.html)
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         let rendered = onecrawl_parser::accessibility::render_tree(&tree, 0, false);
         Ok(CallToolResult::success(vec![Content::text(rendered)]))
     }
@@ -961,8 +875,8 @@ impl OneCrawlMcp {
         req: SelectorRequest,
     ) -> Result<CallToolResult, McpError> {
         let elements = onecrawl_parser::query_selector(&req.html, &req.selector)
-            .map_err(|e| mcp_err(e.to_string()))?;
-        let json = serde_json::to_string(&elements).map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
+        let json = serde_json::to_string(&elements).mcp()?;
         Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 
@@ -971,7 +885,7 @@ impl OneCrawlMcp {
         req: HtmlRequest,
     ) -> Result<CallToolResult, McpError> {
         let texts =
-            onecrawl_parser::extract_text(&req.html, "body").map_err(|e| mcp_err(e.to_string()))?;
+            onecrawl_parser::extract_text(&req.html, "body").mcp()?;
         Ok(CallToolResult::success(vec![Content::text(
             texts.join("\n"),
         )]))
@@ -982,7 +896,7 @@ impl OneCrawlMcp {
         req: HtmlRequest,
     ) -> Result<CallToolResult, McpError> {
         let links = onecrawl_parser::extract::extract_links(&req.html)
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         let result: Vec<LinkInfo> = links
             .into_iter()
             .map(|(href, text)| {
@@ -990,7 +904,7 @@ impl OneCrawlMcp {
                 LinkInfo { href, text, is_external }
             })
             .collect();
-        let json = serde_json::to_string(&result).map_err(|e| mcp_err(e.to_string()))?;
+        let json = serde_json::to_string(&result).mcp()?;
         Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 
@@ -1003,7 +917,7 @@ impl OneCrawlMcp {
         let store = self.open_store()?;
         store
             .set(&req.key, req.value.as_bytes())
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         Ok(CallToolResult::success(vec![Content::text(format!(
             "stored key \"{}\"",
             req.key
@@ -1015,7 +929,7 @@ impl OneCrawlMcp {
         req: StoreGetRequest,
     ) -> Result<CallToolResult, McpError> {
         let store = self.open_store()?;
-        let value = store.get(&req.key).map_err(|e| mcp_err(e.to_string()))?;
+        let value = store.get(&req.key).mcp()?;
         match value {
             Some(v) => {
                 let text = String::from_utf8(v).unwrap_or_else(|e| B64.encode(e.into_bytes()));
@@ -1030,8 +944,8 @@ impl OneCrawlMcp {
 
     fn store_list(&self) -> Result<CallToolResult, McpError> {
         let store = self.open_store()?;
-        let keys = store.list("").map_err(|e| mcp_err(e.to_string()))?;
-        let json = serde_json::to_string(&keys).map_err(|e| mcp_err(e.to_string()))?;
+        let keys = store.list("").mcp()?;
+        let json = serde_json::to_string(&keys).mcp()?;
         Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 
@@ -1046,7 +960,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::navigation::goto(&page, &p.url)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         let title = onecrawl_cdp::navigation::get_title(&page)
             .await
             .unwrap_or_default();
@@ -1061,7 +975,7 @@ impl OneCrawlMcp {
         let selector = onecrawl_cdp::accessibility::resolve_ref(&p.selector);
         onecrawl_cdp::element::click(&page, &selector)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         text_ok(format!("clicked {}", p.selector))
     }
 
@@ -1073,7 +987,7 @@ impl OneCrawlMcp {
         let selector = onecrawl_cdp::accessibility::resolve_ref(&p.selector);
         onecrawl_cdp::element::type_text(&page, &selector, &p.text)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         text_ok(format!("typed {} chars into {}", p.text.len(), p.selector))
     }
 
@@ -1085,15 +999,15 @@ impl OneCrawlMcp {
         let bytes = if let Some(sel) = &p.selector {
             onecrawl_cdp::screenshot::screenshot_element(&page, sel)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?
+                .mcp()?
         } else if p.full_page.unwrap_or(false) {
             onecrawl_cdp::screenshot::screenshot_full(&page)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?
+                .mcp()?
         } else {
             onecrawl_cdp::screenshot::screenshot_viewport(&page)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?
+                .mcp()?
         };
         let b64 = B64.encode(&bytes);
         Ok(CallToolResult::success(vec![Content::image(
@@ -1115,7 +1029,7 @@ impl OneCrawlMcp {
         let _ = p.format; // reserved for future use
         let bytes = onecrawl_cdp::screenshot::pdf_with_options(&page, &opts)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         let b64 = B64.encode(&bytes);
         text_ok(format!(
             "pdf exported ({} bytes, base64 length {})",
@@ -1128,7 +1042,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::navigation::go_back(&page)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         text_ok("navigated back")
     }
 
@@ -1136,7 +1050,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::navigation::go_forward(&page)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         text_ok("navigated forward")
     }
 
@@ -1144,7 +1058,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::navigation::reload(&page)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         text_ok("page reloaded")
     }
 
@@ -1157,7 +1071,7 @@ impl OneCrawlMcp {
         let selector = onecrawl_cdp::accessibility::resolve_ref(&p.selector);
         onecrawl_cdp::navigation::wait_for_selector(&page, &selector, timeout)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         text_ok(format!("selector {} found", p.selector))
     }
 
@@ -1168,7 +1082,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let result = onecrawl_cdp::page::evaluate_js(&page, &p.js)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&result)
     }
 
@@ -1186,7 +1100,7 @@ impl OneCrawlMcp {
         };
         let snap = onecrawl_cdp::accessibility::agent_snapshot(&page, &opts)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         let stats = snap.stats();
         let result = serde_json::json!({
             "snapshot": snap.snapshot,
@@ -1214,7 +1128,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let result = onecrawl_cdp::selectors::css_select(&page, &p.selector)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&result)
     }
 
@@ -1225,7 +1139,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let result = onecrawl_cdp::selectors::xpath_select(&page, &p.expression)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&result)
     }
 
@@ -1237,7 +1151,7 @@ impl OneCrawlMcp {
         let result =
             onecrawl_cdp::selectors::find_by_text(&page, &p.text, p.tag.as_deref())
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?;
+                .mcp()?;
         json_ok(&result)
     }
 
@@ -1252,7 +1166,7 @@ impl OneCrawlMcp {
             onecrawl_cdp::ExtractFormat::Text,
         )
         .await
-        .map_err(|e| mcp_err(e.to_string()))?;
+        .mcp()?;
         json_ok(&result)
     }
 
@@ -1267,7 +1181,7 @@ impl OneCrawlMcp {
             onecrawl_cdp::ExtractFormat::Html,
         )
         .await
-        .map_err(|e| mcp_err(e.to_string()))?;
+        .mcp()?;
         json_ok(&result)
     }
 
@@ -1282,7 +1196,7 @@ impl OneCrawlMcp {
             onecrawl_cdp::ExtractFormat::Markdown,
         )
         .await
-        .map_err(|e| mcp_err(e.to_string()))?;
+        .mcp()?;
         json_ok(&result)
     }
 
@@ -1290,7 +1204,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let result = onecrawl_cdp::structured_data::extract_all(&page)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&result)
     }
 
@@ -1299,15 +1213,9 @@ impl OneCrawlMcp {
         p: StreamExtractParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
-        let fields: Vec<onecrawl_cdp::ExtractionRule> = serde_json::from_str(&p.fields)
-            .map_err(|e| mcp_err(format!("invalid fields JSON: {e}")))?;
-        let pagination: Option<onecrawl_cdp::PaginationConfig> = match &p.pagination {
-            Some(s) => Some(
-                serde_json::from_str(s)
-                    .map_err(|e| mcp_err(format!("invalid pagination JSON: {e}")))?,
-            ),
-            None => None,
-        };
+        let fields: Vec<onecrawl_cdp::ExtractionRule> = parse_json_str(&p.fields, "fields")?;
+        let pagination: Option<onecrawl_cdp::PaginationConfig> =
+            parse_opt_json_str(p.pagination.as_deref(), "pagination")?;
         let schema = onecrawl_cdp::ExtractionSchema {
             item_selector: p.item_selector,
             fields,
@@ -1316,11 +1224,11 @@ impl OneCrawlMcp {
         let result = if schema.pagination.is_some() {
             onecrawl_cdp::streaming::extract_with_pagination(&page, &schema)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?
+                .mcp()?
         } else {
             onecrawl_cdp::streaming::extract_items(&page, &schema)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?
+                .mcp()?
         };
         json_ok(&result)
     }
@@ -1332,7 +1240,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let forms = onecrawl_cdp::form_filler::detect_forms(&page)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&forms)
     }
 
@@ -1341,16 +1249,15 @@ impl OneCrawlMcp {
         p: FillFormParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
-        let values: HashMap<String, String> = serde_json::from_str(&p.data)
-            .map_err(|e| mcp_err(format!("invalid data JSON: {e}")))?;
+        let values: HashMap<String, String> = parse_json_str(&p.data, "data")?;
         let result =
             onecrawl_cdp::form_filler::fill_form(&page, &p.form_selector, &values)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?;
+                .mcp()?;
         if p.submit.unwrap_or(false) {
             onecrawl_cdp::form_filler::submit_form(&page, &p.form_selector)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?;
+                .mcp()?;
         }
         json_ok(&result)
     }
@@ -1389,7 +1296,7 @@ impl OneCrawlMcp {
         };
         let results = onecrawl_cdp::spider::crawl(&page, config)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         let summary = onecrawl_cdp::spider::summarize(&results);
         json_ok(&CrawlResult2 {
             summary,
@@ -1404,7 +1311,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let robots = onecrawl_cdp::robots::fetch_robots(&page, &p.base_url)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         let ua = p.user_agent.as_deref().unwrap_or("*");
         let sitemaps = onecrawl_cdp::robots::get_sitemaps(&robots);
         let delay = onecrawl_cdp::robots::get_crawl_delay(&robots, ua);
@@ -1422,8 +1329,7 @@ impl OneCrawlMcp {
         &self,
         p: GenerateSitemapParams,
     ) -> Result<CallToolResult, McpError> {
-        let entries: Vec<onecrawl_cdp::sitemap::SitemapEntry> = serde_json::from_str(&p.entries)
-            .map_err(|e| mcp_err(format!("invalid entries JSON: {e}")))?;
+        let entries: Vec<onecrawl_cdp::sitemap::SitemapEntry> = parse_json_str(&p.entries, "entries")?;
         let config = onecrawl_cdp::sitemap::SitemapConfig {
             base_url: p.base_url,
             default_changefreq: p.default_changefreq.unwrap_or_else(|| "weekly".into()),
@@ -1441,7 +1347,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let snap = onecrawl_cdp::snapshot::take_snapshot(&page)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         let mut state = self.browser.lock().await;
         state.snapshots.insert(p.label.clone(), snap);
         text_ok(format!("snapshot '{}' saved", p.label))
@@ -1475,7 +1381,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let patches = onecrawl_cdp::antibot::inject_stealth_full(&page)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&StealthInjectResult {
             patches_applied: patches.len(),
             patches,
@@ -1489,7 +1395,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let result = onecrawl_cdp::antibot::bot_detection_test(&page)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&result)
     }
 
@@ -1505,7 +1411,7 @@ impl OneCrawlMcp {
         let script = onecrawl_cdp::stealth::get_stealth_init_script(&fp);
         onecrawl_cdp::page::evaluate_js(&page, &script)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&FingerprintResult {
             user_agent: &fp.user_agent,
             platform: &fp.platform,
@@ -1520,11 +1426,11 @@ impl OneCrawlMcp {
         let count = if let Some(cat) = &p.category {
             onecrawl_cdp::domain_blocker::block_category(&page, cat)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?
+                .mcp()?
         } else if let Some(domains) = &p.domains {
             onecrawl_cdp::domain_blocker::block_domains(&page, domains)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?
+                .mcp()?
         } else {
             return Err(mcp_err(
                 "provide either 'domains' or 'category'",
@@ -1540,7 +1446,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let detection = onecrawl_cdp::captcha::detect_captcha(&page)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&detection)
     }
 
@@ -1552,14 +1458,12 @@ impl OneCrawlMcp {
         &self,
         p: PipelineExecuteParams,
     ) -> Result<CallToolResult, McpError> {
-        let steps: Vec<onecrawl_cdp::PipelineStep> = serde_json::from_str(&p.steps)
-            .map_err(|e| mcp_err(format!("invalid steps JSON: {e}")))?;
+        let steps: Vec<onecrawl_cdp::PipelineStep> = parse_json_str(&p.steps, "steps")?;
         let pipeline = onecrawl_cdp::Pipeline {
             name: p.name,
             steps,
         };
-        let items: Vec<HashMap<String, String>> = serde_json::from_str(&p.input)
-            .map_err(|e| mcp_err(format!("invalid input JSON: {e}")))?;
+        let items: Vec<HashMap<String, String>> = parse_json_str(&p.input, "input")?;
         let result = onecrawl_cdp::data_pipeline::execute_pipeline(&pipeline, items);
         json_ok(&result)
     }
@@ -1569,16 +1473,10 @@ impl OneCrawlMcp {
         p: HttpGetParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
-        let headers: Option<HashMap<String, String>> = match &p.headers {
-            Some(s) => Some(
-                serde_json::from_str(s)
-                    .map_err(|e| mcp_err(format!("invalid headers JSON: {e}")))?,
-            ),
-            None => None,
-        };
+        let headers: Option<HashMap<String, String>> = parse_opt_json_str(p.headers.as_deref(), "headers")?;
         let resp = onecrawl_cdp::http_client::get(&page, &p.url, headers)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&resp)
     }
 
@@ -1587,17 +1485,11 @@ impl OneCrawlMcp {
         p: HttpPostParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
-        let headers: Option<HashMap<String, String>> = match &p.headers {
-            Some(s) => Some(
-                serde_json::from_str(s)
-                    .map_err(|e| mcp_err(format!("invalid headers JSON: {e}")))?,
-            ),
-            None => None,
-        };
+        let headers: Option<HashMap<String, String>> = parse_opt_json_str(p.headers.as_deref(), "headers")?;
         let resp =
             onecrawl_cdp::http_client::post(&page, &p.url, &p.body, "application/json", headers)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?;
+                .mcp()?;
         json_ok(&resp)
     }
 
@@ -1608,7 +1500,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let edges = onecrawl_cdp::link_graph::extract_links(&page, &p.base_url)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&edges)
     }
 
@@ -1616,8 +1508,7 @@ impl OneCrawlMcp {
         &self,
         p: AnalyzeGraphParams,
     ) -> Result<CallToolResult, McpError> {
-        let edges: Vec<onecrawl_cdp::LinkEdge> = serde_json::from_str(&p.edges)
-            .map_err(|e| mcp_err(format!("invalid edges JSON: {e}")))?;
+        let edges: Vec<onecrawl_cdp::LinkEdge> = parse_json_str(&p.edges, "edges")?;
         let graph = onecrawl_cdp::link_graph::build_graph(&edges);
         let stats = onecrawl_cdp::link_graph::analyze_graph(&graph);
         json_ok(&stats)
@@ -1702,7 +1593,7 @@ impl OneCrawlMcp {
         };
         onecrawl_cdp::webauthn::enable_virtual_authenticator(&page, &config)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         text_ok("Virtual authenticator enabled")
     }
 
@@ -1719,7 +1610,7 @@ impl OneCrawlMcp {
         };
         onecrawl_cdp::webauthn::add_virtual_credential(&page, &cred)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         text_ok("Credential added")
     }
 
@@ -1730,7 +1621,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let creds = onecrawl_cdp::webauthn::get_virtual_credentials(&page)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&creds)
     }
 
@@ -1741,7 +1632,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let log = onecrawl_cdp::webauthn::get_webauthn_log(&page)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&log)
     }
 
@@ -1752,7 +1643,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::webauthn::disable_virtual_authenticator(&page)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         text_ok("Virtual authenticator disabled")
     }
 
@@ -1763,7 +1654,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let removed = onecrawl_cdp::webauthn::remove_virtual_credential(&page, &p.credential_id)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&RemovedResult { removed })
     }
 
@@ -1836,7 +1727,7 @@ impl OneCrawlMcp {
         );
         let bounds_val = onecrawl_cdp::page::evaluate_js(&page, &bounds_js)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
 
         if bounds_val.is_null() {
             return Err(crate::helpers::agent_err(
@@ -1846,7 +1737,7 @@ impl OneCrawlMcp {
 
         let bytes = onecrawl_cdp::screenshot::screenshot_element(&page, &selector)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         let b64 = B64.encode(&bytes);
 
         json_ok(&serde_json::json!({
@@ -1912,7 +1803,7 @@ impl OneCrawlMcp {
         "#;
         let result = onecrawl_cdp::page::evaluate_js(&page, js)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&result)
     }
 
@@ -1933,7 +1824,7 @@ impl OneCrawlMcp {
         );
         let result = onecrawl_cdp::page::evaluate_js(&page, &js)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&result)
     }
 
@@ -1944,7 +1835,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let iframes = onecrawl_cdp::iframe::list_iframes(&page)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&serde_json::json!({
             "total": iframes.len(),
             "iframes": iframes
@@ -2000,7 +1891,7 @@ impl OneCrawlMcp {
 
         let result = onecrawl_cdp::iframe::eval_in_iframe(&page, p.index, &snap_js)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
 
         if let Some(err) = result.get("error") {
             return Err(mcp_err(format!("iframe snapshot failed: {}", err)));
@@ -2063,7 +1954,7 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let policy = if let Some(ref path) = p.policy_file {
             onecrawl_cdp::SafetyState::load_from_file(std::path::Path::new(path))
-                .map_err(|e| mcp_err(e))?
+                .mcp()?
         } else {
             onecrawl_cdp::SafetyPolicy {
                 allowed_domains: p.allowed_domains.unwrap_or_default(),
@@ -2092,7 +1983,6 @@ impl OneCrawlMcp {
 
     async fn agent_safety_status(
         &self,
-        #[allow(unused_variables)]
         _p: SafetyStatusParams,
     ) -> Result<CallToolResult, McpError> {
         let state = self.browser.lock().await;
@@ -2107,7 +1997,6 @@ impl OneCrawlMcp {
 
     fn agent_skills_list(
         &self,
-        #[allow(unused_variables)]
         _p: SkillsListParams,
     ) -> Result<CallToolResult, McpError> {
         let builtins = onecrawl_cdp::skills::SkillRegistry::builtins();
@@ -2144,7 +2033,7 @@ impl OneCrawlMcp {
         };
         onecrawl_cdp::screencast::start_screencast(&page, &opts)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&serde_json::json!({
             "status": "started",
             "format": opts.format,
@@ -2157,13 +2046,12 @@ impl OneCrawlMcp {
 
     async fn agent_screencast_stop(
         &self,
-        #[allow(unused_variables)]
         _p: ScreencastStopParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::screencast::stop_screencast(&page)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&serde_json::json!({ "status": "stopped" }))
     }
 
@@ -2179,7 +2067,7 @@ impl OneCrawlMcp {
         };
         let bytes = onecrawl_cdp::screencast::capture_frame(&page, &opts)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         let b64 = B64.encode(&bytes);
         json_ok(&serde_json::json!({
             "image": b64,
@@ -2218,7 +2106,7 @@ impl OneCrawlMcp {
         };
         onecrawl_cdp::screencast::start_screencast(&page, &opts)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
 
         json_ok(&serde_json::json!({
             "status": "recording",
@@ -2229,7 +2117,6 @@ impl OneCrawlMcp {
 
     async fn agent_recording_stop(
         &self,
-        #[allow(unused_variables)]
         _p: RecordingStopParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
@@ -2254,7 +2141,7 @@ impl OneCrawlMcp {
                 .ok_or_else(|| mcp_err("no recording in progress"))?;
             rec.stop();
             let frame_count = rec.frame_count();
-            let result = rec.save_frames().map_err(|e| mcp_err(e))?;
+            let result = rec.save_frames().mcp()?;
             state.recording = None;
             return json_ok(&serde_json::json!({
                 "status": "saved",
@@ -2265,7 +2152,7 @@ impl OneCrawlMcp {
 
         rec.stop();
         let frame_count = rec.frame_count();
-        let result = rec.save_frames().map_err(|e| mcp_err(e))?;
+        let result = rec.save_frames().mcp()?;
         state.recording = None;
         json_ok(&serde_json::json!({
             "status": "saved",
@@ -2276,7 +2163,6 @@ impl OneCrawlMcp {
 
     async fn agent_recording_status(
         &self,
-        #[allow(unused_variables)]
         _p: RecordingStatusParams,
     ) -> Result<CallToolResult, McpError> {
         let state = self.browser.lock().await;
@@ -2303,7 +2189,6 @@ impl OneCrawlMcp {
 
     async fn agent_ios_devices(
         &self,
-        #[allow(unused_variables)]
         _p: IosDevicesParams,
     ) -> Result<CallToolResult, McpError> {
         let devices = onecrawl_cdp::ios::IosClient::list_devices()
@@ -2369,7 +2254,6 @@ impl OneCrawlMcp {
 
     async fn agent_ios_screenshot(
         &self,
-        #[allow(unused_variables)]
         _p: IosScreenshotParams,
     ) -> Result<CallToolResult, McpError> {
         let state = self.browser.lock().await;
@@ -2408,7 +2292,7 @@ impl OneCrawlMcp {
 
         let result = onecrawl_cdp::computer_use::execute_action(&page, &action, 0)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
 
         json_ok(&result)
     }
@@ -2424,7 +2308,7 @@ impl OneCrawlMcp {
             p.include_screenshot.unwrap_or(false),
         )
         .await
-        .map_err(|e| mcp_err(e.to_string()))?;
+        .mcp()?;
 
         json_ok(&obs)
     }
@@ -2454,7 +2338,7 @@ impl OneCrawlMcp {
 
             let result = onecrawl_cdp::computer_use::execute_action(&page, &action, i)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?;
+                .mcp()?;
 
             let failed = !result.success;
             results.push(result);
@@ -2477,7 +2361,7 @@ impl OneCrawlMcp {
 
     async fn pool_list(
         &self,
-        #[allow(unused_variables)] _p: PoolListParams,
+        _p: PoolListParams,
     ) -> Result<CallToolResult, McpError> {
         let state = self.browser.lock().await;
         let instances = state.pool.list();
@@ -2489,7 +2373,7 @@ impl OneCrawlMcp {
 
     async fn pool_status(
         &self,
-        #[allow(unused_variables)] _p: PoolStatusParams,
+        _p: PoolStatusParams,
     ) -> Result<CallToolResult, McpError> {
         let state = self.browser.lock().await;
         let pool = &state.pool;
@@ -2514,7 +2398,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let matches = onecrawl_cdp::smart_actions::smart_find(&page, &p.query)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&serde_json::json!({
             "query": p.query,
             "matches": matches,
@@ -2529,7 +2413,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let matched = onecrawl_cdp::smart_actions::smart_click(&page, &p.query)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&serde_json::json!({
             "clicked": matched.selector,
             "confidence": matched.confidence,
@@ -2544,7 +2428,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let matched = onecrawl_cdp::smart_actions::smart_fill(&page, &p.query, &p.value)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&serde_json::json!({
             "filled": matched.selector,
             "value_length": p.value.len(),
@@ -2573,19 +2457,11 @@ impl OneCrawlMcp {
         p: MemoryStoreParams,
     ) -> Result<CallToolResult, McpError> {
         let mut state = self.browser.lock().await;
-        let category = match p.category.as_deref() {
-            Some("page_visit") => onecrawl_cdp::MemoryCategory::PageVisit,
-            Some("element_pattern") => onecrawl_cdp::MemoryCategory::ElementPattern,
-            Some("domain_strategy") => onecrawl_cdp::MemoryCategory::DomainStrategy,
-            Some("retry_knowledge") => onecrawl_cdp::MemoryCategory::RetryKnowledge,
-            Some("user_preference") => onecrawl_cdp::MemoryCategory::UserPreference,
-            Some("selector_mapping") => onecrawl_cdp::MemoryCategory::SelectorMapping,
-            Some("error_pattern") => onecrawl_cdp::MemoryCategory::ErrorPattern,
-            _ => onecrawl_cdp::MemoryCategory::Custom,
-        };
+        let category = parse_memory_category(p.category.as_deref())
+            .unwrap_or(onecrawl_cdp::MemoryCategory::Custom);
         let mem = Self::ensure_memory(&mut state);
         mem.store(&p.key, p.value.clone(), category, p.domain.clone())
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         json_ok(&serde_json::json!({
             "stored": p.key,
             "category": format!("{:?}", mem.recall(&p.key).map(|e| &e.category)),
@@ -2617,17 +2493,7 @@ impl OneCrawlMcp {
         p: MemorySearchParams,
     ) -> Result<CallToolResult, McpError> {
         let mut state = self.browser.lock().await;
-        let category = match p.category.as_deref() {
-            Some("page_visit") => Some(onecrawl_cdp::MemoryCategory::PageVisit),
-            Some("element_pattern") => Some(onecrawl_cdp::MemoryCategory::ElementPattern),
-            Some("domain_strategy") => Some(onecrawl_cdp::MemoryCategory::DomainStrategy),
-            Some("retry_knowledge") => Some(onecrawl_cdp::MemoryCategory::RetryKnowledge),
-            Some("user_preference") => Some(onecrawl_cdp::MemoryCategory::UserPreference),
-            Some("selector_mapping") => Some(onecrawl_cdp::MemoryCategory::SelectorMapping),
-            Some("error_pattern") => Some(onecrawl_cdp::MemoryCategory::ErrorPattern),
-            Some("custom") => Some(onecrawl_cdp::MemoryCategory::Custom),
-            _ => None,
-        };
+        let category = parse_memory_category(p.category.as_deref());
         let mem = Self::ensure_memory(&mut state);
         let results = mem.search(&p.query, category, p.domain.as_deref());
         let entries: Vec<serde_json::Value> = results.iter().map(|e| {
@@ -2674,7 +2540,7 @@ impl OneCrawlMcp {
             let strategy: onecrawl_cdp::DomainStrategy = serde_json::from_value(strategy_val)
                 .map_err(|e| mcp_err(format!("invalid strategy JSON: {e}")))?;
             mem.store_domain_strategy(strategy)
-                .map_err(|e| mcp_err(e.to_string()))?;
+                .mcp()?;
             json_ok(&serde_json::json!({ "stored": true, "domain": p.domain }))
         } else {
             match mem.recall_domain_strategy(&p.domain) {
@@ -2693,7 +2559,7 @@ impl OneCrawlMcp {
 
     async fn memory_stats(
         &self,
-        #[allow(unused_variables)] _p: MemoryStatsParams,
+        _p: MemoryStatsParams,
     ) -> Result<CallToolResult, McpError> {
         let mut state = self.browser.lock().await;
         let mem = Self::ensure_memory(&mut state);
@@ -2716,7 +2582,7 @@ impl OneCrawlMcp {
         p: WorkflowValidateParams,
     ) -> Result<CallToolResult, McpError> {
         let workflow = onecrawl_cdp::workflow::parse_json(&p.workflow)
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
         let errors = onecrawl_cdp::workflow::validate(&workflow);
         if errors.is_empty() {
             json_ok(&serde_json::json!({
@@ -2739,10 +2605,10 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let mut workflow = if p.workflow.trim().starts_with('{') {
             onecrawl_cdp::workflow::parse_json(&p.workflow)
-                .map_err(|e| mcp_err(e.to_string()))?
+                .mcp()?
         } else {
             onecrawl_cdp::workflow::load_from_file(&p.workflow)
-                .map_err(|e| mcp_err(e.to_string()))?
+                .mcp()?
         };
 
         // Override variables
@@ -2854,40 +2720,40 @@ impl OneCrawlMcp {
         match action {
             Action::Navigate { url } => {
                 let url = onecrawl_cdp::workflow::interpolate(url, variables);
-                onecrawl_cdp::navigation::goto(page, &url).await.map_err(|e| mcp_err(e.to_string()))?;
+                onecrawl_cdp::navigation::goto(page, &url).await.mcp()?;
                 let title = onecrawl_cdp::navigation::get_title(page).await.unwrap_or_default();
                 Ok(Some(serde_json::json!({ "url": url, "title": title })))
             }
             Action::Click { selector } => {
                 let sel = onecrawl_cdp::workflow::interpolate(selector, variables);
                 let resolved = onecrawl_cdp::accessibility::resolve_ref(&sel);
-                onecrawl_cdp::element::click(page, &resolved).await.map_err(|e| mcp_err(e.to_string()))?;
+                onecrawl_cdp::element::click(page, &resolved).await.mcp()?;
                 Ok(Some(serde_json::json!({ "clicked": sel })))
             }
             Action::Type { selector, text } => {
                 let sel = onecrawl_cdp::workflow::interpolate(selector, variables);
                 let txt = onecrawl_cdp::workflow::interpolate(text, variables);
                 let resolved = onecrawl_cdp::accessibility::resolve_ref(&sel);
-                onecrawl_cdp::element::type_text(page, &resolved, &txt).await.map_err(|e| mcp_err(e.to_string()))?;
+                onecrawl_cdp::element::type_text(page, &resolved, &txt).await.mcp()?;
                 Ok(Some(serde_json::json!({ "typed": txt.len() })))
             }
             Action::WaitForSelector { selector, timeout_ms } => {
                 let sel = onecrawl_cdp::workflow::interpolate(selector, variables);
                 let resolved = onecrawl_cdp::accessibility::resolve_ref(&sel);
-                onecrawl_cdp::navigation::wait_for_selector(page, &resolved, *timeout_ms).await.map_err(|e| mcp_err(e.to_string()))?;
+                onecrawl_cdp::navigation::wait_for_selector(page, &resolved, *timeout_ms).await.mcp()?;
                 Ok(Some(serde_json::json!({ "found": sel })))
             }
             Action::Screenshot { path, full_page } => {
                 let bytes = if full_page.unwrap_or(false) {
                     onecrawl_cdp::screenshot::screenshot_full(page)
-                        .await.map_err(|e| mcp_err(e.to_string()))?
+                        .await.mcp()?
                 } else {
                     onecrawl_cdp::screenshot::screenshot_viewport(page)
-                        .await.map_err(|e| mcp_err(e.to_string()))?
+                        .await.mcp()?
                 };
                 if let Some(p) = path {
                     let p = onecrawl_cdp::workflow::interpolate(p, variables);
-                    std::fs::write(&p, &bytes).map_err(|e| mcp_err(e.to_string()))?;
+                    std::fs::write(&p, &bytes).mcp()?;
                     Ok(Some(serde_json::json!({ "saved": p, "bytes": bytes.len() })))
                 } else {
                     Ok(Some(serde_json::json!({ "bytes": bytes.len() })))
@@ -2895,7 +2761,7 @@ impl OneCrawlMcp {
             }
             Action::Evaluate { js } => {
                 let js = onecrawl_cdp::workflow::interpolate(js, variables);
-                let result = page.evaluate(js).await.map_err(|e| mcp_err(e.to_string()))?;
+                let result = page.evaluate(js).await.mcp()?;
                 let val = result.into_value::<serde_json::Value>().unwrap_or(serde_json::Value::Null);
                 Ok(Some(val))
             }
@@ -2909,19 +2775,19 @@ impl OneCrawlMcp {
                     format!(r#"Array.from(document.querySelectorAll({sel_json})).map(e => e.textContent.trim())"#,
                         sel_json = serde_json::to_string(&sel).unwrap())
                 };
-                let result = page.evaluate(attr_js).await.map_err(|e| mcp_err(e.to_string()))?;
+                let result = page.evaluate(attr_js).await.mcp()?;
                 let val = result.into_value::<serde_json::Value>().unwrap_or(serde_json::Value::Null);
                 Ok(Some(val))
             }
             Action::SmartClick { query } => {
                 let q = onecrawl_cdp::workflow::interpolate(query, variables);
-                let matched = onecrawl_cdp::smart_actions::smart_click(page, &q).await.map_err(|e| mcp_err(e.to_string()))?;
+                let matched = onecrawl_cdp::smart_actions::smart_click(page, &q).await.mcp()?;
                 Ok(Some(serde_json::json!({ "clicked": matched.selector, "confidence": matched.confidence })))
             }
             Action::SmartFill { query, value } => {
                 let q = onecrawl_cdp::workflow::interpolate(query, variables);
                 let v = onecrawl_cdp::workflow::interpolate(value, variables);
-                let matched = onecrawl_cdp::smart_actions::smart_fill(page, &q, &v).await.map_err(|e| mcp_err(e.to_string()))?;
+                let matched = onecrawl_cdp::smart_actions::smart_fill(page, &q, &v).await.mcp()?;
                 Ok(Some(serde_json::json!({ "filled": matched.selector, "confidence": matched.confidence })))
             }
             Action::Sleep { ms } => {
@@ -2996,7 +2862,7 @@ impl OneCrawlMcp {
                     let b = onecrawl_cdp::workflow::interpolate(b, variables);
                     req = req.body(b);
                 }
-                let resp = req.send().await.map_err(|e| mcp_err(e.to_string()))?;
+                let resp = req.send().await.mcp()?;
                 let status = resp.status().as_u16();
                 let body_text = resp.text().await.unwrap_or_default();
                 let body_val = serde_json::from_str::<serde_json::Value>(&body_text)
@@ -3010,7 +2876,7 @@ impl OneCrawlMcp {
                     ..Default::default()
                 };
                 let result = onecrawl_cdp::accessibility::agent_snapshot(page, &opts)
-                    .await.map_err(|e| mcp_err(e.to_string()))?;
+                    .await.mcp()?;
                 Ok(Some(serde_json::json!(result)))
             }
         }
@@ -3099,7 +2965,7 @@ impl OneCrawlMcp {
         })()
         "#;
 
-        page.evaluate(js).await.map_err(|e| mcp_err(e.to_string()))?;
+        page.evaluate(js).await.mcp()?;
 
         // Wait for capture duration
         tokio::time::sleep(tokio::time::Duration::from_secs(duration)).await;
@@ -3113,7 +2979,7 @@ impl OneCrawlMcp {
         })()
         "#;
 
-        let result = page.evaluate(collect_js).await.map_err(|e| mcp_err(e.to_string()))?;
+        let result = page.evaluate(collect_js).await.mcp()?;
         let raw: Vec<serde_json::Value> = result.into_value().unwrap_or_default();
 
         let endpoints: Vec<onecrawl_cdp::network_intel::ApiEndpoint> = raw.iter().filter_map(|r| {
@@ -3285,7 +3151,7 @@ impl OneCrawlMcp {
                 .map_err(|e| mcp_err(format!("invalid VRT suite: {e}")))?
         } else {
             onecrawl_cdp::vrt::load_suite(&p.suite)
-                .map_err(|e| mcp_err(e.to_string()))?
+                .mcp()?
         };
 
         let errors = onecrawl_cdp::vrt::validate_suite(&suite);
@@ -3304,7 +3170,7 @@ impl OneCrawlMcp {
         for test in &suite.tests {
             onecrawl_cdp::navigation::goto(&page, &test.url)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?;
+                .mcp()?;
 
             if test.delay_ms > 0 {
                 tokio::time::sleep(tokio::time::Duration::from_millis(test.delay_ms)).await;
@@ -3323,11 +3189,11 @@ impl OneCrawlMcp {
             let screenshot_data = if test.full_page {
                 onecrawl_cdp::screenshot::screenshot_full(&page)
                     .await
-                    .map_err(|e| mcp_err(e.to_string()))?
+                    .mcp()?
             } else {
                 onecrawl_cdp::screenshot::screenshot_viewport(&page)
                     .await
-                    .map_err(|e| mcp_err(e.to_string()))?
+                    .mcp()?
             };
 
             let result = onecrawl_cdp::vrt::compare_test(
@@ -3355,7 +3221,7 @@ impl OneCrawlMcp {
             failed,
             new_baselines,
             errors: error_count,
-            results: results.clone(),
+            results,
             duration_ms: start.elapsed().as_millis() as u64,
         };
 
@@ -3381,16 +3247,16 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::navigation::goto(&page, &p.url)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
 
         let screenshot_data = if p.full_page.unwrap_or(false) {
             onecrawl_cdp::screenshot::screenshot_full(&page)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?
+                .mcp()?
         } else {
             onecrawl_cdp::screenshot::screenshot_viewport(&page)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?
+                .mcp()?
         };
 
         let test = onecrawl_cdp::VrtTestCase {
@@ -3430,7 +3296,7 @@ impl OneCrawlMcp {
             Some(data) => {
                 let path =
                     onecrawl_cdp::vrt::save_baseline(baseline_dir, &p.test_name, &data)
-                        .map_err(|e| mcp_err(e.to_string()))?;
+                        .mcp()?;
                 json_ok(&serde_json::json!({
                     "updated": true,
                     "test_name": p.test_name,
@@ -3468,8 +3334,7 @@ impl OneCrawlMcp {
         p: PlannerExecuteParams,
     ) -> Result<CallToolResult, McpError> {
         let plan: onecrawl_cdp::TaskPlan = if p.plan.trim().starts_with('{') {
-            serde_json::from_str(&p.plan)
-                .map_err(|e| mcp_err(format!("invalid plan JSON: {e}")))?
+            parse_json_str(&p.plan, "plan")?
         } else {
             let mut context = p.context.clone().unwrap_or_default();
             let auto_context = onecrawl_cdp::task_planner::extract_context(&p.plan);
@@ -3560,7 +3425,6 @@ impl OneCrawlMcp {
 
     async fn planner_patterns(
         &self,
-        #[allow(unused_variables)]
         _p: PlannerPatternsParams,
     ) -> Result<CallToolResult, McpError> {
         let patterns = onecrawl_cdp::task_planner::builtin_patterns();
@@ -3591,12 +3455,12 @@ impl OneCrawlMcp {
         if let Some(url) = &p.url {
             onecrawl_cdp::navigation::goto(&page, url)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?;
+                .mcp()?;
             tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         }
 
         let js = onecrawl_cdp::perf_monitor::metrics_collection_js();
-        let result = page.evaluate(js).await.map_err(|e| mcp_err(e.to_string()))?;
+        let result = page.evaluate(js).await.mcp()?;
         let metrics: serde_json::Value = result.into_value().unwrap_or(serde_json::Value::Null);
 
         let url = onecrawl_cdp::navigation::get_url(&page).await.unwrap_or_default();
@@ -3634,12 +3498,12 @@ impl OneCrawlMcp {
         if let Some(url) = &p.url {
             onecrawl_cdp::navigation::goto(&page, url)
                 .await
-                .map_err(|e| mcp_err(e.to_string()))?;
+                .mcp()?;
             tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         }
 
         let js = onecrawl_cdp::perf_monitor::metrics_collection_js();
-        let result = page.evaluate(js).await.map_err(|e| mcp_err(e.to_string()))?;
+        let result = page.evaluate(js).await.mcp()?;
         let metrics: serde_json::Value = result.into_value().unwrap_or(serde_json::Value::Null);
 
         let snapshot = onecrawl_cdp::PerfSnapshot {
@@ -3687,13 +3551,13 @@ impl OneCrawlMcp {
 
         onecrawl_cdp::navigation::goto(&page, &p.url)
             .await
-            .map_err(|e| mcp_err(e.to_string()))?;
+            .mcp()?;
 
         let settle = p.settle_ms.unwrap_or(3000);
         tokio::time::sleep(tokio::time::Duration::from_millis(settle)).await;
 
         let js = onecrawl_cdp::perf_monitor::metrics_collection_js();
-        let result = page.evaluate(js).await.map_err(|e| mcp_err(e.to_string()))?;
+        let result = page.evaluate(js).await.mcp()?;
         let metrics: serde_json::Value = result.into_value().unwrap_or(serde_json::Value::Null);
 
         let vitals: onecrawl_cdp::CoreWebVitals = serde_json::from_value(
@@ -3723,29 +3587,29 @@ impl OneCrawlMcp {
         use onecrawl_cdp::task_planner::PlannedAction;
         match action {
             PlannedAction::Navigate { url } => {
-                onecrawl_cdp::navigation::goto(page, url).await.map_err(|e| mcp_err(e.to_string()))?;
+                onecrawl_cdp::navigation::goto(page, url).await.mcp()?;
                 let title = onecrawl_cdp::navigation::get_title(page).await.unwrap_or_default();
                 Ok(Some(serde_json::json!({ "navigated": url, "title": title })))
             }
             PlannedAction::Click { target, .. } => {
                 let resolved = onecrawl_cdp::accessibility::resolve_ref(target);
-                onecrawl_cdp::element::click(page, &resolved).await.map_err(|e| mcp_err(e.to_string()))?;
+                onecrawl_cdp::element::click(page, &resolved).await.mcp()?;
                 Ok(Some(serde_json::json!({ "clicked": target })))
             }
             PlannedAction::Type { target, text, .. } => {
                 let resolved = onecrawl_cdp::accessibility::resolve_ref(target);
-                onecrawl_cdp::element::type_text(page, &resolved, text).await.map_err(|e| mcp_err(e.to_string()))?;
+                onecrawl_cdp::element::type_text(page, &resolved, text).await.mcp()?;
                 Ok(Some(serde_json::json!({ "typed": text.len() })))
             }
             PlannedAction::Wait { target, timeout_ms } => {
                 let resolved = onecrawl_cdp::accessibility::resolve_ref(target);
-                onecrawl_cdp::navigation::wait_for_selector(page, &resolved, *timeout_ms).await.map_err(|e| mcp_err(e.to_string()))?;
+                onecrawl_cdp::navigation::wait_for_selector(page, &resolved, *timeout_ms).await.mcp()?;
                 Ok(Some(serde_json::json!({ "found": target })))
             }
             PlannedAction::Snapshot {} => {
                 let opts = onecrawl_cdp::accessibility::AgentSnapshotOptions::default();
                 let result = onecrawl_cdp::accessibility::agent_snapshot(page, &opts)
-                    .await.map_err(|e| mcp_err(e.to_string()))?;
+                    .await.mcp()?;
                 Ok(Some(serde_json::json!(result)))
             }
             PlannedAction::Extract { target } => {
@@ -3753,7 +3617,7 @@ impl OneCrawlMcp {
                     r#"Array.from(document.querySelectorAll({sel})).map(e => e.textContent.trim())"#,
                     sel = serde_json::to_string(target).unwrap()
                 );
-                let result = page.evaluate(js).await.map_err(|e| mcp_err(e.to_string()))?;
+                let result = page.evaluate(js).await.mcp()?;
                 let val = result.into_value::<serde_json::Value>().unwrap_or(serde_json::Value::Null);
                 Ok(Some(val))
             }
@@ -3761,11 +3625,11 @@ impl OneCrawlMcp {
                 Ok(Some(serde_json::json!({ "assert": condition, "note": "assertion evaluation requires runtime context" })))
             }
             PlannedAction::SmartClick { query } => {
-                let matched = onecrawl_cdp::smart_actions::smart_click(page, query).await.map_err(|e| mcp_err(e.to_string()))?;
+                let matched = onecrawl_cdp::smart_actions::smart_click(page, query).await.mcp()?;
                 Ok(Some(serde_json::json!({ "clicked": matched.selector, "confidence": matched.confidence })))
             }
             PlannedAction::SmartFill { query, value } => {
-                let matched = onecrawl_cdp::smart_actions::smart_fill(page, query, value).await.map_err(|e| mcp_err(e.to_string()))?;
+                let matched = onecrawl_cdp::smart_actions::smart_fill(page, query, value).await.mcp()?;
                 Ok(Some(serde_json::json!({ "filled": matched.selector, "confidence": matched.confidence })))
             }
             PlannedAction::Scroll { direction, amount } => {
@@ -3777,13 +3641,13 @@ impl OneCrawlMcp {
                     "right" => format!("window.scrollBy({}, 0)", px),
                     _ => format!("window.scrollBy(0, {})", px),
                 };
-                page.evaluate(js).await.map_err(|e| mcp_err(e.to_string()))?;
+                page.evaluate(js).await.mcp()?;
                 Ok(Some(serde_json::json!({ "scrolled": direction, "pixels": px })))
             }
             PlannedAction::Screenshot { path } => {
-                let data = onecrawl_cdp::screenshot::screenshot_full(page).await.map_err(|e| mcp_err(e.to_string()))?;
+                let data = onecrawl_cdp::screenshot::screenshot_full(page).await.mcp()?;
                 if let Some(p) = path {
-                    std::fs::write(p, &data).map_err(|e| mcp_err(e.to_string()))?;
+                    std::fs::write(p, &data).mcp()?;
                 }
                 Ok(Some(serde_json::json!({ "bytes": data.len() })))
             }
