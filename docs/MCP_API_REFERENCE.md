@@ -1,6 +1,6 @@
 # OneCrawl MCP API Reference
 
-> **10 consolidated tools • 171 actions • Action-based dispatch**
+> **10 consolidated tools • 192 actions • Action-based dispatch**
 
 All browser automation, crawling, scraping, security, and AI orchestration capabilities are accessed through 10 super-tools. Each tool accepts a uniform `{ action, params }` interface.
 
@@ -10,15 +10,15 @@ All browser automation, crawling, scraping, security, and AI orchestration capab
 
 | Tool | Actions | Description |
 |------|:-------:|-------------|
-| [`browser`](#1-browser) | 77 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage, network interception, console & errors, device emulation, file operations, shadow DOM, session context, smart forms |
+| [`browser`](#1-browser) | 84 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage, network interception, console & errors, device emulation, file operations, shadow DOM, session context, smart forms, self-healing selectors, event reactions |
 | [`crawl`](#2-crawl) | 5 | Web crawling, robots.txt, sitemaps, DOM snapshots |
-| [`agent`](#3-agent) | 21 | Command chains, API capture, iframes, remote CDP, safety, screencast, recording, iOS |
+| [`agent`](#3-agent) | 27 | Command chains, API capture, iframes, remote CDP, safety, screencast, recording, iOS, task decomposition, vision observation |
 | [`stealth`](#4-stealth) | 5 | Anti-detection patches, fingerprinting, CAPTCHA detection |
 | [`data`](#5-data) | 10 | Data pipelines, HTTP client, link graphs, network intelligence |
 | [`secure`](#6-secure) | 13 | Encryption, PKCE, TOTP, encrypted KV store, WebAuthn passkeys |
 | [`computer`](#7-computer) | 8 | AI computer-use protocol, smart element resolution, browser pool |
 | [`memory`](#8-memory) | 6 | Persistent agent memory across sessions |
-| [`automate`](#9-automate) | 11 | Workflow DSL, AI task planning, rate limiting, retry queues, error recovery |
+| [`automate`](#9-automate) | 19 | Workflow DSL, AI task planning, rate limiting, retry queues, error recovery, session checkpoints, workflow control flow |
 | [`perf`](#10-perf) | 7 | Performance audits, budgets, regression detection, visual regression testing |
 
 ---
@@ -141,6 +141,15 @@ A headless Chromium browser is launched automatically on the first call that req
 | `form_infer` | `{selector?}` | Analyze form fields and infer semantic purpose |
 | `form_auto_fill` | `{data, selector?, confidence_threshold?}` | Auto-fill form by matching data keys to fields |
 | `form_validate` | — | Check HTML5 form validation state |
+| | | **Self-Healing Selectors** |
+| `selector_heal` | `{selector, context?}` | Recover broken selector via multiple strategies |
+| `selector_alternatives` | `{selector, max_alternatives?}` | Generate multiple selector strategies for an element |
+| `selector_validate` | `{selector, expected_role?, expected_text?}` | Validate selector still matches expected element |
+| | | **Event-Driven Reactions** |
+| `event_subscribe` | `{event_type, filter?}` | Subscribe to page events |
+| `event_unsubscribe` | `{event_type}` | Unsubscribe from events |
+| `event_poll` | `{event_type?, limit?, clear?}` | Poll buffered events |
+| `event_clear` | — | Clear event buffer |
 
 #### Action Details
 
@@ -1358,6 +1367,154 @@ Check the HTML5 constraint validation state of all forms on the page. Reports va
 ```
 </details>
 
+<details>
+<summary><strong><code>selector_heal</code></strong> — Recover broken selector via multiple strategies</summary>
+
+Attempt to recover a broken CSS selector by trying multiple healing strategies (ID, class, text, aria, structural). Returns the best match and alternatives.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | ✅ | The broken CSS selector to heal |
+| `context` | string | | Additional context about the expected element |
+
+**Response:**
+```json
+{
+  "healed": true,
+  "original": "#old-button",
+  "alternatives": [
+    { "selector": "[data-testid='submit']", "strategy": "test-id", "confidence": 0.95 },
+    { "selector": "button:has-text('Submit')", "strategy": "text", "confidence": 0.87 }
+  ],
+  "recommended": "[data-testid='submit']"
+}
+```
+</details>
+
+<details>
+<summary><strong><code>selector_alternatives</code></strong> — Generate multiple selector strategies for an element</summary>
+
+Generate multiple CSS selector strategies for a given element. Useful for creating resilient selectors with fallbacks.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | ✅ | CSS selector of the target element |
+| `max_alternatives` | number | | Maximum number of alternatives to generate |
+
+**Response:**
+```json
+{
+  "element": { "tag": "button", "id": "submit-btn", "class": "btn primary", "text": "Submit" },
+  "strategies": [
+    { "type": "id", "selector": "#submit-btn", "specificity": "high", "fragility_score": 0.1 },
+    { "type": "text", "selector": "button:has-text('Submit')", "specificity": "medium", "fragility_score": 0.3 }
+  ]
+}
+```
+</details>
+
+<details>
+<summary><strong><code>selector_validate</code></strong> — Validate selector still matches expected element</summary>
+
+Check whether a CSS selector still matches the expected element on the page. Validates role, text content, and match count.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | ✅ | CSS selector to validate |
+| `expected_role` | string | | Expected ARIA role of the element |
+| `expected_text` | string | | Expected text content of the element |
+
+**Response:**
+```json
+{
+  "valid": true,
+  "matches_count": 1,
+  "expected_role_match": true,
+  "expected_text_match": true,
+  "element_info": { "tag": "button", "role": "button", "text": "Submit" }
+}
+```
+</details>
+
+<details>
+<summary><strong><code>event_subscribe</code></strong> — Subscribe to page events</summary>
+
+Subscribe to specific page events (e.g., `click`, `navigation`, `network`, `console`). Events are buffered and can be retrieved via `event_poll`.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `event_type` | string | ✅ | Event type to subscribe to |
+| `filter` | string | | Optional filter pattern for events |
+
+**Response:**
+```json
+{ "event_type": "network", "subscribed": true, "active_subscriptions": ["network", "console"] }
+```
+</details>
+
+<details>
+<summary><strong><code>event_unsubscribe</code></strong> — Unsubscribe from events</summary>
+
+Remove a subscription for a specific event type.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `event_type` | string | ✅ | Event type to unsubscribe from |
+
+**Response:**
+```json
+{ "event_type": "network", "unsubscribed": true, "remaining_subscriptions": ["console"] }
+```
+</details>
+
+<details>
+<summary><strong><code>event_poll</code></strong> — Poll buffered events</summary>
+
+Retrieve buffered events, optionally filtered by type. Can clear the buffer after reading.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `event_type` | string | | Filter by event type (omit for all) |
+| `limit` | number | | Max events to return |
+| `clear` | boolean | | Clear buffer after polling (default `false`) |
+
+**Response:**
+```json
+{
+  "events": [
+    { "type": "network", "timestamp": "2025-01-15T10:30:00Z", "data": { "url": "https://api.example.com/data", "status": 200 } }
+  ],
+  "count": 1,
+  "has_more": false
+}
+```
+</details>
+
+<details>
+<summary><strong><code>event_clear</code></strong> — Clear event buffer</summary>
+
+Clear all buffered events across all subscriptions.
+
+**Params:** None
+
+**Response:**
+```json
+{ "cleared_count": 42 }
+```
+</details>
+
 ---
 
 ### 2. `crawl`
@@ -1474,7 +1631,7 @@ Compare two previously taken DOM snapshots by label.
 
 ### 3. `agent`
 
-AI agent orchestration — command chains, element screenshots, API capture, iframes, remote CDP, safety policies, skills, screencast, recording, and iOS automation.
+AI agent orchestration — command chains, element screenshots, API capture, iframes, remote CDP, safety policies, skills, screencast, recording, iOS automation, task decomposition, and vision observation.
 
 #### Actions
 
@@ -1501,6 +1658,14 @@ AI agent orchestration — command chains, element screenshots, API capture, ifr
 | `ios_navigate` | `{url}` | Navigate iOS Safari |
 | `ios_tap` | `{x, y}` | Tap on iOS screen |
 | `ios_screenshot` | — | Take iOS screenshot |
+| | | **Task Decomposition** |
+| `task_decompose` | `{goal, context?, max_depth?}` | Break goal into subtasks |
+| `task_plan` | `{tasks, strategy?}` | Generate execution plan |
+| `task_status` | — | Get task plan status |
+| | | **Vision Observation** |
+| `vision_describe` | `{selector?, format?}` | Describe page state structurally |
+| `vision_locate` | `{description, strategy?}` | Find element by natural language |
+| `vision_compare` | `{baseline, current?, threshold?}` | Compare page state against baseline |
 
 #### Action Details
 
@@ -1826,6 +1991,151 @@ Take a screenshot of the iOS device screen.
 **Params:** None
 
 **Response:** `{ "format": "png", "size": 54321, "data": "<base64>" }`
+</details>
+
+<details>
+<summary><strong><code>task_decompose</code></strong> — Break goal into subtasks</summary>
+
+Decompose a high-level goal into actionable subtasks with dependency information and complexity estimates.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `goal` | string | ✅ | The high-level goal to decompose |
+| `context` | string | | Additional context about the current state |
+| `max_depth` | number | | Maximum decomposition depth (default `2`) |
+
+**Response:**
+```json
+{
+  "goal": "Login and scrape dashboard data",
+  "subtasks": [
+    { "id": "t1", "description": "Navigate to login page", "type": "navigation", "complexity": "low", "dependencies": [] },
+    { "id": "t2", "description": "Fill login form", "type": "interaction", "complexity": "medium", "dependencies": ["t1"] },
+    { "id": "t3", "description": "Extract dashboard metrics", "type": "extraction", "complexity": "medium", "dependencies": ["t2"] }
+  ],
+  "count": 3
+}
+```
+</details>
+
+<details>
+<summary><strong><code>task_plan</code></strong> — Generate execution plan</summary>
+
+Generate an ordered execution plan from a list of tasks, resolving dependencies and identifying parallelizable steps.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `tasks` | array | ✅ | List of task descriptions or IDs |
+| `strategy` | string | | Planning strategy: `sequential`, `parallel`, `adaptive` (default `adaptive`) |
+
+**Response:**
+```json
+{
+  "plan_id": "plan_abc123",
+  "strategy": "adaptive",
+  "steps": [
+    { "order": 1, "task": "Navigate to login page", "dependencies": [], "parallel_safe": true },
+    { "order": 2, "task": "Fill login form", "dependencies": ["step_1"], "parallel_safe": false }
+  ],
+  "total_steps": 2
+}
+```
+</details>
+
+<details>
+<summary><strong><code>task_status</code></strong> — Get task plan status</summary>
+
+Retrieve the status of all active task plans including progress and completion state.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "plans": [
+    { "plan_id": "plan_abc123", "strategy": "adaptive", "total_steps": 5, "completed": 3, "status": "running" }
+  ],
+  "total_plans": 1
+}
+```
+</details>
+
+<details>
+<summary><strong><code>vision_describe</code></strong> — Describe page state structurally</summary>
+
+Produce a structural description of the current page state, including visible elements, layout summary, and interactive element count.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | | Scope description to a specific element |
+| `format` | string | | Output format: `summary`, `detailed`, `json` (default `summary`) |
+
+**Response:**
+```json
+{
+  "page_title": "Dashboard",
+  "url": "https://example.com/dashboard",
+  "visible_elements": 47,
+  "layout_summary": "Header with nav, main content with 3-column grid, sidebar with filters",
+  "interactive_count": 12
+}
+```
+</details>
+
+<details>
+<summary><strong><code>vision_locate</code></strong> — Find element by natural language</summary>
+
+Locate a page element using a natural language description. Returns matching elements with confidence scores.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `description` | string | ✅ | Natural language description of the element (e.g. "the blue submit button") |
+| `strategy` | string | | Search strategy: `accessibility`, `visual`, `hybrid` (default `hybrid`) |
+
+**Response:**
+```json
+{
+  "found": true,
+  "matches": [
+    { "selector": "button.btn-primary", "role": "button", "name": "Submit", "confidence": 0.92 },
+    { "selector": "#form-submit", "role": "button", "name": "Submit Form", "confidence": 0.78 }
+  ]
+}
+```
+</details>
+
+<details>
+<summary><strong><code>vision_compare</code></strong> — Compare page state against baseline</summary>
+
+Compare the current page state against a baseline snapshot. Detects visual and structural changes.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `baseline` | string | ✅ | Baseline snapshot identifier or data |
+| `current` | string | | Current snapshot (omit to capture live page) |
+| `threshold` | number | | Similarity threshold 0–1 (default `0.95`) |
+
+**Response:**
+```json
+{
+  "visual_similarity": 0.87,
+  "structural_changes": [
+    { "type": "added", "element": "div.notification-banner" },
+    { "type": "modified", "element": "span.user-count", "detail": "text changed" }
+  ],
+  "summary": "2 structural changes detected, visual similarity below threshold"
+}
+```
 </details>
 
 ---
@@ -2587,6 +2897,16 @@ Workflow automation, AI task planning, and execution control.
 | `error_classify` | `{error_message}` | Classify an error message into categories |
 | `recovery_suggest` | `{error_type, context?}` | Get recovery suggestions for error type |
 | `error_history` | — | Get recent error log |
+| | | **Session Checkpoints** |
+| `checkpoint_save` | `{name, include_cookies?, include_storage?, include_context?}` | Save browser state snapshot |
+| `checkpoint_restore` | `{name, restore_url?, restore_cookies?}` | Restore from checkpoint |
+| `checkpoint_list` | — | List checkpoints |
+| `checkpoint_delete` | `{name}` | Delete checkpoint |
+| | | **Workflow Control Flow** |
+| `workflow_while` | `{condition, actions, max_iterations?}` | Loop while condition true |
+| `workflow_for_each` | `{collection, variable_name?, actions}` | Iterate over collection |
+| `workflow_if` | `{condition, then_actions, else_actions?}` | Conditional execution |
+| `workflow_variable` | `{name, value?}` | Get/set workflow variable |
 
 #### Action Details
 
@@ -2826,6 +3146,169 @@ Retrieve the recent error log for the current session. Useful for debugging recu
   ],
   "count": 2
 }
+```
+</details>
+
+<details>
+<summary><strong><code>checkpoint_save</code></strong> — Save browser state snapshot</summary>
+
+Save a named checkpoint of the current browser state, including URL, cookies, storage, and page context.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | ✅ | Checkpoint name |
+| `include_cookies` | boolean | | Include cookies in snapshot (default `true`) |
+| `include_storage` | boolean | | Include localStorage/sessionStorage (default `true`) |
+| `include_context` | boolean | | Include page context variables (default `true`) |
+
+**Response:**
+```json
+{
+  "name": "after-login",
+  "saved_at": "2025-01-15T10:30:00Z",
+  "url": "https://example.com/dashboard",
+  "has_cookies": true,
+  "has_storage": true,
+  "has_context": true
+}
+```
+</details>
+
+<details>
+<summary><strong><code>checkpoint_restore</code></strong> — Restore from checkpoint</summary>
+
+Restore browser state from a previously saved checkpoint.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | ✅ | Checkpoint name to restore |
+| `restore_url` | boolean | | Navigate to saved URL (default `true`) |
+| `restore_cookies` | boolean | | Restore cookies (default `true`) |
+
+**Response:**
+```json
+{
+  "name": "after-login",
+  "restored_at": "2025-01-15T10:35:00Z",
+  "url": "https://example.com/dashboard",
+  "cookies_restored": true,
+  "storage_restored": true
+}
+```
+</details>
+
+<details>
+<summary><strong><code>checkpoint_list</code></strong> — List checkpoints</summary>
+
+List all saved checkpoints for the current session.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "checkpoints": [
+    { "name": "after-login", "saved_at": "2025-01-15T10:30:00Z", "url": "https://example.com/dashboard" },
+    { "name": "before-checkout", "saved_at": "2025-01-15T10:32:00Z", "url": "https://example.com/cart" }
+  ],
+  "count": 2
+}
+```
+</details>
+
+<details>
+<summary><strong><code>checkpoint_delete</code></strong> — Delete checkpoint</summary>
+
+Delete a saved checkpoint by name.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | ✅ | Checkpoint name to delete |
+
+**Response:**
+```json
+{ "name": "after-login", "deleted": true }
+```
+</details>
+
+<details>
+<summary><strong><code>workflow_while</code></strong> — Loop while condition true</summary>
+
+Execute a set of actions in a loop while a JavaScript condition evaluates to true. Includes a safety limit on iterations.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `condition` | string | ✅ | JavaScript expression evaluated each iteration |
+| `actions` | array | ✅ | List of action objects to execute per iteration |
+| `max_iterations` | number | | Safety limit (default `100`) |
+
+**Response:**
+```json
+{ "iterations_executed": 5, "results": [ /* per-iteration results */ ] }
+```
+</details>
+
+<details>
+<summary><strong><code>workflow_for_each</code></strong> — Iterate over collection</summary>
+
+Execute actions for each item in a collection (CSS selector results, array, or workflow variable).
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `collection` | string | ✅ | CSS selector, variable name, or JSON array |
+| `variable_name` | string | | Name for the current item variable (default `item`) |
+| `actions` | array | ✅ | List of action objects to execute per item |
+
+**Response:**
+```json
+{ "items_processed": 10, "results": [ /* per-item results */ ] }
+```
+</details>
+
+<details>
+<summary><strong><code>workflow_if</code></strong> — Conditional execution</summary>
+
+Execute one of two action branches based on a JavaScript condition.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `condition` | string | ✅ | JavaScript expression to evaluate |
+| `then_actions` | array | ✅ | Actions if condition is true |
+| `else_actions` | array | | Actions if condition is false |
+
+**Response:**
+```json
+{ "condition_value": true, "branch_taken": "then", "results": [ /* branch results */ ] }
+```
+</details>
+
+<details>
+<summary><strong><code>workflow_variable</code></strong> — Get/set workflow variable</summary>
+
+Get or set a workflow variable. If `value` is provided, sets the variable; otherwise returns its current value.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | ✅ | Variable name |
+| `value` | any | | Value to set (omit to get current value) |
+
+**Response:**
+```json
+{ "name": "page_count", "value": 42, "action": "get" }
 ```
 </details>
 
