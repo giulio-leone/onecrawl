@@ -1,6 +1,6 @@
 # OneCrawl MCP API Reference
 
-> **10 consolidated tools • 192 actions • Action-based dispatch**
+> **10 consolidated tools • 214 actions • Action-based dispatch**
 
 All browser automation, crawling, scraping, security, and AI orchestration capabilities are accessed through 10 super-tools. Each tool accepts a uniform `{ action, params }` interface.
 
@@ -14,9 +14,9 @@ All browser automation, crawling, scraping, security, and AI orchestration capab
 | [`crawl`](#2-crawl) | 5 | Web crawling, robots.txt, sitemaps, DOM snapshots |
 | [`agent`](#3-agent) | 27 | Command chains, API capture, iframes, remote CDP, safety, screencast, recording, iOS, task decomposition, vision observation |
 | [`stealth`](#4-stealth) | 5 | Anti-detection patches, fingerprinting, CAPTCHA detection |
-| [`data`](#5-data) | 10 | Data pipelines, HTTP client, link graphs, network intelligence |
-| [`secure`](#6-secure) | 13 | Encryption, PKCE, TOTP, encrypted KV store, WebAuthn passkeys |
-| [`computer`](#7-computer) | 8 | AI computer-use protocol, smart element resolution, browser pool |
+| [`data`](#5-data) | 18 | Data pipelines, HTTP client, link graphs, network intelligence, structured extraction |
+| [`secure`](#6-secure) | 21 | Encryption, PKCE, TOTP, KV store, WebAuthn, OAuth2, session/form auth, MFA |
+| [`computer`](#7-computer) | 14 | AI computer-use, smart element resolution, browser pool, multi-browser fleet |
 | [`memory`](#8-memory) | 6 | Persistent agent memory across sessions |
 | [`automate`](#9-automate) | 19 | Workflow DSL, AI task planning, rate limiting, retry queues, error recovery, session checkpoints, workflow control flow |
 | [`perf`](#10-perf) | 7 | Performance audits, budgets, regression detection, visual regression testing |
@@ -2243,6 +2243,14 @@ Data processing, HTTP requests, link analysis, and network intelligence.
 | `net_sdk` | `{schema, language?}` | Generate API SDK code |
 | `net_mock` | `{endpoints, port?}` | Generate mock server config |
 | `net_replay` | `{endpoints, name?}` | Generate replay sequence |
+| `extract_schema` | `{schema_type?}` | Extract JSON-LD, OpenGraph, Twitter Card, microdata |
+| `extract_tables` | `{selector?, format?, headers?}` | Extract HTML tables to JSON/CSV |
+| `extract_entities` | `{types?, selector?}` | Extract emails, phones, URLs, dates, prices |
+| `classify_content` | `{strategy?, selector?}` | Classify page content type and structure |
+| `transform_json` | `{data, transform, output_format?}` | Transform JSON (flatten, keys, values, unique) |
+| `export_csv` | `{data, columns?, delimiter?}` | Export JSON array to CSV |
+| `extract_metadata` | `{include_og?, include_twitter?, include_all?}` | Extract page metadata |
+| `extract_feeds` | `{feed_type?}` | Discover RSS, Atom, JSON feeds |
 
 #### Action Details
 
@@ -2398,11 +2406,117 @@ Generate a replay sequence from captured network requests.
 **Response:** JSON replay sequence definition.
 </details>
 
+<details>
+<summary><strong><code>extract_schema</code></strong> — Extract structured data schemas</summary>
+
+Extract JSON-LD, OpenGraph, Twitter Card, and microdata from the current page.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `schema_type` | string | | Type to extract: `all`, `json_ld`, `open_graph`, `twitter_card`, `microdata` (default `all`) |
+
+**Response:** JSON with extracted schema data by type.
+</details>
+
+<details>
+<summary><strong><code>extract_tables</code></strong> — Extract HTML tables</summary>
+
+Extract HTML tables from the current page and convert to structured data.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `selector` | string | | CSS selector for tables (default `table`) |
+| `format` | string | | Output format: `json` or `csv` (default `json`) |
+| `headers` | boolean | | Use first row as headers (default `true`) |
+
+**Response:** Array of extracted tables with rows and optional headers.
+</details>
+
+<details>
+<summary><strong><code>extract_entities</code></strong> — Extract named entities</summary>
+
+Extract emails, phone numbers, URLs, dates, and prices from page content.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `types` | string[] | | Entity types to extract (default all) |
+| `selector` | string | | CSS selector to scope extraction |
+
+**Response:** JSON with categorized extracted entities.
+</details>
+
+<details>
+<summary><strong><code>classify_content</code></strong> — Classify page content</summary>
+
+Analyze and classify the content type and structure of the current page.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `strategy` | string | | Classification strategy: `auto`, `heading`, `semantic` (default `auto`) |
+| `selector` | string | | CSS selector to scope classification |
+
+**Response:** JSON with content classification and structural analysis.
+</details>
+
+<details>
+<summary><strong><code>transform_json</code></strong> — Transform JSON data</summary>
+
+Apply transformations to JSON data (flatten, extract keys/values, unique, field access).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `data` | any | ✅ | JSON data to transform |
+| `transform` | string | ✅ | Transform operation: `flatten`, `keys`, `values`, `unique`, `field:<path>` |
+| `output_format` | string | | Output format (default `json`) |
+
+**Response:** Transformed JSON data.
+</details>
+
+<details>
+<summary><strong><code>export_csv</code></strong> — Export JSON to CSV</summary>
+
+Convert a JSON array of objects to CSV format.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `data` | array | ✅ | JSON array to export |
+| `columns` | string[] | | Column names to include (default: all keys) |
+| `delimiter` | string | | CSV delimiter (default `,`) |
+
+**Response:** CSV string output.
+</details>
+
+<details>
+<summary><strong><code>extract_metadata</code></strong> — Extract page metadata</summary>
+
+Extract comprehensive metadata from the current page (title, description, canonical, OG, Twitter).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `include_og` | boolean | | Include OpenGraph metadata (default `true`) |
+| `include_twitter` | boolean | | Include Twitter Card metadata (default `true`) |
+| `include_all` | boolean | | Include all meta tags (default `false`) |
+
+**Response:** JSON with extracted page metadata.
+</details>
+
+<details>
+<summary><strong><code>extract_feeds</code></strong> — Discover RSS/Atom/JSON feeds</summary>
+
+Discover and extract feed links from the current page.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `feed_type` | string | | Feed type filter: `all`, `rss`, `atom`, `json` (default `all`) |
+
+**Response:** JSON array of discovered feeds with type, URL, and title.
+</details>
+
 ---
 
 ### 6. `secure`
 
-Cryptography, encrypted storage, and WebAuthn passkey management.
+Cryptography, encrypted storage, WebAuthn passkey management, and authentication flows.
 
 #### Actions
 
@@ -2421,6 +2535,14 @@ Cryptography, encrypted storage, and WebAuthn passkey management.
 | `passkey_log` | — | Get WebAuthn operation log |
 | `passkey_disable` | — | Disable authenticator |
 | `passkey_remove` | `{credential_id}` | Remove passkey by ID |
+| `auth_oauth2` | `{auth_url, token_url, client_id, redirect_uri?, scopes?, use_pkce?}` | OAuth2 authorization flow with PKCE |
+| `auth_session` | `{name, export?, import_data?}` | Export/import browser session |
+| `auth_form_login` | `{url, username, password, username_sel?, password_sel?, submit_sel?}` | Automated form-based login |
+| `auth_mfa` | `{mfa_type, totp_secret?, code?, code_selector?, submit_selector?}` | Handle MFA/2FA challenges |
+| `auth_status` | — | Check authentication status |
+| `auth_logout` | — | Clear all auth state |
+| `credential_store` | `{label, username, password, domain?, metadata?}` | Store credentials in encrypted vault |
+| `credential_get` | `{label}` | Retrieve stored credentials |
 
 #### Action Details
 
@@ -2595,6 +2717,114 @@ Remove a specific virtual passkey credential by ID.
 **Response:** `{ "removed": true }`
 </details>
 
+<details>
+<summary><strong><code>auth_oauth2</code></strong> — OAuth2 authorization flow</summary>
+
+Initiate OAuth2 authorization with optional PKCE support. Generates authorization URL and PKCE pair.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `auth_url` | string | ✅ | Authorization endpoint URL |
+| `token_url` | string | ✅ | Token exchange endpoint URL |
+| `client_id` | string | ✅ | OAuth2 client ID |
+| `redirect_uri` | string | | Redirect URI (default `http://localhost:3000/callback`) |
+| `scopes` | string[] | | OAuth2 scopes (default `["openid", "profile", "email"]`) |
+| `use_pkce` | boolean | | Enable PKCE S256 challenge (default `true`) |
+
+**Response:** JSON with authorization URL, PKCE pair, and token endpoint.
+</details>
+
+<details>
+<summary><strong><code>auth_session</code></strong> — Export/import browser session</summary>
+
+Export current browser session (cookies, localStorage) or import a saved session.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `name` | string | ✅ | Session name identifier |
+| `export` | boolean | | Export current session if `true` (default `true`) |
+| `import_data` | string | | JSON session data to import |
+
+**Response:** JSON session data (on export) or import confirmation.
+</details>
+
+<details>
+<summary><strong><code>auth_form_login</code></strong> — Automated form login</summary>
+
+Navigate to a login page and perform automated form-based authentication.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `url` | string | ✅ | Login page URL |
+| `username` | string | ✅ | Username/email to enter |
+| `password` | string | ✅ | Password to enter |
+| `username_sel` | string | | CSS selector for username field |
+| `password_sel` | string | | CSS selector for password field |
+| `submit_sel` | string | | CSS selector for submit button |
+
+**Response:** JSON with login result, final URL, and authentication status.
+</details>
+
+<details>
+<summary><strong><code>auth_mfa</code></strong> — Handle MFA/2FA</summary>
+
+Handle multi-factor authentication challenges with TOTP auto-generation or manual code entry.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `mfa_type` | string | ✅ | MFA type: `totp`, `sms`, `email` |
+| `totp_secret` | string | | Base32-encoded TOTP secret for auto-generation |
+| `code` | string | | Manual MFA code to enter |
+| `code_selector` | string | | CSS selector for code input field |
+| `submit_selector` | string | | CSS selector for submit button |
+
+**Response:** JSON with MFA verification result and status.
+</details>
+
+<details>
+<summary><strong><code>auth_status</code></strong> — Check auth status</summary>
+
+Check current authentication status including cookies, sessions, and stored credentials.
+
+**Response:** JSON with cookie count, auth sessions, stored credentials count.
+</details>
+
+<details>
+<summary><strong><code>auth_logout</code></strong> — Clear all auth state</summary>
+
+Clear all authentication state: cookies, localStorage, sessionStorage, and auth sessions.
+
+**Response:** JSON confirming all auth state has been cleared.
+</details>
+
+<details>
+<summary><strong><code>credential_store</code></strong> — Store credentials</summary>
+
+Store credentials in the encrypted KV vault for later retrieval.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `label` | string | ✅ | Unique label for the credential |
+| `username` | string | ✅ | Username to store |
+| `password` | string | ✅ | Password to store |
+| `domain` | string | | Associated domain |
+| `metadata` | object | | Additional metadata |
+
+**Response:** JSON confirming credential storage.
+</details>
+
+<details>
+<summary><strong><code>credential_get</code></strong> — Retrieve credentials</summary>
+
+Retrieve stored credentials from the encrypted vault by label.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `label` | string | ✅ | Credential label to retrieve |
+
+**Response:** JSON with stored credential data or not-found status.
+</details>
+
 ---
 
 ### 7. `computer`
@@ -2615,6 +2845,12 @@ This tool implements the Anthropic Computer Use protocol for AI agent interactio
 | `smart_fill` | `{query, value}` | Fill input by fuzzy description |
 | `pool_list` | — | List browser pool instances |
 | `pool_status` | — | Get pool status and stats |
+| `fleet_spawn` | `{count?, fleet_name?}` | Launch multi-browser fleet |
+| `fleet_broadcast` | `{fleet_name, action}` | Send action to all fleet instances |
+| `fleet_collect` | `{fleet_name, selector?, attribute?}` | Collect data from all instances |
+| `fleet_destroy` | `{fleet_name}` | Terminate fleet |
+| `fleet_status` | — | Get all fleet statuses |
+| `fleet_balance` | `{fleet_name, urls}` | Distribute URLs across fleet |
 
 #### Action Details
 
@@ -2739,6 +2975,81 @@ Get browser pool utilization stats.
 ```json
 { "size": 5, "max_size": 10, "idle": 3, "busy": 2 }
 ```
+</details>
+
+<details>
+<summary><strong><code>fleet_spawn</code></strong> — Launch browser fleet</summary>
+
+Spawn a fleet of parallel browser instances for distributed automation.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `count` | number | | Number of instances (default 3, max 10) |
+| `fleet_name` | string | | Fleet identifier (default `default`) |
+
+**Response:** JSON with fleet name, instance count, and instance IDs.
+</details>
+
+<details>
+<summary><strong><code>fleet_broadcast</code></strong> — Broadcast action to fleet</summary>
+
+Send the same action to all instances in a browser fleet.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `fleet_name` | string | ✅ | Fleet to target |
+| `action` | string | ✅ | Action to execute on each instance |
+
+**Response:** JSON with per-instance results and success/failure counts.
+</details>
+
+<details>
+<summary><strong><code>fleet_collect</code></strong> — Collect fleet data</summary>
+
+Collect and aggregate data from all fleet instances.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `fleet_name` | string | ✅ | Fleet to collect from |
+| `selector` | string | | CSS selector to extract |
+| `attribute` | string | | Attribute to extract from elements |
+
+**Response:** JSON array with collected data from each instance.
+</details>
+
+<details>
+<summary><strong><code>fleet_destroy</code></strong> — Terminate fleet</summary>
+
+Destroy all instances in a browser fleet.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `fleet_name` | string | ✅ | Fleet to destroy |
+
+**Response:** JSON confirming fleet termination.
+</details>
+
+<details>
+<summary><strong><code>fleet_status</code></strong> — Fleet status overview</summary>
+
+Get status of all active browser fleets.
+
+**Params:** None
+
+**Response:** JSON with fleet names, instance counts, and utilization stats.
+</details>
+
+<details>
+<summary><strong><code>fleet_balance</code></strong> — Distribute URLs across fleet</summary>
+
+Load-balance a list of URLs across fleet instances for parallel processing.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `fleet_name` | string | ✅ | Fleet to distribute to |
+| `urls` | string[] | ✅ | URLs to distribute |
+
+**Response:** JSON with URL-to-instance assignment mapping.
 </details>
 
 ---
