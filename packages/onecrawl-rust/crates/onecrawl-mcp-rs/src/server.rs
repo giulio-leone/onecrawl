@@ -2072,6 +2072,777 @@ impl OneCrawlMcp {
             "strategy": matched.strategy,
         }))
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Agent Memory tools
+    // ════════════════════════════════════════════════════════════════
+
+    fn ensure_memory(state: &mut BrowserState) -> &mut onecrawl_cdp::AgentMemory {
+        if state.memory.is_none() {
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+            let path = std::path::PathBuf::from(home).join(".onecrawl").join("agent_memory.json");
+            state.memory = Some(
+                onecrawl_cdp::AgentMemory::load(&path).unwrap_or_else(|_| onecrawl_cdp::AgentMemory::new(&path))
+            );
+        }
+        state.memory.as_mut().unwrap()
+    }
+
+    #[tool(
+        name = "memory.store",
+        description = "Store a memory entry — persists data across sessions. Use for learned patterns, domain strategies, selector mappings, or any knowledge the agent should remember."
+    )]
+    async fn memory_store(
+        &self,
+        Parameters(p): Parameters<MemoryStoreParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut state = self.browser.lock().await;
+        let category = match p.category.as_deref() {
+            Some("page_visit") => onecrawl_cdp::MemoryCategory::PageVisit,
+            Some("element_pattern") => onecrawl_cdp::MemoryCategory::ElementPattern,
+            Some("domain_strategy") => onecrawl_cdp::MemoryCategory::DomainStrategy,
+            Some("retry_knowledge") => onecrawl_cdp::MemoryCategory::RetryKnowledge,
+            Some("user_preference") => onecrawl_cdp::MemoryCategory::UserPreference,
+            Some("selector_mapping") => onecrawl_cdp::MemoryCategory::SelectorMapping,
+            Some("error_pattern") => onecrawl_cdp::MemoryCategory::ErrorPattern,
+            _ => onecrawl_cdp::MemoryCategory::Custom,
+        };
+        let mem = Self::ensure_memory(&mut state);
+        mem.store(&p.key, p.value.clone(), category, p.domain.clone())
+            .map_err(|e| mcp_err(e.to_string()))?;
+        json_ok(&serde_json::json!({
+            "stored": p.key,
+            "category": format!("{:?}", mem.recall(&p.key).map(|e| &e.category)),
+        }))
+    }
+
+    #[tool(
+        name = "memory.recall",
+        description = "Recall a specific memory entry by key. Returns the stored value, category, domain, and access statistics."
+    )]
+    async fn memory_recall(
+        &self,
+        Parameters(p): Parameters<MemoryRecallParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut state = self.browser.lock().await;
+        let mem = Self::ensure_memory(&mut state);
+        match mem.recall(&p.key) {
+            Some(entry) => json_ok(&serde_json::json!({
+                "key": entry.key,
+                "value": entry.value,
+                "category": format!("{:?}", entry.category),
+                "domain": entry.domain,
+                "access_count": entry.access_count,
+                "created_at": entry.created_at,
+                "accessed_at": entry.accessed_at,
+            })),
+            None => json_ok(&serde_json::json!({ "key": p.key, "found": false })),
+        }
+    }
+
+    #[tool(
+        name = "memory.search",
+        description = "Search agent memory by query text, optionally filtered by category and domain. Returns matching entries ranked by relevance."
+    )]
+    async fn memory_search(
+        &self,
+        Parameters(p): Parameters<MemorySearchParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut state = self.browser.lock().await;
+        let category = match p.category.as_deref() {
+            Some("page_visit") => Some(onecrawl_cdp::MemoryCategory::PageVisit),
+            Some("element_pattern") => Some(onecrawl_cdp::MemoryCategory::ElementPattern),
+            Some("domain_strategy") => Some(onecrawl_cdp::MemoryCategory::DomainStrategy),
+            Some("retry_knowledge") => Some(onecrawl_cdp::MemoryCategory::RetryKnowledge),
+            Some("user_preference") => Some(onecrawl_cdp::MemoryCategory::UserPreference),
+            Some("selector_mapping") => Some(onecrawl_cdp::MemoryCategory::SelectorMapping),
+            Some("error_pattern") => Some(onecrawl_cdp::MemoryCategory::ErrorPattern),
+            Some("custom") => Some(onecrawl_cdp::MemoryCategory::Custom),
+            _ => None,
+        };
+        let mem = Self::ensure_memory(&mut state);
+        let results = mem.search(&p.query, category, p.domain.as_deref());
+        let entries: Vec<serde_json::Value> = results.iter().map(|e| {
+            serde_json::json!({
+                "key": e.key,
+                "value": e.value,
+                "category": format!("{:?}", e.category),
+                "domain": e.domain,
+                "access_count": e.access_count,
+            })
+        }).collect();
+        json_ok(&serde_json::json!({
+            "query": p.query,
+            "count": entries.len(),
+            "results": entries,
+        }))
+    }
+
+    #[tool(
+        name = "memory.forget",
+        description = "Forget a specific memory entry by key, or clear all memories for a domain. Returns how many entries were removed."
+    )]
+    async fn memory_forget(
+        &self,
+        Parameters(p): Parameters<MemoryForgetParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut state = self.browser.lock().await;
+        let mem = Self::ensure_memory(&mut state);
+        if let Some(key) = &p.key {
+            let removed = mem.forget(key);
+            json_ok(&serde_json::json!({ "removed": removed, "key": key }))
+        } else if let Some(domain) = &p.domain {
+            let count = mem.clear_domain(domain);
+            json_ok(&serde_json::json!({ "removed": count, "domain": domain }))
+        } else {
+            let count = mem.clear_all();
+            json_ok(&serde_json::json!({ "removed": count, "cleared": "all" }))
+        }
+    }
+
+    #[tool(
+        name = "memory.domain_strategy",
+        description = "Store or recall a domain-specific strategy (login selectors, navigation patterns, popup handlers, rate limits). Pass strategy JSON to store, omit to recall."
+    )]
+    async fn memory_domain_strategy(
+        &self,
+        Parameters(p): Parameters<MemoryDomainStrategyParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut state = self.browser.lock().await;
+        let mem = Self::ensure_memory(&mut state);
+        if let Some(strategy_val) = p.strategy {
+            let strategy: onecrawl_cdp::DomainStrategy = serde_json::from_value(strategy_val)
+                .map_err(|e| mcp_err(format!("invalid strategy JSON: {e}")))?;
+            mem.store_domain_strategy(strategy)
+                .map_err(|e| mcp_err(e.to_string()))?;
+            json_ok(&serde_json::json!({ "stored": true, "domain": p.domain }))
+        } else {
+            match mem.recall_domain_strategy(&p.domain) {
+                Some(strategy) => json_ok(&serde_json::json!({
+                    "domain": strategy.domain,
+                    "login_selectors": strategy.login_selectors,
+                    "navigation_patterns": strategy.navigation_patterns,
+                    "known_popups": strategy.known_popups,
+                    "rate_limit_info": strategy.rate_limit_info,
+                    "anti_bot_level": strategy.anti_bot_level,
+                })),
+                None => json_ok(&serde_json::json!({ "domain": p.domain, "found": false })),
+            }
+        }
+    }
+
+    #[tool(
+        name = "memory.stats",
+        description = "Get memory statistics — total entries, breakdown by category and domain, and capacity info."
+    )]
+    async fn memory_stats(
+        &self,
+        #[allow(unused_variables)] Parameters(_p): Parameters<MemoryStatsParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut state = self.browser.lock().await;
+        let mem = Self::ensure_memory(&mut state);
+        let stats = mem.stats();
+        json_ok(&serde_json::json!({
+            "total_entries": stats.total_entries,
+            "max_entries": stats.max_entries,
+            "categories": stats.categories,
+            "domains": stats.domains,
+            "utilization": format!("{:.1}%", (stats.total_entries as f64 / stats.max_entries as f64) * 100.0),
+        }))
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Workflow DSL tools
+    // ════════════════════════════════════════════════════════════════
+
+    #[tool(
+        name = "workflow.validate",
+        description = "Validate a workflow definition. Returns validation errors if any, or confirms the workflow is valid."
+    )]
+    async fn workflow_validate(
+        &self,
+        Parameters(p): Parameters<WorkflowValidateParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let workflow = onecrawl_cdp::workflow::parse_json(&p.workflow)
+            .map_err(|e| mcp_err(e.to_string()))?;
+        let errors = onecrawl_cdp::workflow::validate(&workflow);
+        if errors.is_empty() {
+            json_ok(&serde_json::json!({
+                "valid": true,
+                "name": workflow.name,
+                "steps": workflow.steps.len(),
+                "variables": workflow.variables.keys().collect::<Vec<_>>(),
+            }))
+        } else {
+            json_ok(&serde_json::json!({
+                "valid": false,
+                "errors": errors,
+            }))
+        }
+    }
+
+    #[tool(
+        name = "workflow.run",
+        description = "Execute a workflow — runs a series of browser automation steps defined in JSON. Supports variables, conditionals, loops, error handling, and sub-workflows."
+    )]
+    async fn workflow_run(
+        &self,
+        Parameters(p): Parameters<WorkflowRunParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let mut workflow = if p.workflow.trim().starts_with('{') {
+            onecrawl_cdp::workflow::parse_json(&p.workflow)
+                .map_err(|e| mcp_err(e.to_string()))?
+        } else {
+            onecrawl_cdp::workflow::load_from_file(&p.workflow)
+                .map_err(|e| mcp_err(e.to_string()))?
+        };
+
+        // Override variables
+        if let Some(overrides) = p.variables {
+            for (k, v) in overrides {
+                workflow.variables.insert(k, v);
+            }
+        }
+
+        // Validate first
+        let errors = onecrawl_cdp::workflow::validate(&workflow);
+        if !errors.is_empty() {
+            return json_ok(&serde_json::json!({
+                "status": "validation_failed",
+                "errors": errors,
+            }));
+        }
+
+        let page = ensure_page(&self.browser).await?;
+        let start = std::time::Instant::now();
+        let mut results: Vec<onecrawl_cdp::StepResult> = Vec::new();
+        let mut variables = workflow.variables.clone();
+        let mut succeeded = 0usize;
+        let mut failed = 0usize;
+        let mut skipped = 0usize;
+        let mut overall_status = onecrawl_cdp::StepStatus::Success;
+
+        for (i, step) in workflow.steps.iter().enumerate() {
+            let step_id = if step.id.is_empty() { format!("step_{i}") } else { step.id.clone() };
+            let step_name = if step.name.is_empty() { format!("Step {i}") } else { step.name.clone() };
+
+            // Check condition
+            if let Some(ref cond) = step.condition {
+                let interpolated = onecrawl_cdp::workflow::interpolate(cond, &variables);
+                if !onecrawl_cdp::workflow::evaluate_condition(&interpolated, &variables) {
+                    results.push(onecrawl_cdp::StepResult {
+                        step_id, step_name,
+                        status: onecrawl_cdp::StepStatus::Skipped,
+                        output: None, error: None, duration_ms: 0,
+                    });
+                    skipped += 1;
+                    continue;
+                }
+            }
+
+            let step_start = std::time::Instant::now();
+            let result = self.execute_step(&page, &step.action, &mut variables).await;
+            let duration_ms = step_start.elapsed().as_millis() as u64;
+
+            match result {
+                Ok(output) => {
+                    if let Some(ref save_key) = step.save_as {
+                        if let Some(ref out) = output {
+                            variables.insert(save_key.clone(), out.clone());
+                        }
+                    }
+                    results.push(onecrawl_cdp::StepResult {
+                        step_id, step_name,
+                        status: onecrawl_cdp::StepStatus::Success,
+                        output, error: None, duration_ms,
+                    });
+                    succeeded += 1;
+                }
+                Err(e) => {
+                    let err_msg = format!("{}", e.message);
+                    let error_action = step.on_error.as_ref()
+                        .unwrap_or(&workflow.on_error.action);
+                    results.push(onecrawl_cdp::StepResult {
+                        step_id, step_name,
+                        status: onecrawl_cdp::StepStatus::Failed,
+                        output: None, error: Some(err_msg.clone()), duration_ms,
+                    });
+                    failed += 1;
+
+                    match error_action {
+                        onecrawl_cdp::workflow::StepErrorAction::Stop => {
+                            overall_status = onecrawl_cdp::StepStatus::Failed;
+                            break;
+                        }
+                        onecrawl_cdp::workflow::StepErrorAction::Continue |
+                        onecrawl_cdp::workflow::StepErrorAction::Skip => continue,
+                        onecrawl_cdp::workflow::StepErrorAction::Retry => continue,
+                    }
+                }
+            }
+        }
+
+        let total_duration_ms = start.elapsed().as_millis() as u64;
+        json_ok(&serde_json::json!({
+            "name": workflow.name,
+            "status": format!("{:?}", overall_status).to_lowercase(),
+            "total_duration_ms": total_duration_ms,
+            "steps_succeeded": succeeded,
+            "steps_failed": failed,
+            "steps_skipped": skipped,
+            "steps": results,
+            "variables": variables,
+        }))
+    }
+
+    fn execute_step<'a>(
+        &'a self,
+        page: &'a chromiumoxide::Page,
+        action: &'a onecrawl_cdp::workflow::Action,
+        variables: &'a mut HashMap<String, serde_json::Value>,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::result::Result<Option<serde_json::Value>, McpError>> + Send + 'a>> {
+        Box::pin(async move {
+        use onecrawl_cdp::workflow::Action;
+        match action {
+            Action::Navigate { url } => {
+                let url = onecrawl_cdp::workflow::interpolate(url, variables);
+                onecrawl_cdp::navigation::goto(page, &url).await.map_err(|e| mcp_err(e.to_string()))?;
+                let title = onecrawl_cdp::navigation::get_title(page).await.unwrap_or_default();
+                Ok(Some(serde_json::json!({ "url": url, "title": title })))
+            }
+            Action::Click { selector } => {
+                let sel = onecrawl_cdp::workflow::interpolate(selector, variables);
+                let resolved = onecrawl_cdp::accessibility::resolve_ref(&sel);
+                onecrawl_cdp::element::click(page, &resolved).await.map_err(|e| mcp_err(e.to_string()))?;
+                Ok(Some(serde_json::json!({ "clicked": sel })))
+            }
+            Action::Type { selector, text } => {
+                let sel = onecrawl_cdp::workflow::interpolate(selector, variables);
+                let txt = onecrawl_cdp::workflow::interpolate(text, variables);
+                let resolved = onecrawl_cdp::accessibility::resolve_ref(&sel);
+                onecrawl_cdp::element::type_text(page, &resolved, &txt).await.map_err(|e| mcp_err(e.to_string()))?;
+                Ok(Some(serde_json::json!({ "typed": txt.len() })))
+            }
+            Action::WaitForSelector { selector, timeout_ms } => {
+                let sel = onecrawl_cdp::workflow::interpolate(selector, variables);
+                let resolved = onecrawl_cdp::accessibility::resolve_ref(&sel);
+                onecrawl_cdp::navigation::wait_for_selector(page, &resolved, *timeout_ms).await.map_err(|e| mcp_err(e.to_string()))?;
+                Ok(Some(serde_json::json!({ "found": sel })))
+            }
+            Action::Screenshot { path, full_page } => {
+                let bytes = if full_page.unwrap_or(false) {
+                    onecrawl_cdp::screenshot::screenshot_full(page)
+                        .await.map_err(|e| mcp_err(e.to_string()))?
+                } else {
+                    onecrawl_cdp::screenshot::screenshot_viewport(page)
+                        .await.map_err(|e| mcp_err(e.to_string()))?
+                };
+                if let Some(p) = path {
+                    let p = onecrawl_cdp::workflow::interpolate(p, variables);
+                    std::fs::write(&p, &bytes).map_err(|e| mcp_err(e.to_string()))?;
+                    Ok(Some(serde_json::json!({ "saved": p, "bytes": bytes.len() })))
+                } else {
+                    Ok(Some(serde_json::json!({ "bytes": bytes.len() })))
+                }
+            }
+            Action::Evaluate { js } => {
+                let js = onecrawl_cdp::workflow::interpolate(js, variables);
+                let result = page.evaluate(js).await.map_err(|e| mcp_err(e.to_string()))?;
+                let val = result.into_value::<serde_json::Value>().unwrap_or(serde_json::Value::Null);
+                Ok(Some(val))
+            }
+            Action::Extract { selector, attribute } => {
+                let sel = onecrawl_cdp::workflow::interpolate(selector, variables);
+                let attr_js = if let Some(attr) = attribute {
+                    format!(r#"Array.from(document.querySelectorAll({sel_json})).map(e => e.getAttribute({attr_json}))"#,
+                        sel_json = serde_json::to_string(&sel).unwrap(),
+                        attr_json = serde_json::to_string(attr).unwrap())
+                } else {
+                    format!(r#"Array.from(document.querySelectorAll({sel_json})).map(e => e.textContent.trim())"#,
+                        sel_json = serde_json::to_string(&sel).unwrap())
+                };
+                let result = page.evaluate(attr_js).await.map_err(|e| mcp_err(e.to_string()))?;
+                let val = result.into_value::<serde_json::Value>().unwrap_or(serde_json::Value::Null);
+                Ok(Some(val))
+            }
+            Action::SmartClick { query } => {
+                let q = onecrawl_cdp::workflow::interpolate(query, variables);
+                let matched = onecrawl_cdp::smart_actions::smart_click(page, &q).await.map_err(|e| mcp_err(e.to_string()))?;
+                Ok(Some(serde_json::json!({ "clicked": matched.selector, "confidence": matched.confidence })))
+            }
+            Action::SmartFill { query, value } => {
+                let q = onecrawl_cdp::workflow::interpolate(query, variables);
+                let v = onecrawl_cdp::workflow::interpolate(value, variables);
+                let matched = onecrawl_cdp::smart_actions::smart_fill(page, &q, &v).await.map_err(|e| mcp_err(e.to_string()))?;
+                Ok(Some(serde_json::json!({ "filled": matched.selector, "confidence": matched.confidence })))
+            }
+            Action::Sleep { ms } => {
+                tokio::time::sleep(tokio::time::Duration::from_millis(*ms)).await;
+                Ok(Some(serde_json::json!({ "slept_ms": ms })))
+            }
+            Action::SetVariable { name, value } => {
+                let interpolated = onecrawl_cdp::workflow::interpolate(&value.to_string(), variables);
+                let parsed = serde_json::from_str::<serde_json::Value>(&interpolated)
+                    .unwrap_or(serde_json::Value::String(interpolated));
+                variables.insert(name.clone(), parsed.clone());
+                Ok(Some(serde_json::json!({ "set": name, "value": parsed })))
+            }
+            Action::Log { message, level } => {
+                let msg = onecrawl_cdp::workflow::interpolate(message, variables);
+                let lvl = level.as_deref().unwrap_or("info");
+                match lvl {
+                    "error" => tracing::error!("[workflow] {}", msg),
+                    "warn" => tracing::warn!("[workflow] {}", msg),
+                    "debug" => tracing::debug!("[workflow] {}", msg),
+                    _ => tracing::info!("[workflow] {}", msg),
+                }
+                Ok(Some(serde_json::json!({ "logged": msg, "level": lvl })))
+            }
+            Action::Assert { condition, message } => {
+                let cond = onecrawl_cdp::workflow::interpolate(condition, variables);
+                if onecrawl_cdp::workflow::evaluate_condition(&cond, variables) {
+                    Ok(Some(serde_json::json!({ "assert": "passed" })))
+                } else {
+                    Err(mcp_err(format!("assertion failed: {}", message.as_deref().unwrap_or(&cond))))
+                }
+            }
+            Action::Loop { items: _, variable: _, steps: _ } => {
+                Ok(Some(serde_json::json!({ "note": "loop execution requires recursive step runner — use workflow.run for full support" })))
+            }
+            Action::Conditional { condition, then_steps, else_steps } => {
+                let cond = onecrawl_cdp::workflow::interpolate(condition, variables);
+                let empty = vec![];
+                let branch = if onecrawl_cdp::workflow::evaluate_condition(&cond, variables) {
+                    then_steps
+                } else {
+                    else_steps.as_ref().unwrap_or(&empty)
+                };
+                let mut last_output = None;
+                for step in branch {
+                    last_output = self.execute_step(page, &step.action, variables).await?;
+                }
+                Ok(last_output)
+            }
+            Action::SubWorkflow { path } => {
+                let p = onecrawl_cdp::workflow::interpolate(path, variables);
+                Ok(Some(serde_json::json!({ "note": format!("sub-workflow '{}' — use workflow.run to execute", p) })))
+            }
+            Action::HttpRequest { url, method, headers, body } => {
+                let url = onecrawl_cdp::workflow::interpolate(url, variables);
+                let method = method.as_deref().unwrap_or("GET");
+                let client = reqwest::Client::new();
+                let mut req = match method.to_uppercase().as_str() {
+                    "POST" => client.post(&url),
+                    "PUT" => client.put(&url),
+                    "DELETE" => client.delete(&url),
+                    "PATCH" => client.patch(&url),
+                    _ => client.get(&url),
+                };
+                if let Some(hdrs) = headers {
+                    for (k, v) in hdrs {
+                        let v = onecrawl_cdp::workflow::interpolate(v, variables);
+                        req = req.header(k.as_str(), v);
+                    }
+                }
+                if let Some(b) = body {
+                    let b = onecrawl_cdp::workflow::interpolate(b, variables);
+                    req = req.body(b);
+                }
+                let resp = req.send().await.map_err(|e| mcp_err(e.to_string()))?;
+                let status = resp.status().as_u16();
+                let body_text = resp.text().await.unwrap_or_default();
+                let body_val = serde_json::from_str::<serde_json::Value>(&body_text)
+                    .unwrap_or(serde_json::Value::String(body_text));
+                Ok(Some(serde_json::json!({ "status": status, "body": body_val })))
+            }
+            Action::Snapshot { compact, interactive_only } => {
+                let opts = onecrawl_cdp::accessibility::AgentSnapshotOptions {
+                    interactive_only: *interactive_only,
+                    compact: *compact,
+                    ..Default::default()
+                };
+                let result = onecrawl_cdp::accessibility::agent_snapshot(page, &opts)
+                    .await.map_err(|e| mcp_err(e.to_string()))?;
+                Ok(Some(serde_json::json!(result)))
+            }
+        }
+        })
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Network Intelligence tools
+    // ════════════════════════════════════════════════════════════════
+
+    #[tool(
+        name = "net.capture",
+        description = "Capture network traffic from the current page. Returns API endpoints with request/response details, timing, and classification."
+    )]
+    async fn net_capture(
+        &self,
+        Parameters(p): Parameters<NetIntelCaptureParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let duration = p.duration_seconds.unwrap_or(10);
+        let api_only = p.api_only.unwrap_or(true);
+
+        // Inject network interceptor
+        let js = r#"
+        (() => {
+            if (!window.__onecrawl_net_capture) {
+                window.__onecrawl_net_capture = [];
+                const origFetch = window.fetch;
+                window.fetch = async function(...args) {
+                    const start = Date.now();
+                    const req = new Request(...args);
+                    try {
+                        const resp = await origFetch.apply(this, args);
+                        const clone = resp.clone();
+                        let body = null;
+                        try { body = await clone.json(); } catch(_) {
+                            try { body = await clone.text(); } catch(_) {}
+                        }
+                        let reqBody = null;
+                        try { if (req.body) { reqBody = await new Request(...args).json(); } } catch(_) {}
+                        window.__onecrawl_net_capture.push({
+                            method: req.method,
+                            url: req.url,
+                            status: resp.status,
+                            contentType: resp.headers.get('content-type'),
+                            requestHeaders: Object.fromEntries(req.headers.entries()),
+                            responseHeaders: Object.fromEntries(resp.headers.entries()),
+                            requestBody: reqBody,
+                            responseBody: body,
+                            timing: Date.now() - start,
+                        });
+                        return resp;
+                    } catch(e) {
+                        window.__onecrawl_net_capture.push({
+                            method: req.method,
+                            url: req.url,
+                            status: 0,
+                            error: e.message,
+                            timing: Date.now() - start,
+                        });
+                        throw e;
+                    }
+                };
+
+                const origXHR = XMLHttpRequest.prototype.open;
+                XMLHttpRequest.prototype.open = function(method, url, ...rest) {
+                    this.__onecrawl_method = method;
+                    this.__onecrawl_url = url;
+                    this.__onecrawl_start = Date.now();
+                    return origXHR.call(this, method, url, ...rest);
+                };
+                const origSend = XMLHttpRequest.prototype.send;
+                XMLHttpRequest.prototype.send = function(body) {
+                    this.addEventListener('load', function() {
+                        let respBody = null;
+                        try { respBody = JSON.parse(this.responseText); } catch(_) { respBody = this.responseText; }
+                        window.__onecrawl_net_capture.push({
+                            method: this.__onecrawl_method,
+                            url: this.__onecrawl_url,
+                            status: this.status,
+                            contentType: this.getResponseHeader('content-type'),
+                            responseBody: respBody,
+                            timing: Date.now() - this.__onecrawl_start,
+                        });
+                    });
+                    return origSend.call(this, body);
+                };
+            }
+            return 'capture_started';
+        })()
+        "#;
+
+        page.evaluate(js).await.map_err(|e| mcp_err(e.to_string()))?;
+
+        // Wait for capture duration
+        tokio::time::sleep(tokio::time::Duration::from_secs(duration)).await;
+
+        // Collect results
+        let collect_js = r#"
+        (() => {
+            const raw = window.__onecrawl_net_capture || [];
+            window.__onecrawl_net_capture = [];
+            return raw;
+        })()
+        "#;
+
+        let result = page.evaluate(collect_js).await.map_err(|e| mcp_err(e.to_string()))?;
+        let raw: Vec<serde_json::Value> = result.into_value().unwrap_or_default();
+
+        let endpoints: Vec<onecrawl_cdp::network_intel::ApiEndpoint> = raw.iter().filter_map(|r| {
+            let url = r.get("url")?.as_str()?;
+            let method = r.get("method")?.as_str().unwrap_or("GET");
+            let status = r.get("status")?.as_u64().unwrap_or(0) as u16;
+            let content_type = r.get("contentType").and_then(|v| v.as_str()).map(String::from);
+            let category = onecrawl_cdp::network_intel::classify_request(url, content_type.as_deref(), method);
+
+            if api_only && category == onecrawl_cdp::network_intel::ApiCategory::Static {
+                return None;
+            }
+
+            let (parsed_path, parsed_base) = url.split_once("://")
+                .and_then(|(scheme, rest)| rest.split_once('/').map(|(host, path)| {
+                    let p = format!("/{}", path).split('?').next().unwrap_or("/").to_string();
+                    let b = format!("{}://{}", scheme, host);
+                    (p, b)
+                }))
+                .unwrap_or(("/".into(), url.to_string()));
+
+            Some(onecrawl_cdp::network_intel::ApiEndpoint {
+                method: method.to_string(),
+                url: url.to_string(),
+                path: parsed_path,
+                base_url: parsed_base,
+                query_params: std::collections::HashMap::new(),
+                request_headers: r.get("requestHeaders").and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default(),
+                response_headers: r.get("responseHeaders").and_then(|v| serde_json::from_value(v.clone()).ok()).unwrap_or_default(),
+                request_body: r.get("requestBody").cloned().filter(|v| !v.is_null()),
+                response_body: r.get("responseBody").cloned().filter(|v| !v.is_null()),
+                status_code: status,
+                content_type,
+                timing_ms: r.get("timing").and_then(|v| v.as_f64()),
+                category,
+            })
+        }).collect();
+
+        json_ok(&serde_json::json!({
+            "endpoints": endpoints,
+            "count": endpoints.len(),
+            "duration_seconds": duration,
+        }))
+    }
+
+    #[tool(
+        name = "net.analyze",
+        description = "Analyze captured network traffic to discover API schemas, auth patterns, and endpoint templates. Input: endpoints JSON from net.capture."
+    )]
+    async fn net_analyze(
+        &self,
+        Parameters(p): Parameters<NetIntelAnalyzeParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let endpoints: Vec<onecrawl_cdp::network_intel::ApiEndpoint> = serde_json::from_str(&p.capture)
+            .map_err(|e| mcp_err(format!("invalid capture data: {e}")))?;
+
+        if endpoints.is_empty() {
+            return json_ok(&serde_json::json!({ "error": "no endpoints to analyze" }));
+        }
+
+        let base_url = endpoints.first().map(|e| e.base_url.clone()).unwrap_or_default();
+        let total_requests = endpoints.len();
+
+        // Group by method+path template
+        let mut endpoint_map: std::collections::HashMap<String, Vec<&onecrawl_cdp::network_intel::ApiEndpoint>> = std::collections::HashMap::new();
+        for ep in &endpoints {
+            let (template, _) = onecrawl_cdp::network_intel::extract_path_params(&ep.path);
+            let key = format!("{} {}", ep.method, template);
+            endpoint_map.entry(key).or_default().push(ep);
+        }
+
+        let schemas: Vec<onecrawl_cdp::network_intel::EndpointSchema> = endpoint_map.iter().map(|(key, eps)| {
+            let parts: Vec<&str> = key.splitn(2, ' ').collect();
+            let method = parts.first().unwrap_or(&"GET");
+            let path = parts.get(1).unwrap_or(&"/");
+            let (template, params) = onecrawl_cdp::network_intel::extract_path_params(path);
+
+            let status_codes: Vec<u16> = eps.iter().map(|e| e.status_code).collect::<std::collections::HashSet<_>>().into_iter().collect();
+            let content_types: Vec<String> = eps.iter().filter_map(|e| e.content_type.clone()).collect::<std::collections::HashSet<_>>().into_iter().collect();
+            let avg_latency = eps.iter().filter_map(|e| e.timing_ms).sum::<f64>() / eps.len().max(1) as f64;
+
+            let response_schema = eps.iter().find_map(|e| e.response_body.as_ref())
+                .map(|b| onecrawl_cdp::network_intel::infer_json_schema(b));
+            let request_schema = eps.iter().find_map(|e| e.request_body.as_ref())
+                .map(|b| onecrawl_cdp::network_intel::infer_json_schema(b));
+
+            onecrawl_cdp::network_intel::EndpointSchema {
+                method: method.to_string(),
+                path: template,
+                path_params: params,
+                query_params: vec![],
+                request_body_schema: request_schema,
+                response_body_schema: response_schema,
+                status_codes,
+                content_types,
+                call_count: eps.len(),
+                avg_latency_ms: avg_latency,
+            }
+        }).collect();
+
+        let auth_pattern = endpoints.iter()
+            .find_map(|e| {
+                let auth = onecrawl_cdp::network_intel::detect_auth_pattern(&e.request_headers);
+                match auth {
+                    onecrawl_cdp::network_intel::AuthPattern::None => None,
+                    other => Some(other),
+                }
+            });
+
+        let schema = onecrawl_cdp::network_intel::ApiSchema {
+            base_url,
+            endpoints: schemas,
+            auth_pattern,
+            total_requests,
+            unique_endpoints: endpoint_map.len(),
+        };
+
+        json_ok(&serde_json::to_value(&schema).unwrap())
+    }
+
+    #[tool(
+        name = "net.sdk",
+        description = "Generate an SDK client from an API schema. Supports TypeScript and Python. Input: schema JSON from net.analyze."
+    )]
+    async fn net_sdk(
+        &self,
+        Parameters(p): Parameters<NetIntelSdkParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let schema: onecrawl_cdp::network_intel::ApiSchema = serde_json::from_str(&p.schema)
+            .map_err(|e| mcp_err(format!("invalid schema: {e}")))?;
+
+        let sdk = match p.language.as_deref().unwrap_or("typescript") {
+            "python" | "py" => onecrawl_cdp::network_intel::generate_python_sdk(&schema),
+            _ => onecrawl_cdp::network_intel::generate_typescript_sdk(&schema),
+        };
+
+        json_ok(&serde_json::json!({
+            "language": sdk.language,
+            "code": sdk.code,
+            "endpoints_covered": sdk.endpoints_covered,
+        }))
+    }
+
+    #[tool(
+        name = "net.mock",
+        description = "Generate a mock server configuration from captured endpoints. Returns endpoint definitions with recorded responses."
+    )]
+    async fn net_mock(
+        &self,
+        Parameters(p): Parameters<NetIntelMockParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let endpoints: Vec<onecrawl_cdp::network_intel::ApiEndpoint> = serde_json::from_str(&p.endpoints)
+            .map_err(|e| mcp_err(format!("invalid endpoints: {e}")))?;
+
+        let config = onecrawl_cdp::network_intel::generate_mock_config(&endpoints, p.port.unwrap_or(3001));
+        json_ok(&serde_json::to_value(&config).unwrap())
+    }
+
+    #[tool(
+        name = "net.replay",
+        description = "Generate a replay sequence from captured network traffic. Can be used to reproduce exact API call sequences."
+    )]
+    async fn net_replay(
+        &self,
+        Parameters(p): Parameters<NetIntelReplayParams>,
+    ) -> Result<CallToolResult, McpError> {
+        let endpoints: Vec<onecrawl_cdp::network_intel::ApiEndpoint> = serde_json::from_str(&p.endpoints)
+            .map_err(|e| mcp_err(format!("invalid endpoints: {e}")))?;
+
+        let name = p.name.as_deref().unwrap_or("replay_sequence");
+        let sequence = onecrawl_cdp::network_intel::generate_replay_sequence(name, &endpoints);
+        json_ok(&serde_json::to_value(&sequence).unwrap())
+    }
 }
 
 impl ServerHandler for OneCrawlMcp {

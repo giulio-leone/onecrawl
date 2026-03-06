@@ -151,3 +151,111 @@ pub struct RetryResult {
 pub struct RemovedResult {
     pub removed: bool,
 }
+
+// ──────────────────── Agent Memory params ─────────────────────
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct MemoryStoreParams {
+    #[schemars(description = "Unique key for this memory entry")]
+    pub key: String,
+    #[schemars(description = "JSON value to store")]
+    pub value: serde_json::Value,
+    #[schemars(description = "Category: page_visit, element_pattern, domain_strategy, retry_knowledge, user_preference, selector_mapping, error_pattern, custom")]
+    pub category: Option<String>,
+    #[schemars(description = "Domain this memory is associated with (e.g. 'example.com')")]
+    pub domain: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct MemoryRecallParams {
+    #[schemars(description = "Key of the memory entry to recall")]
+    pub key: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct MemorySearchParams {
+    #[schemars(description = "Search query (matches against keys and values)")]
+    pub query: String,
+    #[schemars(description = "Filter by category")]
+    pub category: Option<String>,
+    #[schemars(description = "Filter by domain")]
+    pub domain: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct MemoryForgetParams {
+    #[schemars(description = "Key to forget, or domain to clear all memories for")]
+    pub key: Option<String>,
+    #[schemars(description = "Domain to clear all memories for")]
+    pub domain: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct MemoryDomainStrategyParams {
+    #[schemars(description = "Domain to store/recall strategy for")]
+    pub domain: String,
+    #[schemars(description = "Strategy data as JSON (omit to recall existing)")]
+    pub strategy: Option<serde_json::Value>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct MemoryStatsParams {}
+
+// ──────────────────── Workflow DSL params ─────────────────────
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct WorkflowValidateParams {
+    #[schemars(description = "Workflow definition as JSON string")]
+    pub workflow: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct WorkflowRunParams {
+    #[schemars(description = "Workflow definition as JSON string, or file path to workflow JSON")]
+    pub workflow: String,
+    #[schemars(description = "Override variables as key-value pairs")]
+    pub variables: Option<std::collections::HashMap<String, serde_json::Value>>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct WorkflowListParams {}
+
+// ──────────────────── Network Intelligence params ─────────────────────
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct NetIntelCaptureParams {
+    #[schemars(description = "Duration in seconds to capture network traffic (default: 10)")]
+    pub duration_seconds: Option<u64>,
+    #[schemars(description = "Only capture API calls (exclude static assets)")]
+    pub api_only: Option<bool>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct NetIntelAnalyzeParams {
+    #[schemars(description = "Network capture data (from net.capture output)")]
+    pub capture: String,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct NetIntelSdkParams {
+    #[schemars(description = "API schema JSON (from net.analyze output)")]
+    pub schema: String,
+    #[schemars(description = "Target language: typescript or python (default: typescript)")]
+    pub language: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct NetIntelMockParams {
+    #[schemars(description = "Captured endpoints JSON (from net.capture)")]
+    pub endpoints: String,
+    #[schemars(description = "Port for mock server (default: 3001)")]
+    pub port: Option<u16>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct NetIntelReplayParams {
+    #[schemars(description = "Captured endpoints JSON (from net.capture)")]
+    pub endpoints: String,
+    #[schemars(description = "Name for the replay sequence")]
+    pub name: Option<String>,
+}

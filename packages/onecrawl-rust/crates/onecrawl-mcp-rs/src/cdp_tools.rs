@@ -20,6 +20,7 @@ pub struct BrowserState {
     pub recording: Option<onecrawl_cdp::RecordingState>,
     pub ios_client: Option<onecrawl_cdp::ios::IosClient>,
     pub pool: onecrawl_cdp::BrowserPool,
+    pub memory: Option<onecrawl_cdp::AgentMemory>,
 }
 
 pub type SharedBrowser = Arc<Mutex<BrowserState>>;

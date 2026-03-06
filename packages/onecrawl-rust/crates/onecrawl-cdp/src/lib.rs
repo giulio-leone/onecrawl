@@ -4,6 +4,7 @@
 
 pub mod accessibility;
 pub mod adaptive;
+pub mod agent_memory;
 pub mod browser_pool;
 pub mod computer_use;
 pub mod adaptive_fetch;
@@ -41,6 +42,7 @@ pub mod keyboard;
 pub mod link_graph;
 pub mod navigation;
 pub mod network;
+pub mod network_intel;
 pub mod network_log;
 pub mod page;
 pub mod page_watcher;
@@ -80,10 +82,12 @@ pub mod safety;
 pub mod webauthn;
 pub mod websocket;
 pub mod workers;
+pub mod workflow;
 
 pub use browser_pool::{BrowserInstance, BrowserPool, BrowserStatus, SharedPool, new_shared_pool};
 pub use smart_actions::SmartMatch;
 
+pub use agent_memory::{AgentMemory, MemoryCategory, MemoryEntry, MemoryStats, DomainStrategy, PageVisit, ElementPattern};
 pub use accessibility::AccessibilityAudit;
 pub use adaptive::{ElementFingerprint, ElementMatch, TrackedElement};
 pub use antibot::AntibotProfile;
@@ -102,6 +106,7 @@ pub use iframe::IframeInfo;
 pub use ios::{IosClient, IosDevice, IosSessionConfig};
 pub use intercept::{InterceptAction, InterceptRule};
 pub use network::ResourceType;
+pub use network_intel::{ApiEndpoint, ApiSchema, ApiCategory, SdkStub, MockServerConfig, ReplaySequence};
 pub use network_log::{NetworkEntry, NetworkSummary};
 pub use print::DetailedPdfOptions;
 pub use proxy::{ProxyConfig, ProxyPool, RotationStrategy};
@@ -125,6 +130,7 @@ pub use passkey_store::{
 pub use websocket::WsRecorder;
 pub use skills::{SkillManifest, SkillRegistry, SkillTool};
 pub use workers::ServiceWorkerInfo;
+pub use workflow::{Workflow, WorkflowResult, Step, Action, StepResult, StepStatus};
 pub use safety::{SafetyCheck, SafetyPolicy, SafetyState};
 
 pub use captcha::{CaptchaConfig, CaptchaDetection, CaptchaResult, SolverConfig, SolverService, solve_via_api, load_solver_config};
