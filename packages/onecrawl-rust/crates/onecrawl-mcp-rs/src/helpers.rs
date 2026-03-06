@@ -91,6 +91,16 @@ pub async fn ensure_page(browser: &SharedBrowser) -> Result<chromiumoxide::Page,
 
 // ── Response helpers ──
 
+/// Serialize to `serde_json::Value`, returning `McpError` on failure.
+pub fn to_json_value(value: &impl serde::Serialize) -> Result<serde_json::Value, McpError> {
+    serde_json::to_value(value).mcp()
+}
+
+/// JSON-escape a string for safe embedding in JS template literals.
+pub fn json_escape(s: &str) -> String {
+    serde_json::to_string(s).unwrap_or_else(|_| format!("\"{}\"", s.replace('"', "\\\"")))
+}
+
 /// Serialize a value as JSON and return a success result.
 pub fn json_ok(value: &impl serde::Serialize) -> Result<CallToolResult, McpError> {
     let json = serde_json::to_string(value).mcp()?;

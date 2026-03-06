@@ -101,7 +101,7 @@ impl OneCrawlMcp {
             };
             state.rate_limiter = Some(onecrawl_cdp::RateLimitState::new(config));
         }
-        let limiter = state.rate_limiter.as_ref().unwrap();
+        let limiter = state.rate_limiter.as_ref().ok_or_else(|| mcp_err("rate limiter not initialized"))?;
         let can = onecrawl_cdp::rate_limiter::can_proceed(limiter);
         let stats = onecrawl_cdp::rate_limiter::get_stats(limiter);
         json_ok(&RateLimitResult {
@@ -125,7 +125,7 @@ impl OneCrawlMcp {
                 jitter: true,
             }));
         }
-        let queue = state.retry_queue.as_mut().unwrap();
+        let queue = state.retry_queue.as_mut().ok_or_else(|| mcp_err("retry queue not initialized"))?;
         let id = onecrawl_cdp::retry_queue::enqueue(
             queue,
             &p.url,
@@ -353,7 +353,7 @@ impl OneCrawlMcp {
             unique_endpoints: endpoint_map.len(),
         };
 
-        json_ok(&serde_json::to_value(&schema).unwrap())
+        json_ok(&serde_json::to_value(&schema).mcp()?)
     }
 
 
@@ -385,7 +385,7 @@ impl OneCrawlMcp {
             .map_err(|e| mcp_err(format!("invalid endpoints: {e}")))?;
 
         let config = onecrawl_cdp::network_intel::generate_mock_config(&endpoints, p.port.unwrap_or(3001));
-        json_ok(&serde_json::to_value(&config).unwrap())
+        json_ok(&serde_json::to_value(&config).mcp()?)
     }
 
 
@@ -398,7 +398,7 @@ impl OneCrawlMcp {
 
         let name = p.name.as_deref().unwrap_or("replay_sequence");
         let sequence = onecrawl_cdp::network_intel::generate_replay_sequence(name, &endpoints);
-        json_ok(&serde_json::to_value(&sequence).unwrap())
+        json_ok(&serde_json::to_value(&sequence).mcp()?)
     }
 
     // ════════════════════════════════════════════════════════════════

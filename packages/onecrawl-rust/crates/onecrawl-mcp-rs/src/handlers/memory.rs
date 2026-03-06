@@ -20,7 +20,8 @@ impl OneCrawlMcp {
                 onecrawl_cdp::AgentMemory::load(&path).unwrap_or_else(|_| onecrawl_cdp::AgentMemory::new(&path))
             );
         }
-        state.memory.as_mut().unwrap()
+        // SAFETY: We just set state.memory = Some(...) in the block above
+        state.memory.as_mut().expect("memory was just initialized")
     }
 
 

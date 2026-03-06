@@ -1,6 +1,6 @@
 # OneCrawl MCP API Reference
 
-> **10 consolidated tools • 108 actions • Action-based dispatch**
+> **10 consolidated tools • 123 actions • Action-based dispatch**
 
 All browser automation, crawling, scraping, security, and AI orchestration capabilities are accessed through 10 super-tools. Each tool accepts a uniform `{ action, params }` interface.
 
@@ -10,7 +10,7 @@ All browser automation, crawling, scraping, security, and AI orchestration capab
 
 | Tool | Actions | Description |
 |------|:-------:|-------------|
-| [`browser`](#1-browser) | 26 | Navigation, interaction, scraping, content extraction, offline HTML parsing |
+| [`browser`](#1-browser) | 41 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage |
 | [`crawl`](#2-crawl) | 5 | Web crawling, robots.txt, sitemaps, DOM snapshots |
 | [`agent`](#3-agent) | 21 | Command chains, API capture, iframes, remote CDP, safety, screencast, recording, iOS |
 | [`stealth`](#4-stealth) | 5 | Anti-detection patches, fingerprinting, CAPTCHA detection |
@@ -79,6 +79,24 @@ A headless Chromium browser is launched automatically on the first call that req
 | `parse_selector` | `{html, selector}` | CSS query on HTML string (offline) |
 | `parse_text` | `{html}` | Extract text from HTML (offline) |
 | `parse_links` | `{html}` | Extract links from HTML (offline) |
+| | | **Multi-Tab** |
+| `new_tab` | `{url?}` | Open new tab, optionally navigate to URL |
+| `list_tabs` | — | List all tabs with index, URL, title, active state |
+| `switch_tab` | `{index}` | Switch active page by index (0-based) |
+| `close_tab` | `{index?}` | Close tab by index (defaults to active) |
+| | | **DOM Events** |
+| `observe_mutations` | `{selector?, child_list?, attributes?, character_data?, subtree?}` | Start MutationObserver |
+| `get_mutations` | — | Get recorded DOM mutations since last call |
+| `stop_mutations` | — | Disconnect MutationObserver |
+| `wait_for_event` | `{event, selector?, timeout?}` | Wait for DOM event (promise-based, default 30 s timeout) |
+| | | **Cookie & Storage** |
+| `cookies_get` | `{domain?, name?}` | Get cookies (non-HttpOnly only via `document.cookie`) |
+| `cookies_set` | `{name, value, domain, path?, secure?, http_only?, same_site?, expires?}` | Set cookie |
+| `cookies_clear` | `{domain?}` | Clear cookies |
+| `storage_get` | `{key, storage_type?}` | Get localStorage/sessionStorage value |
+| `storage_set` | `{key, value, storage_type?}` | Set localStorage/sessionStorage value |
+| `export_session` | `{cookies?, local_storage?, session_storage?}` | Export full session state as JSON |
+| `import_session` | `{state}` | Import session state from export JSON |
 
 #### Action Details
 
@@ -454,6 +472,229 @@ Extract all links from a raw HTML string. Does not require a browser.
 | `html` | string | ✅ | Raw HTML string |
 
 **Response:** JSON array of `{ "href", "text", "is_external" }` objects.
+</details>
+
+##### Multi-Tab
+
+<details>
+<summary><strong><code>new_tab</code></strong> — Open new tab</summary>
+
+Open a new browser tab, optionally navigating to a URL. The new tab becomes the active page.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `url` | string | | URL to navigate to in the new tab. If omitted, opens `about:blank`. |
+
+**Response:** `"opened new tab (index <i>) — <url>"`
+</details>
+
+<details>
+<summary><strong><code>list_tabs</code></strong> — List all tabs</summary>
+
+List all open browser tabs with their index, URL, title, and whether they are the currently active page.
+
+**Params:** None
+
+**Response:** JSON array of `{ "index", "url", "title", "active" }` objects.
+</details>
+
+<details>
+<summary><strong><code>switch_tab</code></strong> — Switch active tab</summary>
+
+Switch the active page to a different tab by its 0-based index.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `index` | number | ✅ | 0-based tab index (see `list_tabs`) |
+
+**Response:** `"switched to tab <index> — <url>"`
+</details>
+
+<details>
+<summary><strong><code>close_tab</code></strong> — Close tab</summary>
+
+Close a browser tab by index. If no index is provided, closes the currently active tab. The active page switches to the nearest remaining tab.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `index` | number | | 0-based tab index. Defaults to the active tab. |
+
+**Response:** `"closed tab <index>"`
+</details>
+
+##### DOM Events
+
+<details>
+<summary><strong><code>observe_mutations</code></strong> — Start MutationObserver</summary>
+
+Start a `MutationObserver` on the current page. Recorded mutations can be retrieved with `get_mutations` and the observer disconnected with `stop_mutations`.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | | CSS selector for the target node (default `body`) |
+| `child_list` | boolean | | Observe child additions/removals (default `true`) |
+| `attributes` | boolean | | Observe attribute changes (default `false`) |
+| `character_data` | boolean | | Observe text content changes (default `false`) |
+| `subtree` | boolean | | Observe entire subtree (default `true`) |
+
+**Response:** `"mutation observer started on <selector>"`
+</details>
+
+<details>
+<summary><strong><code>get_mutations</code></strong> — Get recorded DOM mutations</summary>
+
+Return all DOM mutations recorded since the last `get_mutations` call (or since `observe_mutations` was started). The buffer is cleared after reading.
+
+**Params:** None
+
+**Response:** JSON array of mutation records `{ "type", "target", "addedNodes", "removedNodes", "attributeName", "oldValue" }`.
+</details>
+
+<details>
+<summary><strong><code>stop_mutations</code></strong> — Disconnect MutationObserver</summary>
+
+Disconnect the active `MutationObserver`. Any unread mutations are discarded.
+
+**Params:** None
+
+**Response:** `"mutation observer stopped"`
+</details>
+
+<details>
+<summary><strong><code>wait_for_event</code></strong> — Wait for DOM event</summary>
+
+Wait for a specific DOM event on the page or a targeted element. Resolves when the event fires or the timeout is reached.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `event` | string | ✅ | DOM event name (e.g. `click`, `load`, `transitionend`) |
+| `selector` | string | | CSS selector for the target element (default `document`) |
+| `timeout` | number | | Timeout in milliseconds (default `30000`) |
+
+**Response:** JSON object with event details `{ "type", "target", "timestamp" }`, or error on timeout.
+</details>
+
+##### Cookie & Storage
+
+<details>
+<summary><strong><code>cookies_get</code></strong> — Get cookies</summary>
+
+Get cookies visible to the page. Non-HttpOnly cookies are read via `document.cookie`; HttpOnly cookies require CDP access.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `domain` | string | | Filter by domain |
+| `name` | string | | Filter by cookie name |
+
+**Response:** JSON array of `{ "name", "value", "domain", "path", "secure", "httpOnly", "sameSite", "expires" }` objects.
+</details>
+
+<details>
+<summary><strong><code>cookies_set</code></strong> — Set cookie</summary>
+
+Set a cookie on the current browser context.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | ✅ | Cookie name |
+| `value` | string | ✅ | Cookie value |
+| `domain` | string | ✅ | Cookie domain |
+| `path` | string | | Cookie path (default `/`) |
+| `secure` | boolean | | Secure flag (default `false`) |
+| `http_only` | boolean | | HttpOnly flag (default `false`) |
+| `same_site` | string | | `Strict`, `Lax`, or `None` |
+| `expires` | number | | Expiry as Unix timestamp (seconds) |
+
+**Response:** `"cookie '<name>' set for <domain>"`
+</details>
+
+<details>
+<summary><strong><code>cookies_clear</code></strong> — Clear cookies</summary>
+
+Clear cookies from the browser context. Optionally filter by domain.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `domain` | string | | Clear only cookies for this domain. If omitted, clears all. |
+
+**Response:** `"cleared <n> cookies"`
+</details>
+
+<details>
+<summary><strong><code>storage_get</code></strong> — Get storage value</summary>
+
+Get a value from `localStorage` or `sessionStorage`.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `key` | string | ✅ | Storage key |
+| `storage_type` | string | | `local` or `session` (default `local`) |
+
+**Response:** The stored value as a string, or `null` if the key does not exist.
+</details>
+
+<details>
+<summary><strong><code>storage_set</code></strong> — Set storage value</summary>
+
+Set a value in `localStorage` or `sessionStorage`.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `key` | string | ✅ | Storage key |
+| `value` | string | ✅ | Value to store |
+| `storage_type` | string | | `local` or `session` (default `local`) |
+
+**Response:** `"stored '<key>' in <storage_type>Storage"`
+</details>
+
+<details>
+<summary><strong><code>export_session</code></strong> — Export session state</summary>
+
+Export the full browser session state (cookies, localStorage, sessionStorage) as a JSON blob that can be re-imported with `import_session`.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `cookies` | boolean | | Include cookies (default `true`) |
+| `local_storage` | boolean | | Include localStorage (default `true`) |
+| `session_storage` | boolean | | Include sessionStorage (default `true`) |
+
+**Response:** JSON object `{ "cookies": [...], "local_storage": {...}, "session_storage": {...} }`.
+</details>
+
+<details>
+<summary><strong><code>import_session</code></strong> — Import session state</summary>
+
+Import a previously exported session state to restore cookies and storage values.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `state` | object | ✅ | Session state JSON (output of `export_session`) |
+
+**Response:** `"session imported — <n> cookies, <n> localStorage keys, <n> sessionStorage keys"`
 </details>
 
 ---
@@ -2226,4 +2467,4 @@ All tools return errors in a consistent format:
 
 ---
 
-*Auto-generated from OneCrawl MCP server source (`onecrawl-mcp-rs`). Total: 10 tools, 108 actions.*
+*Auto-generated from OneCrawl MCP server source (`onecrawl-mcp-rs`). Total: 10 tools, 123 actions.*

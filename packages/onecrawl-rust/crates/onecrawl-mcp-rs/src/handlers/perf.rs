@@ -151,7 +151,7 @@ impl OneCrawlMcp {
             p.threshold.unwrap_or(0.1),
         );
 
-        json_ok(&serde_json::to_value(&result).unwrap())
+        json_ok(&serde_json::to_value(&result).mcp()?)
     }
 
 
@@ -263,7 +263,7 @@ impl OneCrawlMcp {
         };
 
         let budget_result = onecrawl_cdp::perf_monitor::check_budget(&snapshot, &budget);
-        json_ok(&serde_json::to_value(&budget_result).unwrap())
+        json_ok(&serde_json::to_value(&budget_result).mcp()?)
     }
 
 

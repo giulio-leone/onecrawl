@@ -1,7 +1,7 @@
 //! Handler implementations for the `automate` super-tool.
 
 use rmcp::{ErrorData as McpError, model::*};
-use crate::helpers::{mcp_err, ensure_page, json_ok, parse_json_str, McpResult};
+use crate::helpers::{mcp_err, ensure_page, json_ok, parse_json_str, json_escape, McpResult};
 use crate::types::*;
 use crate::OneCrawlMcp;
 use std::collections::HashMap;
@@ -205,11 +205,11 @@ impl OneCrawlMcp {
                 let sel = onecrawl_cdp::workflow::interpolate(selector, variables);
                 let attr_js = if let Some(attr) = attribute {
                     format!(r#"Array.from(document.querySelectorAll({sel_json})).map(e => e.getAttribute({attr_json}))"#,
-                        sel_json = serde_json::to_string(&sel).unwrap(),
-                        attr_json = serde_json::to_string(attr).unwrap())
+                        sel_json = json_escape(&sel),
+                        attr_json = json_escape(attr))
                 } else {
                     format!(r#"Array.from(document.querySelectorAll({sel_json})).map(e => e.textContent.trim())"#,
-                        sel_json = serde_json::to_string(&sel).unwrap())
+                        sel_json = json_escape(&sel))
                 };
                 let result = page.evaluate(attr_js).await.mcp()?;
                 let val = result.into_value::<serde_json::Value>().unwrap_or(serde_json::Value::Null);
@@ -339,7 +339,7 @@ impl OneCrawlMcp {
         }
 
         let plan = onecrawl_cdp::task_planner::plan_from_goal(&p.goal, &context);
-        json_ok(&serde_json::to_value(&plan).unwrap())
+        json_ok(&serde_json::to_value(&plan).mcp()?)
     }
 
 
@@ -434,7 +434,7 @@ impl OneCrawlMcp {
             total_duration_ms: start.elapsed().as_millis() as u64,
         };
 
-        json_ok(&serde_json::to_value(&result).unwrap())
+        json_ok(&serde_json::to_value(&result).mcp()?)
     }
 
 
@@ -498,7 +498,7 @@ impl OneCrawlMcp {
             PlannedAction::Extract { target } => {
                 let js = format!(
                     r#"Array.from(document.querySelectorAll({sel})).map(e => e.textContent.trim())"#,
-                    sel = serde_json::to_string(target).unwrap()
+                    sel = json_escape(target)
                 );
                 let result = page.evaluate(js).await.mcp()?;
                 let val = result.into_value::<serde_json::Value>().unwrap_or(serde_json::Value::Null);
