@@ -1425,4 +1425,253 @@ mod tests {
         let p: DeepQueryParams = serde_json::from_str(r#"{"selector":"my-element >>> .inner"}"#).unwrap();
         assert!(p.selector.contains(">>>"));
     }
+
+    // ── Agentic Task Decomposition ──
+
+    #[test]
+    fn task_decompose_params() {
+        let p: TaskDecomposeParams = serde_json::from_str(r#"{"goal":"click login"}"#).unwrap();
+        assert_eq!(p.goal, "click login");
+        assert!(p.context.is_none());
+        assert!(p.max_depth.is_none());
+    }
+
+    #[test]
+    fn task_decompose_params_full() {
+        let p: TaskDecomposeParams = serde_json::from_str(
+            r#"{"goal":"fill form","context":"login page","max_depth":3}"#,
+        )
+        .unwrap();
+        assert_eq!(p.goal, "fill form");
+        assert_eq!(p.context.as_deref(), Some("login page"));
+        assert_eq!(p.max_depth, Some(3));
+    }
+
+    #[test]
+    fn task_plan_params() {
+        let p: TaskPlanParams = serde_json::from_str(
+            r#"{"tasks":["navigate","click","verify"],"strategy":"sequential"}"#,
+        )
+        .unwrap();
+        assert_eq!(p.tasks.len(), 3);
+        assert_eq!(p.strategy.as_deref(), Some("sequential"));
+    }
+
+    // ── Vision/LLM Observation Layer ──
+
+    #[test]
+    fn vision_describe_params_defaults() {
+        let p: VisionDescribeParams = serde_json::from_str(r#"{}"#).unwrap();
+        assert!(p.selector.is_none());
+        assert!(p.format.is_none());
+    }
+
+    #[test]
+    fn vision_describe_params_full() {
+        let p: VisionDescribeParams =
+            serde_json::from_str(r#"{"selector":"main","format":"detailed"}"#).unwrap();
+        assert_eq!(p.selector.as_deref(), Some("main"));
+        assert_eq!(p.format.as_deref(), Some("detailed"));
+    }
+
+    #[test]
+    fn vision_locate_params() {
+        let p: VisionLocateParams = serde_json::from_str(
+            r#"{"description":"blue submit button","strategy":"aria"}"#,
+        )
+        .unwrap();
+        assert_eq!(p.description, "blue submit button");
+        assert_eq!(p.strategy.as_deref(), Some("aria"));
+    }
+
+    #[test]
+    fn vision_compare_params() {
+        let p: VisionCompareParams =
+            serde_json::from_str(r#"{"baseline":"base64data","threshold":0.95}"#).unwrap();
+        assert_eq!(p.baseline, "base64data");
+        assert!(p.current.is_none());
+        assert_eq!(p.threshold, Some(0.95));
+    }
+
+    // ── Self-Healing Selector Recovery ──
+
+    #[test]
+    fn selector_heal_params() {
+        let p: SelectorHealParams =
+            serde_json::from_str(r#"{"selector":".btn-login","context":"login button"}"#)
+                .unwrap();
+        assert_eq!(p.selector, ".btn-login");
+        assert_eq!(p.context.as_deref(), Some("login button"));
+    }
+
+    #[test]
+    fn selector_alternatives_params() {
+        let p: SelectorAlternativesParams =
+            serde_json::from_str(r##"{"selector":"#main","max_alternatives":5}"##).unwrap();
+        assert_eq!(p.selector, "#main");
+        assert_eq!(p.max_alternatives, Some(5));
+    }
+
+    #[test]
+    fn selector_validate_params() {
+        let p: SelectorValidateParams = serde_json::from_str(
+            r#"{"selector":"button","expected_role":"button","expected_text":"Submit"}"#,
+        )
+        .unwrap();
+        assert_eq!(p.selector, "button");
+        assert_eq!(p.expected_role.as_deref(), Some("button"));
+        assert_eq!(p.expected_text.as_deref(), Some("Submit"));
+    }
+
+    // ── Session Checkpoints/Resume ──
+
+    #[test]
+    fn checkpoint_save_params_minimal() {
+        let p: CheckpointSaveParams =
+            serde_json::from_str(r#"{"name":"before-login"}"#).unwrap();
+        assert_eq!(p.name, "before-login");
+        assert!(p.include_cookies.is_none());
+        assert!(p.include_storage.is_none());
+        assert!(p.include_context.is_none());
+    }
+
+    #[test]
+    fn checkpoint_save_params_full() {
+        let p: CheckpointSaveParams = serde_json::from_str(
+            r#"{"name":"after-auth","include_cookies":true,"include_storage":true,"include_context":true}"#,
+        )
+        .unwrap();
+        assert_eq!(p.name, "after-auth");
+        assert_eq!(p.include_cookies, Some(true));
+        assert_eq!(p.include_storage, Some(true));
+        assert_eq!(p.include_context, Some(true));
+    }
+
+    #[test]
+    fn checkpoint_restore_params() {
+        let p: CheckpointRestoreParams = serde_json::from_str(
+            r#"{"name":"before-login","restore_url":true,"restore_cookies":false}"#,
+        )
+        .unwrap();
+        assert_eq!(p.name, "before-login");
+        assert_eq!(p.restore_url, Some(true));
+        assert_eq!(p.restore_cookies, Some(false));
+    }
+
+    #[test]
+    fn checkpoint_delete_params() {
+        let p: CheckpointDeleteParams =
+            serde_json::from_str(r#"{"name":"old-checkpoint"}"#).unwrap();
+        assert_eq!(p.name, "old-checkpoint");
+    }
+
+    // ── Extended Workflow DSL ──
+
+    #[test]
+    fn workflow_while_params() {
+        let p: WorkflowWhileParams = serde_json::from_str(
+            r#"{"condition":"document.querySelector('.next')","actions":[{"action":"click","params":{}}],"max_iterations":10}"#,
+        )
+        .unwrap();
+        assert_eq!(p.condition, "document.querySelector('.next')");
+        assert_eq!(p.actions.len(), 1);
+        assert_eq!(p.max_iterations, Some(10));
+    }
+
+    #[test]
+    fn workflow_for_each_params() {
+        let p: WorkflowForEachParams = serde_json::from_str(
+            r#"{"collection":"document.querySelectorAll('a')","variable_name":"link","actions":[{"action":"click"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(p.collection, "document.querySelectorAll('a')");
+        assert_eq!(p.variable_name.as_deref(), Some("link"));
+        assert_eq!(p.actions.len(), 1);
+    }
+
+    #[test]
+    fn workflow_if_params_then_only() {
+        let p: WorkflowIfParams = serde_json::from_str(
+            r#"{"condition":"true","then_actions":[{"action":"click"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(p.condition, "true");
+        assert_eq!(p.then_actions.len(), 1);
+        assert!(p.else_actions.is_none());
+    }
+
+    #[test]
+    fn workflow_if_params_full() {
+        let p: WorkflowIfParams = serde_json::from_str(
+            r#"{"condition":"false","then_actions":[{"action":"click"}],"else_actions":[{"action":"wait"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(p.condition, "false");
+        assert_eq!(p.then_actions.len(), 1);
+        assert!(p.else_actions.is_some());
+        assert_eq!(p.else_actions.unwrap().len(), 1);
+    }
+
+    #[test]
+    fn workflow_variable_set() {
+        let p: WorkflowVariableParams =
+            serde_json::from_str(r#"{"name":"counter","value":42}"#).unwrap();
+        assert_eq!(p.name, "counter");
+        assert!(p.value.is_some());
+    }
+
+    #[test]
+    fn workflow_variable_get() {
+        let p: WorkflowVariableParams =
+            serde_json::from_str(r#"{"name":"counter"}"#).unwrap();
+        assert_eq!(p.name, "counter");
+        assert!(p.value.is_none());
+    }
+
+    // ── Event-Driven Reaction System ──
+
+    #[test]
+    fn event_subscribe_params() {
+        let p: EventSubscribeParams =
+            serde_json::from_str(r#"{"event_type":"navigation","filter":"*.html"}"#).unwrap();
+        assert_eq!(p.event_type, "navigation");
+        assert_eq!(p.filter.as_deref(), Some("*.html"));
+    }
+
+    #[test]
+    fn event_unsubscribe_params() {
+        let p: EventUnsubscribeParams =
+            serde_json::from_str(r#"{"event_type":"console"}"#).unwrap();
+        assert_eq!(p.event_type, "console");
+    }
+
+    #[test]
+    fn event_poll_params_defaults() {
+        let p: EventPollParams = serde_json::from_str(r#"{}"#).unwrap();
+        assert!(p.event_type.is_none());
+        assert!(p.limit.is_none());
+        assert!(p.clear.is_none());
+    }
+
+    #[test]
+    fn event_poll_params_full() {
+        let p: EventPollParams =
+            serde_json::from_str(r#"{"event_type":"error","limit":10,"clear":true}"#).unwrap();
+        assert_eq!(p.event_type.as_deref(), Some("error"));
+        assert_eq!(p.limit, Some(10));
+        assert_eq!(p.clear, Some(true));
+    }
+
+    // ── BrowserState agentic defaults ──
+
+    #[test]
+    fn browser_state_agentic_defaults() {
+        let state = BrowserState::default();
+        assert!(state.task_plans.is_empty());
+        assert!(state.selector_cache.is_empty());
+        assert!(state.checkpoints.is_empty());
+        assert!(state.workflow_variables.is_empty());
+        assert!(state.event_subscriptions.is_empty());
+        assert!(state.event_buffer.is_empty());
+    }
 }

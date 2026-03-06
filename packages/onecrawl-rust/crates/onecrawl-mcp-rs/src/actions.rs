@@ -337,4 +337,59 @@ mod tests {
             assert!(BrowserAction::parse(a).is_ok(), "failed to parse: {a}");
         }
     }
+
+    // ── Self-Healing Selector action variants ──
+
+    #[test]
+    fn browser_selector_variants() {
+        assert_eq!(BrowserAction::parse("selector_heal").unwrap(), BrowserAction::SelectorHeal);
+        assert_eq!(BrowserAction::parse("selector_alternatives").unwrap(), BrowserAction::SelectorAlternatives);
+        assert_eq!(BrowserAction::parse("selector_validate").unwrap(), BrowserAction::SelectorValidate);
+    }
+
+    // ── Event-Driven Reaction action variants ──
+
+    #[test]
+    fn browser_event_variants() {
+        assert_eq!(BrowserAction::parse("event_subscribe").unwrap(), BrowserAction::EventSubscribe);
+        assert_eq!(BrowserAction::parse("event_unsubscribe").unwrap(), BrowserAction::EventUnsubscribe);
+        assert_eq!(BrowserAction::parse("event_poll").unwrap(), BrowserAction::EventPoll);
+        assert_eq!(BrowserAction::parse("event_clear").unwrap(), BrowserAction::EventClear);
+    }
+
+    // ── Agent Task/Vision action variants ──
+
+    #[test]
+    fn agent_task_variants() {
+        assert_eq!(AgentAction::parse("task_decompose").unwrap(), AgentAction::TaskDecompose);
+        assert_eq!(AgentAction::parse("task_plan").unwrap(), AgentAction::TaskPlan);
+        assert_eq!(AgentAction::parse("task_status").unwrap(), AgentAction::TaskStatus);
+    }
+
+    #[test]
+    fn agent_vision_variants() {
+        assert_eq!(AgentAction::parse("vision_describe").unwrap(), AgentAction::VisionDescribe);
+        assert_eq!(AgentAction::parse("vision_locate").unwrap(), AgentAction::VisionLocate);
+        assert_eq!(AgentAction::parse("vision_compare").unwrap(), AgentAction::VisionCompare);
+    }
+
+    // ── Automate Checkpoint action variants ──
+
+    #[test]
+    fn automate_checkpoint_variants() {
+        assert_eq!(AutomateAction::parse("checkpoint_save").unwrap(), AutomateAction::CheckpointSave);
+        assert_eq!(AutomateAction::parse("checkpoint_restore").unwrap(), AutomateAction::CheckpointRestore);
+        assert_eq!(AutomateAction::parse("checkpoint_list").unwrap(), AutomateAction::CheckpointList);
+        assert_eq!(AutomateAction::parse("checkpoint_delete").unwrap(), AutomateAction::CheckpointDelete);
+    }
+
+    // ── Automate Workflow Control action variants ──
+
+    #[test]
+    fn automate_workflow_control_variants() {
+        assert_eq!(AutomateAction::parse("workflow_while").unwrap(), AutomateAction::WorkflowWhile);
+        assert_eq!(AutomateAction::parse("workflow_for_each").unwrap(), AutomateAction::WorkflowForEach);
+        assert_eq!(AutomateAction::parse("workflow_if").unwrap(), AutomateAction::WorkflowIf);
+        assert_eq!(AutomateAction::parse("workflow_variable").unwrap(), AutomateAction::WorkflowVariable);
+    }
 }
