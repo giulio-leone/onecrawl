@@ -99,3 +99,18 @@ pub fn json_ok(value: &impl serde::Serialize) -> Result<CallToolResult, McpError
 pub fn text_ok(msg: impl Into<String>) -> Result<CallToolResult, McpError> {
     Ok(CallToolResult::success(vec![Content::text(msg.into())]))
 }
+
+/// Parse a string into a `MemoryCategory` enum variant.
+pub fn parse_memory_category(s: Option<&str>) -> Option<onecrawl_cdp::MemoryCategory> {
+    match s {
+        Some("page_visit") => Some(onecrawl_cdp::MemoryCategory::PageVisit),
+        Some("element_pattern") => Some(onecrawl_cdp::MemoryCategory::ElementPattern),
+        Some("domain_strategy") => Some(onecrawl_cdp::MemoryCategory::DomainStrategy),
+        Some("retry_knowledge") => Some(onecrawl_cdp::MemoryCategory::RetryKnowledge),
+        Some("user_preference") => Some(onecrawl_cdp::MemoryCategory::UserPreference),
+        Some("selector_mapping") => Some(onecrawl_cdp::MemoryCategory::SelectorMapping),
+        Some("error_pattern") => Some(onecrawl_cdp::MemoryCategory::ErrorPattern),
+        Some("custom") => Some(onecrawl_cdp::MemoryCategory::Custom),
+        _ => None,
+    }
+}

@@ -1,5 +1,6 @@
 pub mod agent_error;
 pub mod cdp_tools;
+mod handlers;
 pub mod helpers;
 pub mod types;
 pub mod server;
