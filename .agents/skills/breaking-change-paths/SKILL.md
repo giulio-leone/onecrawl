@@ -2,20 +2,16 @@
 name: "Breaking Change Decision"
 description: "Structured decision process between Non-Breaking and Breaking paths without relaxing quality gates."
 ---
-
 # Breaking Change Decision Skill
 
 ## Purpose
-
 Run a structured, future-proof decision process between Non-Breaking and Breaking paths without relaxing quality gates.
 
 ## Use when
-
 - A task may affect public contracts, APIs, schemas, or behavioral compatibility
 - Root-cause fixes suggest architectural reshaping
 
 ## Checklist
-
 - Explicitly classify impact: Non-Breaking vs Breaking.
 - Present both paths with:
   - pros/cons
@@ -26,12 +22,10 @@ Run a structured, future-proof decision process between Non-Breaking and Breakin
 - If Breaking is selected, include migration and compatibility notes before execution.
 
 ## Short examples
-
 - Non-Breaking path: adapter layer preserving old contract while introducing new internals.
 - Breaking path: remove deprecated endpoint + provide migration map + test updates.
 
 ## Anti-patterns
-
 - Assuming breaking path without explicit selection
 - Treating breaking changes as exempt from test gates
 - Missing migration guidance
