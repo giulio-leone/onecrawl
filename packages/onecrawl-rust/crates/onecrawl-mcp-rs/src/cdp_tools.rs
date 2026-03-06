@@ -13,6 +13,8 @@ use tokio::sync::Mutex;
 pub struct BrowserState {
     pub session: Option<onecrawl_cdp::BrowserSession>,
     pub page: Option<chromiumoxide::Page>,
+    pub tabs: Vec<chromiumoxide::Page>,
+    pub active_tab: usize,
     pub snapshots: HashMap<String, onecrawl_cdp::DomSnapshot>,
     pub rate_limiter: Option<onecrawl_cdp::RateLimitState>,
     pub retry_queue: Option<onecrawl_cdp::RetryQueue>,
@@ -21,6 +23,8 @@ pub struct BrowserState {
     pub ios_client: Option<onecrawl_cdp::ios::IosClient>,
     pub pool: onecrawl_cdp::BrowserPool,
     pub memory: Option<onecrawl_cdp::AgentMemory>,
+    pub mutation_buffer: Vec<serde_json::Value>,
+    pub observing_mutations: bool,
 }
 
 pub type SharedBrowser = Arc<Mutex<BrowserState>>;
@@ -554,4 +558,120 @@ pub struct SmartFillParams {
     pub query: String,
     #[schemars(description = "Value to type into the matched input")]
     pub value: String,
+}
+
+// ──────────────── Multi-Tab params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct NewTabParams {
+    #[schemars(description = "URL to navigate to in the new tab (defaults to about:blank)")]
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SwitchTabParams {
+    #[schemars(description = "Tab index (0-based)")]
+    pub index: usize,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct CloseTabParams {
+    #[schemars(description = "Tab index to close (0-based). Defaults to active tab.")]
+    pub index: Option<usize>,
+}
+
+// ──────────────── DOM Events params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ObserveMutationsParams {
+    #[schemars(description = "CSS selector of element to observe (defaults to body)")]
+    pub selector: Option<String>,
+    #[schemars(description = "Observe child list changes")]
+    pub child_list: Option<bool>,
+    #[schemars(description = "Observe attribute changes")]
+    pub attributes: Option<bool>,
+    #[schemars(description = "Observe character data changes")]
+    pub character_data: Option<bool>,
+    #[schemars(description = "Observe entire subtree")]
+    pub subtree: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct WaitForEventParams {
+    #[schemars(description = "DOM event to wait for (e.g. click, load, DOMContentLoaded, hashchange)")]
+    pub event: String,
+    #[schemars(description = "CSS selector to scope the listener (defaults to document)")]
+    pub selector: Option<String>,
+    #[schemars(description = "Timeout in milliseconds (default 30000)")]
+    pub timeout: Option<u64>,
+}
+
+// ──────────────── Cookie & Storage params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct CookiesGetParams {
+    #[schemars(description = "Filter cookies by domain")]
+    pub domain: Option<String>,
+    #[schemars(description = "Filter cookies by name")]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct CookieSetParams {
+    #[schemars(description = "Cookie name")]
+    pub name: String,
+    #[schemars(description = "Cookie value")]
+    pub value: String,
+    #[schemars(description = "Cookie domain")]
+    pub domain: String,
+    #[schemars(description = "Cookie path (defaults to /)")]
+    pub path: Option<String>,
+    #[schemars(description = "Secure flag")]
+    pub secure: Option<bool>,
+    #[schemars(description = "HttpOnly flag")]
+    pub http_only: Option<bool>,
+    #[schemars(description = "SameSite attribute (Strict, Lax, None)")]
+    pub same_site: Option<String>,
+    #[schemars(description = "Expiry as Unix timestamp")]
+    pub expires: Option<f64>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct CookiesClearParams {
+    #[schemars(description = "Clear only cookies matching this domain (omit for all)")]
+    pub domain: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct StorageGetParams {
+    #[schemars(description = "Storage key to retrieve")]
+    pub key: String,
+    #[schemars(description = "Storage type: 'local' or 'session' (defaults to local)")]
+    pub storage_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct StorageSetParams {
+    #[schemars(description = "Storage key")]
+    pub key: String,
+    #[schemars(description = "Value to store")]
+    pub value: String,
+    #[schemars(description = "Storage type: 'local' or 'session' (defaults to local)")]
+    pub storage_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SessionExportParams {
+    #[schemars(description = "Include cookies in export")]
+    pub cookies: Option<bool>,
+    #[schemars(description = "Include localStorage in export")]
+    pub local_storage: Option<bool>,
+    #[schemars(description = "Include sessionStorage in export")]
+    pub session_storage: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SessionImportParams {
+    #[schemars(description = "Session state JSON (from export_session)")]
+    pub state: String,
 }

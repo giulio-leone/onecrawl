@@ -175,7 +175,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "browser",
-        description = "Browser navigation, interaction, and content extraction. All browser operations in one tool.\n\nActions:\n- goto {url} — Navigate to URL\n- click {selector} — Click element (CSS selector or @ref like @e1)\n- type {selector, text} — Type into input\n- screenshot {selector?, full_page?} — Screenshot as PNG base64\n- pdf {landscape?} — Export page as PDF\n- back — Navigate back\n- forward — Navigate forward\n- reload — Reload page\n- wait {selector, timeout_ms?} — Wait for element (default 30s)\n- evaluate {js} — Execute JavaScript, returns result\n- snapshot {interactive_only?, cursor?, compact?, depth?, selector?} — Accessibility snapshot with @refs\n- css {selector} — CSS query on live DOM\n- xpath {expression} — XPath query\n- find_text {text, tag?} — Find by visible text\n- text {selector?} — Extract visible text\n- html {selector?} — Extract raw HTML\n- markdown {selector?} — Extract as Markdown\n- structured — Extract JSON-LD, OpenGraph, etc.\n- stream {start_url, selector, next_selector?, max_pages?} — Paginated extraction\n- detect_forms — Detect forms and fields\n- fill_form {form_selector?, fields, submit?} — Fill and submit form\n- snapshot_diff {before, after} — Diff two text snapshots\n- parse_a11y {html} — Parse HTML into accessibility tree (offline)\n- parse_selector {html, selector} — CSS query on HTML string (offline)\n- parse_text {html} — Extract text from HTML (offline)\n- parse_links {html} — Extract links from HTML (offline)"
+        description = "Browser navigation, interaction, content extraction, multi-tab, DOM events, and session management.\n\nActions:\n- goto {url} — Navigate to URL\n- click {selector} — Click element\n- type {selector, text} — Type into input\n- screenshot {selector?, full_page?} — Screenshot\n- pdf {landscape?} — Export PDF\n- back — Navigate back\n- forward — Navigate forward\n- reload — Reload\n- wait {selector, timeout_ms?} — Wait for element\n- evaluate {js} — Execute JavaScript\n- snapshot {interactive_only?, compact?, depth?} — Accessibility snapshot\n- css {selector} — CSS query\n- xpath {expression} — XPath query\n- find_text {text, tag?} — Find by text\n- text {selector?} — Extract text\n- html {selector?} — Extract HTML\n- markdown {selector?} — Extract Markdown\n- structured — Extract JSON-LD/OG\n- stream {start_url, selector, next_selector?, max_pages?} — Paginated extraction\n- detect_forms — Detect forms\n- fill_form {form_selector?, fields, submit?} — Fill form\n- snapshot_diff {before, after} — Diff snapshots\n- parse_a11y {html} — Parse a11y tree offline\n- parse_selector {html, selector} — CSS query offline\n- parse_text {html} — Extract text offline\n- parse_links {html} — Extract links offline\n- new_tab {url?} — Open new tab\n- list_tabs — List all tabs\n- switch_tab {index} — Switch active tab\n- close_tab {index?} — Close tab\n- observe_mutations {selector?, child_list?, attributes?, subtree?} — Start mutation observer\n- get_mutations — Get recorded mutations\n- stop_mutations — Stop mutation observer\n- wait_for_event {event, selector?, timeout?} — Wait for DOM event\n- cookies_get {domain?, name?} — Get cookies\n- cookies_set {name, value, domain, path?, secure?, http_only?} — Set cookie\n- cookies_clear {domain?} — Clear cookies\n- storage_get {key, storage_type?} — Get localStorage/sessionStorage\n- storage_set {key, value, storage_type?} — Set storage\n- export_session {cookies?, local_storage?, session_storage?} — Export session state\n- import_session {state} — Import session state"
     )]
     async fn tool_browser(
         &self,
@@ -276,11 +276,68 @@ impl OneCrawlMcp {
                 let params: HtmlRequest = parse_params(v, "parse_links")?;
                 self.html_extract_links(params)
             }
+            // Multi-tab
+            "new_tab" => {
+                let params: NewTabParams = parse_params(v, "new_tab")?;
+                self.tab_new(params).await
+            }
+            "list_tabs" => self.tab_list().await,
+            "switch_tab" => {
+                let params: SwitchTabParams = parse_params(v, "switch_tab")?;
+                self.tab_switch(params).await
+            }
+            "close_tab" => {
+                let params: CloseTabParams = parse_params(v, "close_tab")?;
+                self.tab_close(params).await
+            }
+            // DOM events
+            "observe_mutations" => {
+                let params: ObserveMutationsParams = parse_params(v, "observe_mutations")?;
+                self.observe_mutations(params).await
+            }
+            "get_mutations" => self.get_mutations().await,
+            "stop_mutations" => self.stop_mutations().await,
+            "wait_for_event" => {
+                let params: WaitForEventParams = parse_params(v, "wait_for_event")?;
+                self.wait_for_event(params).await
+            }
+            // Cookies & storage
+            "cookies_get" => {
+                let params: CookiesGetParams = parse_params(v, "cookies_get")?;
+                self.cookies_get(params).await
+            }
+            "cookies_set" => {
+                let params: CookieSetParams = parse_params(v, "cookies_set")?;
+                self.cookies_set(params).await
+            }
+            "cookies_clear" => {
+                let params: CookiesClearParams = parse_params(v, "cookies_clear")?;
+                self.cookies_clear(params).await
+            }
+            "storage_get" => {
+                let params: StorageGetParams = parse_params(v, "storage_get")?;
+                self.storage_get(params).await
+            }
+            "storage_set" => {
+                let params: StorageSetParams = parse_params(v, "storage_set")?;
+                self.storage_set(params).await
+            }
+            "export_session" => {
+                let params: SessionExportParams = parse_params(v, "export_session")?;
+                self.session_export(params).await
+            }
+            "import_session" => {
+                let params: SessionImportParams = parse_params(v, "import_session")?;
+                self.session_import(params).await
+            }
             other => Err(mcp_err(format!(
                 "unknown browser action: {other}. Available: goto, click, type, screenshot, pdf, \
                  back, forward, reload, wait, evaluate, snapshot, css, xpath, find_text, text, \
                  html, markdown, structured, stream, detect_forms, fill_form, snapshot_diff, \
-                 parse_a11y, parse_selector, parse_text, parse_links"
+                 parse_a11y, parse_selector, parse_text, parse_links, new_tab, list_tabs, \
+                 switch_tab, close_tab, observe_mutations, get_mutations, stop_mutations, \
+                 wait_for_event, cookies_get, cookies_set, cookies_clear, storage_get, \
+                 storage_set, export_session, import_session"
             )))
         }
     }
