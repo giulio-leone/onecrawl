@@ -1,0 +1,276 @@
+//! Compile-time action enums for each super-tool.
+//!
+//! Each enum maps 1:1 to the string-based actions in the dispatcher.
+//! `FromStr` handles parsing; `match` on the enum is exhaustive.
+
+use crate::helpers::mcp_err;
+use rmcp::ErrorData as McpError;
+
+macro_rules! action_enum {
+    (
+        $name:ident, $tool:expr,
+        [ $( $variant:ident => $str:expr ),+ $(,)? ]
+    ) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub enum $name {
+            $( $variant, )+
+        }
+
+        impl $name {
+            pub fn parse(s: &str) -> Result<Self, McpError> {
+                match s {
+                    $( $str => Ok(Self::$variant), )+
+                    other => Err(mcp_err(format!(
+                        "unknown {} action: '{}'. Available: {}",
+                        $tool,
+                        other,
+                        [ $( $str ),+ ].join(", ")
+                    )))
+                }
+            }
+        }
+    };
+}
+
+action_enum!(BrowserAction, "browser", [
+    Goto => "goto",
+    Click => "click",
+    Type => "type",
+    Screenshot => "screenshot",
+    Pdf => "pdf",
+    Back => "back",
+    Forward => "forward",
+    Reload => "reload",
+    Wait => "wait",
+    Evaluate => "evaluate",
+    Snapshot => "snapshot",
+    Css => "css",
+    Xpath => "xpath",
+    FindText => "find_text",
+    Text => "text",
+    Html => "html",
+    Markdown => "markdown",
+    Structured => "structured",
+    Stream => "stream",
+    DetectForms => "detect_forms",
+    FillForm => "fill_form",
+    SnapshotDiff => "snapshot_diff",
+    ParseA11y => "parse_a11y",
+    ParseSelector => "parse_selector",
+    ParseText => "parse_text",
+    ParseLinks => "parse_links",
+    NewTab => "new_tab",
+    ListTabs => "list_tabs",
+    SwitchTab => "switch_tab",
+    CloseTab => "close_tab",
+    ObserveMutations => "observe_mutations",
+    GetMutations => "get_mutations",
+    StopMutations => "stop_mutations",
+    WaitForEvent => "wait_for_event",
+    CookiesGet => "cookies_get",
+    CookiesSet => "cookies_set",
+    CookiesClear => "cookies_clear",
+    StorageGet => "storage_get",
+    StorageSet => "storage_set",
+    ExportSession => "export_session",
+    ImportSession => "import_session",
+    InterceptEnable => "intercept_enable",
+    InterceptAddRule => "intercept_add_rule",
+    InterceptRemoveRule => "intercept_remove_rule",
+    InterceptList => "intercept_list",
+    InterceptDisable => "intercept_disable",
+    BlockRequests => "block_requests",
+    ConsoleStart => "console_start",
+    ConsoleGet => "console_get",
+    ConsoleClear => "console_clear",
+    DialogHandle => "dialog_handle",
+    DialogGet => "dialog_get",
+    ErrorsGet => "errors_get",
+    EmulateDevice => "emulate_device",
+    EmulateGeolocation => "emulate_geolocation",
+    EmulateTimezone => "emulate_timezone",
+    EmulateMedia => "emulate_media",
+    EmulateNetwork => "emulate_network",
+]);
+
+action_enum!(CrawlAction, "crawl", [
+    Spider => "spider",
+    Robots => "robots",
+    Sitemap => "sitemap",
+    DomSnapshot => "dom_snapshot",
+    DomCompare => "dom_compare",
+]);
+
+action_enum!(AgentAction, "agent", [
+    ExecuteChain => "execute_chain",
+    ElementScreenshot => "element_screenshot",
+    ApiCaptureStart => "api_capture_start",
+    ApiCaptureSummary => "api_capture_summary",
+    IframeList => "iframe_list",
+    IframeSnapshot => "iframe_snapshot",
+    ConnectRemote => "connect_remote",
+    SafetySet => "safety_set",
+    SafetyStatus => "safety_status",
+    SkillsList => "skills_list",
+    ScreencastStart => "screencast_start",
+    ScreencastStop => "screencast_stop",
+    ScreencastFrame => "screencast_frame",
+    RecordingStart => "recording_start",
+    RecordingStop => "recording_stop",
+    RecordingStatus => "recording_status",
+    IosDevices => "ios_devices",
+    IosConnect => "ios_connect",
+    IosNavigate => "ios_navigate",
+    IosTap => "ios_tap",
+    IosScreenshot => "ios_screenshot",
+]);
+
+action_enum!(StealthAction, "stealth", [
+    Inject => "inject",
+    Test => "test",
+    Fingerprint => "fingerprint",
+    BlockDomains => "block_domains",
+    DetectCaptcha => "detect_captcha",
+]);
+
+action_enum!(DataAction, "data", [
+    Pipeline => "pipeline",
+    HttpGet => "http_get",
+    HttpPost => "http_post",
+    Links => "links",
+    Graph => "graph",
+    NetCapture => "net_capture",
+    NetAnalyze => "net_analyze",
+    NetSdk => "net_sdk",
+    NetMock => "net_mock",
+    NetReplay => "net_replay",
+]);
+
+action_enum!(SecureAction, "secure", [
+    Encrypt => "encrypt",
+    Decrypt => "decrypt",
+    Pkce => "pkce",
+    Totp => "totp",
+    KvSet => "kv_set",
+    KvGet => "kv_get",
+    KvList => "kv_list",
+    PasskeyEnable => "passkey_enable",
+    PasskeyAdd => "passkey_add",
+    PasskeyList => "passkey_list",
+    PasskeyLog => "passkey_log",
+    PasskeyDisable => "passkey_disable",
+    PasskeyRemove => "passkey_remove",
+]);
+
+action_enum!(ComputerAction, "computer", [
+    Act => "act",
+    Observe => "observe",
+    Batch => "batch",
+    SmartFind => "smart_find",
+    SmartClick => "smart_click",
+    SmartFill => "smart_fill",
+    PoolList => "pool_list",
+    PoolStatus => "pool_status",
+]);
+
+action_enum!(MemoryAction, "memory", [
+    Store => "store",
+    Recall => "recall",
+    Search => "search",
+    Forget => "forget",
+    DomainStrategy => "domain_strategy",
+    Stats => "stats",
+]);
+
+action_enum!(AutomateAction, "automate", [
+    WorkflowValidate => "workflow_validate",
+    WorkflowRun => "workflow_run",
+    Plan => "plan",
+    Execute => "execute",
+    Patterns => "patterns",
+    RateLimit => "rate_limit",
+    Retry => "retry",
+]);
+
+action_enum!(PerfAction, "perf", [
+    Audit => "audit",
+    Budget => "budget",
+    Compare => "compare",
+    Trace => "trace",
+    VrtRun => "vrt_run",
+    VrtCompare => "vrt_compare",
+    VrtUpdate => "vrt_update",
+]);
+
+// ──────────────── Tests ─────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn browser_action_parse_valid() {
+        assert_eq!(BrowserAction::parse("goto").unwrap(), BrowserAction::Goto);
+        assert_eq!(BrowserAction::parse("emulate_network").unwrap(), BrowserAction::EmulateNetwork);
+        assert_eq!(BrowserAction::parse("intercept_enable").unwrap(), BrowserAction::InterceptEnable);
+    }
+
+    #[test]
+    fn browser_action_parse_invalid() {
+        assert!(BrowserAction::parse("nonexistent").is_err());
+    }
+
+    #[test]
+    fn crawl_action_parse() {
+        assert_eq!(CrawlAction::parse("spider").unwrap(), CrawlAction::Spider);
+        assert_eq!(CrawlAction::parse("dom_compare").unwrap(), CrawlAction::DomCompare);
+    }
+
+    #[test]
+    fn agent_action_parse() {
+        assert_eq!(AgentAction::parse("execute_chain").unwrap(), AgentAction::ExecuteChain);
+        assert_eq!(AgentAction::parse("ios_screenshot").unwrap(), AgentAction::IosScreenshot);
+    }
+
+    #[test]
+    fn all_tool_actions_parse() {
+        assert_eq!(StealthAction::parse("inject").unwrap(), StealthAction::Inject);
+        assert_eq!(DataAction::parse("pipeline").unwrap(), DataAction::Pipeline);
+        assert_eq!(SecureAction::parse("encrypt").unwrap(), SecureAction::Encrypt);
+        assert_eq!(ComputerAction::parse("act").unwrap(), ComputerAction::Act);
+        assert_eq!(MemoryAction::parse("store").unwrap(), MemoryAction::Store);
+        assert_eq!(AutomateAction::parse("plan").unwrap(), AutomateAction::Plan);
+        assert_eq!(PerfAction::parse("audit").unwrap(), PerfAction::Audit);
+    }
+
+    #[test]
+    fn error_message_contains_available() {
+        let err = BrowserAction::parse("bad").unwrap_err();
+        let msg = err.message.to_string();
+        assert!(msg.contains("unknown browser action"));
+        assert!(msg.contains("goto"));
+    }
+
+    #[test]
+    fn all_browser_actions_count() {
+        let actions = [
+            "goto", "click", "type", "screenshot", "pdf", "back", "forward",
+            "reload", "wait", "evaluate", "snapshot", "css", "xpath", "find_text",
+            "text", "html", "markdown", "structured", "stream", "detect_forms",
+            "fill_form", "snapshot_diff", "parse_a11y", "parse_selector",
+            "parse_text", "parse_links", "new_tab", "list_tabs", "switch_tab",
+            "close_tab", "observe_mutations", "get_mutations", "stop_mutations",
+            "wait_for_event", "cookies_get", "cookies_set", "cookies_clear",
+            "storage_get", "storage_set", "export_session", "import_session",
+            "intercept_enable", "intercept_add_rule", "intercept_remove_rule",
+            "intercept_list", "intercept_disable", "block_requests",
+            "console_start", "console_get", "console_clear", "dialog_handle",
+            "dialog_get", "errors_get", "emulate_device", "emulate_geolocation",
+            "emulate_timezone", "emulate_media", "emulate_network",
+        ];
+        assert_eq!(actions.len(), 58);
+        for a in &actions {
+            assert!(BrowserAction::parse(a).is_ok(), "failed to parse: {a}");
+        }
+    }
+}

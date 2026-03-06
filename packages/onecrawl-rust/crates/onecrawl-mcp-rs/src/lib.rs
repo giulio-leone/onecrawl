@@ -1,3 +1,4 @@
+pub mod actions;
 pub mod agent_error;
 pub mod cdp_tools;
 mod handlers;

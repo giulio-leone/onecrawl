@@ -6,8 +6,9 @@ use rmcp::{
 };
 use std::sync::Arc;
 
+use crate::actions::*;
 use crate::cdp_tools::*;
-use crate::helpers::{mcp_err, ensure_page, parse_params, McpResult};
+use crate::helpers::{ensure_page, parse_params, McpResult};
 use crate::types::*;
 
 // ──────────────────────────── Server ────────────────────────────
@@ -183,219 +184,207 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
-        match action.as_str() {
-            "goto" => {
+        let action = BrowserAction::parse(&action)?;
+        match action {
+            BrowserAction::Goto => {
                 let params: NavigateParams = parse_params(v, "goto")?;
                 self.navigation_goto(params).await
             }
-            "click" => {
+            BrowserAction::Click => {
                 let params: ClickParams = parse_params(v, "click")?;
                 self.navigation_click(params).await
             }
-            "type" => {
+            BrowserAction::Type => {
                 let params: TypeTextParams = parse_params(v, "type")?;
                 self.navigation_type(params).await
             }
-            "screenshot" => {
+            BrowserAction::Screenshot => {
                 let params: ScreenshotParams = parse_params(v, "screenshot")?;
                 self.navigation_screenshot(params).await
             }
-            "pdf" => {
+            BrowserAction::Pdf => {
                 let params: PdfExportParams = parse_params(v, "pdf")?;
                 self.navigation_pdf(params).await
             }
-            "back" => self.navigation_back().await,
-            "forward" => self.navigation_forward().await,
-            "reload" => self.navigation_reload().await,
-            "wait" => {
+            BrowserAction::Back => self.navigation_back().await,
+            BrowserAction::Forward => self.navigation_forward().await,
+            BrowserAction::Reload => self.navigation_reload().await,
+            BrowserAction::Wait => {
                 let params: WaitForSelectorParams = parse_params(v, "wait")?;
                 self.navigation_wait(params).await
             }
-            "evaluate" => {
+            BrowserAction::Evaluate => {
                 let params: EvaluateJsParams = parse_params(v, "evaluate")?;
                 self.navigation_evaluate(params).await
             }
-            "snapshot" => {
+            BrowserAction::Snapshot => {
                 let params: AgentSnapshotParams = parse_params(v, "snapshot")?;
                 self.navigation_snapshot(params).await
             }
-            "css" => {
+            BrowserAction::Css => {
                 let params: CssSelectorParams = parse_params(v, "css")?;
                 self.scraping_css(params).await
             }
-            "xpath" => {
+            BrowserAction::Xpath => {
                 let params: XPathParams = parse_params(v, "xpath")?;
                 self.scraping_xpath(params).await
             }
-            "find_text" => {
+            BrowserAction::FindText => {
                 let params: FindByTextParams = parse_params(v, "find_text")?;
                 self.scraping_find_text(params).await
             }
-            "text" => {
+            BrowserAction::Text => {
                 let params: ExtractTextParams = parse_params(v, "text")?;
                 self.scraping_text(params).await
             }
-            "html" => {
+            BrowserAction::Html => {
                 let params: ExtractHtmlParams = parse_params(v, "html")?;
                 self.scraping_html(params).await
             }
-            "markdown" => {
+            BrowserAction::Markdown => {
                 let params: ExtractMarkdownParams = parse_params(v, "markdown")?;
                 self.scraping_markdown(params).await
             }
-            "structured" => self.scraping_structured().await,
-            "stream" => {
+            BrowserAction::Structured => self.scraping_structured().await,
+            BrowserAction::Stream => {
                 let params: StreamExtractParams = parse_params(v, "stream")?;
                 self.scraping_stream(params).await
             }
-            "detect_forms" => {
+            BrowserAction::DetectForms => {
                 let params: DetectFormsParams = parse_params(v, "detect_forms")?;
                 self.scraping_detect_forms(params).await
             }
-            "fill_form" => {
+            BrowserAction::FillForm => {
                 let params: FillFormParams = parse_params(v, "fill_form")?;
                 self.scraping_fill_form(params).await
             }
-            "snapshot_diff" => {
+            BrowserAction::SnapshotDiff => {
                 let params: SnapshotDiffParams = parse_params(v, "snapshot_diff")?;
                 self.scraping_snapshot_diff(params).await
             }
-            "parse_a11y" => {
+            BrowserAction::ParseA11y => {
                 let params: HtmlRequest = parse_params(v, "parse_a11y")?;
                 self.parse_accessibility_tree(params)
             }
-            "parse_selector" => {
+            BrowserAction::ParseSelector => {
                 let params: SelectorRequest = parse_params(v, "parse_selector")?;
                 self.query_selector(params)
             }
-            "parse_text" => {
+            BrowserAction::ParseText => {
                 let params: HtmlRequest = parse_params(v, "parse_text")?;
                 self.html_extract_text(params)
             }
-            "parse_links" => {
+            BrowserAction::ParseLinks => {
                 let params: HtmlRequest = parse_params(v, "parse_links")?;
                 self.html_extract_links(params)
             }
             // Multi-tab
-            "new_tab" => {
+            BrowserAction::NewTab => {
                 let params: NewTabParams = parse_params(v, "new_tab")?;
                 self.tab_new(params).await
             }
-            "list_tabs" => self.tab_list().await,
-            "switch_tab" => {
+            BrowserAction::ListTabs => self.tab_list().await,
+            BrowserAction::SwitchTab => {
                 let params: SwitchTabParams = parse_params(v, "switch_tab")?;
                 self.tab_switch(params).await
             }
-            "close_tab" => {
+            BrowserAction::CloseTab => {
                 let params: CloseTabParams = parse_params(v, "close_tab")?;
                 self.tab_close(params).await
             }
             // DOM events
-            "observe_mutations" => {
+            BrowserAction::ObserveMutations => {
                 let params: ObserveMutationsParams = parse_params(v, "observe_mutations")?;
                 self.observe_mutations(params).await
             }
-            "get_mutations" => self.get_mutations().await,
-            "stop_mutations" => self.stop_mutations().await,
-            "wait_for_event" => {
+            BrowserAction::GetMutations => self.get_mutations().await,
+            BrowserAction::StopMutations => self.stop_mutations().await,
+            BrowserAction::WaitForEvent => {
                 let params: WaitForEventParams = parse_params(v, "wait_for_event")?;
                 self.wait_for_event(params).await
             }
             // Cookies & storage
-            "cookies_get" => {
+            BrowserAction::CookiesGet => {
                 let params: CookiesGetParams = parse_params(v, "cookies_get")?;
                 self.cookies_get(params).await
             }
-            "cookies_set" => {
+            BrowserAction::CookiesSet => {
                 let params: CookieSetParams = parse_params(v, "cookies_set")?;
                 self.cookies_set(params).await
             }
-            "cookies_clear" => {
+            BrowserAction::CookiesClear => {
                 let params: CookiesClearParams = parse_params(v, "cookies_clear")?;
                 self.cookies_clear(params).await
             }
-            "storage_get" => {
+            BrowserAction::StorageGet => {
                 let params: StorageGetParams = parse_params(v, "storage_get")?;
                 self.storage_get(params).await
             }
-            "storage_set" => {
+            BrowserAction::StorageSet => {
                 let params: StorageSetParams = parse_params(v, "storage_set")?;
                 self.storage_set(params).await
             }
-            "export_session" => {
+            BrowserAction::ExportSession => {
                 let params: SessionExportParams = parse_params(v, "export_session")?;
                 self.session_export(params).await
             }
-            "import_session" => {
+            BrowserAction::ImportSession => {
                 let params: SessionImportParams = parse_params(v, "import_session")?;
                 self.session_import(params).await
             }
             // Network Interception
-            "intercept_enable" => {
+            BrowserAction::InterceptEnable => {
                 let params: InterceptEnableParams = parse_params(v, "intercept_enable")?;
                 self.intercept_enable(params).await
             }
-            "intercept_add_rule" => {
+            BrowserAction::InterceptAddRule => {
                 let params: InterceptAddRuleParams = parse_params(v, "intercept_add_rule")?;
                 self.intercept_add_rule(params).await
             }
-            "intercept_remove_rule" => {
+            BrowserAction::InterceptRemoveRule => {
                 let params: InterceptRemoveRuleParams = parse_params(v, "intercept_remove_rule")?;
                 self.intercept_remove_rule(params).await
             }
-            "intercept_list" => self.intercept_list(v).await,
-            "intercept_disable" => self.intercept_disable(v).await,
-            "block_requests" => {
+            BrowserAction::InterceptList => self.intercept_list(v).await,
+            BrowserAction::InterceptDisable => self.intercept_disable(v).await,
+            BrowserAction::BlockRequests => {
                 let params: BlockRequestsParams = parse_params(v, "block_requests")?;
                 self.block_requests(params).await
             }
             // Console, Dialog & Error Capture
-            "console_start" => self.console_start(v).await,
-            "console_get" => {
+            BrowserAction::ConsoleStart => self.console_start(v).await,
+            BrowserAction::ConsoleGet => {
                 let params: ConsoleFilterParams = parse_params(v, "console_get")?;
                 self.console_get(params).await
             }
-            "console_clear" => self.console_clear(v).await,
-            "dialog_handle" => {
+            BrowserAction::ConsoleClear => self.console_clear(v).await,
+            BrowserAction::DialogHandle => {
                 let params: DialogHandleParams = parse_params(v, "dialog_handle")?;
                 self.dialog_handle(params).await
             }
-            "dialog_get" => self.dialog_get(v).await,
-            "errors_get" => self.errors_get(v).await,
+            BrowserAction::DialogGet => self.dialog_get(v).await,
+            BrowserAction::ErrorsGet => self.errors_get(v).await,
             // Device Emulation
-            "emulate_device" => {
+            BrowserAction::EmulateDevice => {
                 let params: EmulateDeviceParams = parse_params(v, "emulate_device")?;
                 self.emulate_device(params).await
             }
-            "emulate_geolocation" => {
+            BrowserAction::EmulateGeolocation => {
                 let params: EmulateGeolocationParams = parse_params(v, "emulate_geolocation")?;
                 self.emulate_geolocation(params).await
             }
-            "emulate_timezone" => {
+            BrowserAction::EmulateTimezone => {
                 let params: EmulateTimezoneParams = parse_params(v, "emulate_timezone")?;
                 self.emulate_timezone(params).await
             }
-            "emulate_media" => {
+            BrowserAction::EmulateMedia => {
                 let params: EmulateMediaParams = parse_params(v, "emulate_media")?;
                 self.emulate_media(params).await
             }
-            "emulate_network" => {
+            BrowserAction::EmulateNetwork => {
                 let params: EmulateNetworkParams = parse_params(v, "emulate_network")?;
                 self.emulate_network(params).await
             }
-            other => Err(mcp_err(format!(
-                "unknown browser action: {other}. Available: goto, click, type, screenshot, pdf, \
-                 back, forward, reload, wait, evaluate, snapshot, css, xpath, find_text, text, \
-                 html, markdown, structured, stream, detect_forms, fill_form, snapshot_diff, \
-                 parse_a11y, parse_selector, parse_text, parse_links, new_tab, list_tabs, \
-                 switch_tab, close_tab, observe_mutations, get_mutations, stop_mutations, \
-                 wait_for_event, cookies_get, cookies_set, cookies_clear, storage_get, \
-                 storage_set, export_session, import_session, intercept_enable, \
-                 intercept_add_rule, intercept_remove_rule, intercept_list, intercept_disable, \
-                 block_requests, console_start, console_get, console_clear, dialog_handle, \
-                 dialog_get, errors_get, emulate_device, emulate_geolocation, emulate_timezone, \
-                 emulate_media, emulate_network"
-            )))
         }
     }
 
@@ -409,30 +398,28 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
-        match action.as_str() {
-            "spider" => {
+        let action = CrawlAction::parse(&action)?;
+        match action {
+            CrawlAction::Spider => {
                 let params: SpiderCrawlParams = parse_params(v, "spider")?;
                 self.crawling_spider(params).await
             }
-            "robots" => {
+            CrawlAction::Robots => {
                 let params: CheckRobotsParams = parse_params(v, "robots")?;
                 self.crawling_robots(params).await
             }
-            "sitemap" => {
+            CrawlAction::Sitemap => {
                 let params: GenerateSitemapParams = parse_params(v, "sitemap")?;
                 self.crawling_sitemap(params)
             }
-            "dom_snapshot" => {
+            CrawlAction::DomSnapshot => {
                 let params: TakeSnapshotParams = parse_params(v, "dom_snapshot")?;
                 self.crawling_snapshot(params).await
             }
-            "dom_compare" => {
+            CrawlAction::DomCompare => {
                 let params: CompareSnapshotsParams = parse_params(v, "dom_compare")?;
                 self.crawling_compare(params).await
             }
-            other => Err(mcp_err(format!(
-                "unknown crawl action: {other}. Available: spider, robots, sitemap,                  dom_snapshot, dom_compare"
-            )))
         }
     }
 
@@ -446,94 +433,92 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
-        match action.as_str() {
-            "execute_chain" => {
+        let action = AgentAction::parse(&action)?;
+        match action {
+            AgentAction::ExecuteChain => {
                 let params: ExecuteChainParams = parse_params(v, "execute_chain")?;
                 self.agent_execute_chain(params).await
             }
-            "element_screenshot" => {
+            AgentAction::ElementScreenshot => {
                 let params: ElementScreenshotParams = parse_params(v, "element_screenshot")?;
                 self.agent_element_screenshot(params).await
             }
-            "api_capture_start" => {
+            AgentAction::ApiCaptureStart => {
                 let params: ApiCaptureStartParams = parse_params(v, "api_capture_start")?;
                 self.agent_api_capture_start(params).await
             }
-            "api_capture_summary" => {
+            AgentAction::ApiCaptureSummary => {
                 let params: ApiCaptureSummaryParams = parse_params(v, "api_capture_summary")?;
                 self.agent_api_capture_summary(params).await
             }
-            "iframe_list" => {
+            AgentAction::IframeList => {
                 let params: IframeListParams = parse_params(v, "iframe_list")?;
                 self.agent_iframe_list(params).await
             }
-            "iframe_snapshot" => {
+            AgentAction::IframeSnapshot => {
                 let params: IframeSnapshotParams = parse_params(v, "iframe_snapshot")?;
                 self.agent_iframe_snapshot(params).await
             }
-            "connect_remote" => {
+            AgentAction::ConnectRemote => {
                 let params: RemoteCdpParams = parse_params(v, "connect_remote")?;
                 self.agent_connect_remote(params).await
             }
-            "safety_set" => {
+            AgentAction::SafetySet => {
                 let params: SafetyPolicySetParams = parse_params(v, "safety_set")?;
                 self.agent_safety_policy_set(params).await
             }
-            "safety_status" => {
+            AgentAction::SafetyStatus => {
                 let params: SafetyStatusParams = parse_params(v, "safety_status")?;
                 self.agent_safety_status(params).await
             }
-            "skills_list" => {
+            AgentAction::SkillsList => {
                 let params: SkillsListParams = parse_params(v, "skills_list")?;
                 self.agent_skills_list(params)
             }
-            "screencast_start" => {
+            AgentAction::ScreencastStart => {
                 let params: ScreencastStartParams = parse_params(v, "screencast_start")?;
                 self.agent_screencast_start(params).await
             }
-            "screencast_stop" => {
+            AgentAction::ScreencastStop => {
                 let params: ScreencastStopParams = parse_params(v, "screencast_stop")?;
                 self.agent_screencast_stop(params).await
             }
-            "screencast_frame" => {
+            AgentAction::ScreencastFrame => {
                 let params: ScreencastFrameParams = parse_params(v, "screencast_frame")?;
                 self.agent_screencast_frame(params).await
             }
-            "recording_start" => {
+            AgentAction::RecordingStart => {
                 let params: RecordingStartParams = parse_params(v, "recording_start")?;
                 self.agent_recording_start(params).await
             }
-            "recording_stop" => {
+            AgentAction::RecordingStop => {
                 let params: RecordingStopParams = parse_params(v, "recording_stop")?;
                 self.agent_recording_stop(params).await
             }
-            "recording_status" => {
+            AgentAction::RecordingStatus => {
                 let params: RecordingStatusParams = parse_params(v, "recording_status")?;
                 self.agent_recording_status(params).await
             }
-            "ios_devices" => {
+            AgentAction::IosDevices => {
                 let params: IosDevicesParams = parse_params(v, "ios_devices")?;
                 self.agent_ios_devices(params).await
             }
-            "ios_connect" => {
+            AgentAction::IosConnect => {
                 let params: IosConnectParams = parse_params(v, "ios_connect")?;
                 self.agent_ios_connect(params).await
             }
-            "ios_navigate" => {
+            AgentAction::IosNavigate => {
                 let params: IosNavigateParams = parse_params(v, "ios_navigate")?;
                 self.agent_ios_navigate(params).await
             }
-            "ios_tap" => {
+            AgentAction::IosTap => {
                 let params: IosTapParams = parse_params(v, "ios_tap")?;
                 self.agent_ios_tap(params).await
             }
-            "ios_screenshot" => {
+            AgentAction::IosScreenshot => {
                 let params: IosScreenshotParams = parse_params(v, "ios_screenshot")?;
                 self.agent_ios_screenshot(params).await
             }
-            other => Err(mcp_err(format!(
-                "unknown agent action: {other}. Available: execute_chain, element_screenshot,                  api_capture_start, api_capture_summary, iframe_list, iframe_snapshot,                  connect_remote, safety_set, safety_status, skills_list, screencast_start,                  screencast_stop, screencast_frame, recording_start, recording_stop,                  recording_status, ios_devices, ios_connect, ios_navigate, ios_tap, ios_screenshot"
-            )))
         }
     }
 
@@ -547,30 +532,28 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
-        match action.as_str() {
-            "inject" => {
+        let action = StealthAction::parse(&action)?;
+        match action {
+            StealthAction::Inject => {
                 let params: InjectStealthParams = parse_params(v, "inject")?;
                 self.stealth_inject(params).await
             }
-            "test" => {
+            StealthAction::Test => {
                 let params: BotDetectionTestParams = parse_params(v, "test")?;
                 self.stealth_test(params).await
             }
-            "fingerprint" => {
+            StealthAction::Fingerprint => {
                 let params: ApplyFingerprintParams = parse_params(v, "fingerprint")?;
                 self.stealth_fingerprint(params).await
             }
-            "block_domains" => {
+            StealthAction::BlockDomains => {
                 let params: BlockDomainsParams = parse_params(v, "block_domains")?;
                 self.stealth_block_domains(params).await
             }
-            "detect_captcha" => {
+            StealthAction::DetectCaptcha => {
                 let params: DetectCaptchaParams = parse_params(v, "detect_captcha")?;
                 self.stealth_detect_captcha(params).await
             }
-            other => Err(mcp_err(format!(
-                "unknown stealth action: {other}. Available: inject, test, fingerprint,                  block_domains, detect_captcha"
-            )))
         }
     }
 
@@ -584,50 +567,48 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
-        match action.as_str() {
-            "pipeline" => {
+        let action = DataAction::parse(&action)?;
+        match action {
+            DataAction::Pipeline => {
                 let params: PipelineExecuteParams = parse_params(v, "pipeline")?;
                 self.data_pipeline(params)
             }
-            "http_get" => {
+            DataAction::HttpGet => {
                 let params: HttpGetParams = parse_params(v, "http_get")?;
                 self.data_http_get(params).await
             }
-            "http_post" => {
+            DataAction::HttpPost => {
                 let params: HttpPostParams = parse_params(v, "http_post")?;
                 self.data_http_post(params).await
             }
-            "links" => {
+            DataAction::Links => {
                 let params: ExtractLinksParams = parse_params(v, "links")?;
                 self.data_links(params).await
             }
-            "graph" => {
+            DataAction::Graph => {
                 let params: AnalyzeGraphParams = parse_params(v, "graph")?;
                 self.data_graph(params)
             }
-            "net_capture" => {
+            DataAction::NetCapture => {
                 let params: NetIntelCaptureParams = parse_params(v, "net_capture")?;
                 self.net_capture(params).await
             }
-            "net_analyze" => {
+            DataAction::NetAnalyze => {
                 let params: NetIntelAnalyzeParams = parse_params(v, "net_analyze")?;
                 self.net_analyze(params).await
             }
-            "net_sdk" => {
+            DataAction::NetSdk => {
                 let params: NetIntelSdkParams = parse_params(v, "net_sdk")?;
                 self.net_sdk(params).await
             }
-            "net_mock" => {
+            DataAction::NetMock => {
                 let params: NetIntelMockParams = parse_params(v, "net_mock")?;
                 self.net_mock(params).await
             }
-            "net_replay" => {
+            DataAction::NetReplay => {
                 let params: NetIntelReplayParams = parse_params(v, "net_replay")?;
                 self.net_replay(params).await
             }
-            other => Err(mcp_err(format!(
-                "unknown data action: {other}. Available: pipeline, http_get, http_post,                  links, graph, net_capture, net_analyze, net_sdk, net_mock, net_replay"
-            )))
         }
     }
 
@@ -641,56 +622,54 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
-        match action.as_str() {
-            "encrypt" => {
+        let action = SecureAction::parse(&action)?;
+        match action {
+            SecureAction::Encrypt => {
                 let params: EncryptRequest = parse_params(v, "encrypt")?;
                 self.encrypt(params)
             }
-            "decrypt" => {
+            SecureAction::Decrypt => {
                 let params: DecryptRequest = parse_params(v, "decrypt")?;
                 self.decrypt(params)
             }
-            "pkce" => self.generate_pkce(),
-            "totp" => {
+            SecureAction::Pkce => self.generate_pkce(),
+            SecureAction::Totp => {
                 let params: TotpRequest = parse_params(v, "totp")?;
                 self.generate_totp(params)
             }
-            "kv_set" => {
+            SecureAction::KvSet => {
                 let params: StoreSetRequest = parse_params(v, "kv_set")?;
                 self.store_set(params)
             }
-            "kv_get" => {
+            SecureAction::KvGet => {
                 let params: StoreGetRequest = parse_params(v, "kv_get")?;
                 self.store_get(params)
             }
-            "kv_list" => self.store_list(),
-            "passkey_enable" => {
+            SecureAction::KvList => self.store_list(),
+            SecureAction::PasskeyEnable => {
                 let params: PasskeyEnableParams = parse_params(v, "passkey_enable")?;
                 self.auth_passkey_enable(params).await
             }
-            "passkey_add" => {
+            SecureAction::PasskeyAdd => {
                 let params: PasskeyAddParams = parse_params(v, "passkey_add")?;
                 self.auth_passkey_add(params).await
             }
-            "passkey_list" => {
+            SecureAction::PasskeyList => {
                 let params: PasskeyListParams = parse_params(v, "passkey_list")?;
                 self.auth_passkey_list(params).await
             }
-            "passkey_log" => {
+            SecureAction::PasskeyLog => {
                 let params: PasskeyLogParams = parse_params(v, "passkey_log")?;
                 self.auth_passkey_log(params).await
             }
-            "passkey_disable" => {
+            SecureAction::PasskeyDisable => {
                 let params: PasskeyDisableParams = parse_params(v, "passkey_disable")?;
                 self.auth_passkey_disable(params).await
             }
-            "passkey_remove" => {
+            SecureAction::PasskeyRemove => {
                 let params: PasskeyRemoveParams = parse_params(v, "passkey_remove")?;
                 self.auth_passkey_remove(params).await
             }
-            other => Err(mcp_err(format!(
-                "unknown secure action: {other}. Available: encrypt, decrypt, pkce, totp,                  kv_set, kv_get, kv_list, passkey_enable, passkey_add, passkey_list,                  passkey_log, passkey_disable, passkey_remove"
-            )))
         }
     }
 
@@ -704,42 +683,40 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
-        match action.as_str() {
-            "act" => {
+        let action = ComputerAction::parse(&action)?;
+        match action {
+            ComputerAction::Act => {
                 let params: ComputerUseActionParams = parse_params(v, "act")?;
                 self.computer_act(params).await
             }
-            "observe" => {
+            ComputerAction::Observe => {
                 let params: ComputerUseObserveParams = parse_params(v, "observe")?;
                 self.computer_observe(params).await
             }
-            "batch" => {
+            ComputerAction::Batch => {
                 let params: ComputerUseBatchParams = parse_params(v, "batch")?;
                 self.computer_batch(params).await
             }
-            "smart_find" => {
+            ComputerAction::SmartFind => {
                 let params: SmartFindParams = parse_params(v, "smart_find")?;
                 self.smart_find(params).await
             }
-            "smart_click" => {
+            ComputerAction::SmartClick => {
                 let params: SmartClickParams = parse_params(v, "smart_click")?;
                 self.smart_click(params).await
             }
-            "smart_fill" => {
+            ComputerAction::SmartFill => {
                 let params: SmartFillParams = parse_params(v, "smart_fill")?;
                 self.smart_fill(params).await
             }
-            "pool_list" => {
+            ComputerAction::PoolList => {
                 let params: PoolListParams = parse_params(v, "pool_list")?;
                 self.pool_list(params).await
             }
-            "pool_status" => {
+            ComputerAction::PoolStatus => {
                 let params: PoolStatusParams = parse_params(v, "pool_status")?;
                 self.pool_status(params).await
             }
-            other => Err(mcp_err(format!(
-                "unknown computer action: {other}. Available: act, observe, batch,                  smart_find, smart_click, smart_fill, pool_list, pool_status"
-            )))
         }
     }
 
@@ -753,34 +730,32 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
-        match action.as_str() {
-            "store" => {
+        let action = MemoryAction::parse(&action)?;
+        match action {
+            MemoryAction::Store => {
                 let params: MemoryStoreParams = parse_params(v, "store")?;
                 self.memory_store(params).await
             }
-            "recall" => {
+            MemoryAction::Recall => {
                 let params: MemoryRecallParams = parse_params(v, "recall")?;
                 self.memory_recall(params).await
             }
-            "search" => {
+            MemoryAction::Search => {
                 let params: MemorySearchParams = parse_params(v, "search")?;
                 self.memory_search(params).await
             }
-            "forget" => {
+            MemoryAction::Forget => {
                 let params: MemoryForgetParams = parse_params(v, "forget")?;
                 self.memory_forget(params).await
             }
-            "domain_strategy" => {
+            MemoryAction::DomainStrategy => {
                 let params: MemoryDomainStrategyParams = parse_params(v, "domain_strategy")?;
                 self.memory_domain_strategy(params).await
             }
-            "stats" => {
+            MemoryAction::Stats => {
                 let params: MemoryStatsParams = parse_params(v, "stats")?;
                 self.memory_stats(params).await
             }
-            other => Err(mcp_err(format!(
-                "unknown memory action: {other}. Available: store, recall, search, forget,                  domain_strategy, stats"
-            )))
         }
     }
 
@@ -794,38 +769,36 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
-        match action.as_str() {
-            "workflow_validate" => {
+        let action = AutomateAction::parse(&action)?;
+        match action {
+            AutomateAction::WorkflowValidate => {
                 let params: WorkflowValidateParams = parse_params(v, "workflow_validate")?;
                 self.workflow_validate(params).await
             }
-            "workflow_run" => {
+            AutomateAction::WorkflowRun => {
                 let params: WorkflowRunParams = parse_params(v, "workflow_run")?;
                 self.workflow_run(params).await
             }
-            "plan" => {
+            AutomateAction::Plan => {
                 let params: PlannerPlanParams = parse_params(v, "plan")?;
                 self.planner_plan(params).await
             }
-            "execute" => {
+            AutomateAction::Execute => {
                 let params: PlannerExecuteParams = parse_params(v, "execute")?;
                 self.planner_execute(params).await
             }
-            "patterns" => {
+            AutomateAction::Patterns => {
                 let params: PlannerPatternsParams = parse_params(v, "patterns")?;
                 self.planner_patterns(params).await
             }
-            "rate_limit" => {
+            AutomateAction::RateLimit => {
                 let params: RateLimitCheckParams = parse_params(v, "rate_limit")?;
                 self.automation_rate_limit(params).await
             }
-            "retry" => {
+            AutomateAction::Retry => {
                 let params: RetryEnqueueParams = parse_params(v, "retry")?;
                 self.automation_retry(params).await
             }
-            other => Err(mcp_err(format!(
-                "unknown automate action: {other}. Available: workflow_validate, workflow_run,                  plan, execute, patterns, rate_limit, retry"
-            )))
         }
     }
 
@@ -839,38 +812,36 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
-        match action.as_str() {
-            "audit" => {
+        let action = PerfAction::parse(&action)?;
+        match action {
+            PerfAction::Audit => {
                 let params: PerfAuditParams = parse_params(v, "audit")?;
                 self.perf_audit(params).await
             }
-            "budget" => {
+            PerfAction::Budget => {
                 let params: PerfBudgetCheckParams = parse_params(v, "budget")?;
                 self.perf_budget(params).await
             }
-            "compare" => {
+            PerfAction::Compare => {
                 let params: PerfCompareParams = parse_params(v, "compare")?;
                 self.perf_compare(params).await
             }
-            "trace" => {
+            PerfAction::Trace => {
                 let params: PerfTraceParams = parse_params(v, "trace")?;
                 self.perf_trace(params).await
             }
-            "vrt_run" => {
+            PerfAction::VrtRun => {
                 let params: VrtRunParams = parse_params(v, "vrt_run")?;
                 self.vrt_run(params).await
             }
-            "vrt_compare" => {
+            PerfAction::VrtCompare => {
                 let params: VrtCompareParams = parse_params(v, "vrt_compare")?;
                 self.vrt_compare(params).await
             }
-            "vrt_update" => {
+            PerfAction::VrtUpdate => {
                 let params: VrtUpdateBaselineParams = parse_params(v, "vrt_update")?;
                 self.vrt_update_baseline(params).await
             }
-            other => Err(mcp_err(format!(
-                "unknown perf action: {other}. Available: audit, budget, compare, trace,                  vrt_run, vrt_compare, vrt_update"
-            )))
         }
     }
 }
