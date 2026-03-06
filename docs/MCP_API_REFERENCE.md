@@ -1,6 +1,6 @@
 # OneCrawl MCP API Reference
 
-> **10 consolidated tools • 159 actions • Action-based dispatch**
+> **10 consolidated tools • 171 actions • Action-based dispatch**
 
 All browser automation, crawling, scraping, security, and AI orchestration capabilities are accessed through 10 super-tools. Each tool accepts a uniform `{ action, params }` interface.
 
@@ -10,7 +10,7 @@ All browser automation, crawling, scraping, security, and AI orchestration capab
 
 | Tool | Actions | Description |
 |------|:-------:|-------------|
-| [`browser`](#1-browser) | 69 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage, network interception, console & errors, device emulation, file operations, shadow DOM |
+| [`browser`](#1-browser) | 77 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage, network interception, console & errors, device emulation, file operations, shadow DOM, session context, smart forms |
 | [`crawl`](#2-crawl) | 5 | Web crawling, robots.txt, sitemaps, DOM snapshots |
 | [`agent`](#3-agent) | 21 | Command chains, API capture, iframes, remote CDP, safety, screencast, recording, iOS |
 | [`stealth`](#4-stealth) | 5 | Anti-detection patches, fingerprinting, CAPTCHA detection |
@@ -18,7 +18,7 @@ All browser automation, crawling, scraping, security, and AI orchestration capab
 | [`secure`](#6-secure) | 13 | Encryption, PKCE, TOTP, encrypted KV store, WebAuthn passkeys |
 | [`computer`](#7-computer) | 8 | AI computer-use protocol, smart element resolution, browser pool |
 | [`memory`](#8-memory) | 6 | Persistent agent memory across sessions |
-| [`automate`](#9-automate) | 7 | Workflow DSL, AI task planning, rate limiting, retry queues |
+| [`automate`](#9-automate) | 11 | Workflow DSL, AI task planning, rate limiting, retry queues, error recovery |
 | [`perf`](#10-perf) | 7 | Performance audits, budgets, regression detection, visual regression testing |
 
 ---
@@ -131,6 +131,16 @@ A headless Chromium browser is launched automatically on the first call that req
 | `shadow_query` | `{host_selector, inner_selector}` | Query inside shadow DOM |
 | `shadow_text` | `{host_selector, inner_selector}` | Get text content from shadow DOM element |
 | `deep_query` | `{selector}` | Pierce multiple shadow DOM layers with `>>>` delimiter |
+| | | **Session Context** |
+| `context_set` | `{key, value}` | Store key/value in persistent page context |
+| `context_get` | `{key}` | Retrieve value by key from page context |
+| `context_list` | — | List all stored context entries |
+| `context_clear` | — | Clear all page context |
+| `context_transfer` | `{from_tab, to_tab, keys?}` | Transfer context between tabs |
+| | | **Smart Forms** |
+| `form_infer` | `{selector?}` | Analyze form fields and infer semantic purpose |
+| `form_auto_fill` | `{data, selector?, confidence_threshold?}` | Auto-fill form by matching data keys to fields |
+| `form_validate` | — | Check HTML5 form validation state |
 
 #### Action Details
 
@@ -1192,6 +1202,159 @@ Query elements across multiple shadow DOM boundaries using the `>>>` delimiter. 
 
 ```json
 {"action":"deep_query","params":{"selector":"my-app >>> .content >>> button"}}
+```
+</details>
+
+##### Session Context
+
+<details>
+<summary><strong><code>context_set</code></strong> — Store key/value in persistent page context</summary>
+
+Store a key/value pair in the persistent page context. Values survive navigation within the same tab and can be transferred between tabs.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `key` | string | ✅ | Context key |
+| `value` | any | ✅ | Value to store (string, number, boolean, object, or array) |
+
+**Response:**
+```json
+{ "stored": true, "key": "user_id", "entries_count": 3 }
+```
+</details>
+
+<details>
+<summary><strong><code>context_get</code></strong> — Retrieve value by key from page context</summary>
+
+Retrieve a previously stored value from the page context by its key.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `key` | string | ✅ | Context key to retrieve |
+
+**Response:**
+```json
+{ "key": "user_id", "value": "abc-123" }
+```
+</details>
+
+<details>
+<summary><strong><code>context_list</code></strong> — List all stored context entries</summary>
+
+List all key/value pairs currently stored in the page context.
+
+**Params:** None
+
+**Response:**
+```json
+{ "entries": { "user_id": "abc-123", "token": "xyz" }, "count": 2 }
+```
+</details>
+
+<details>
+<summary><strong><code>context_clear</code></strong> — Clear all page context</summary>
+
+Remove all entries from the persistent page context.
+
+**Params:** None
+
+**Response:**
+```json
+{ "cleared": true, "entries_removed": 3 }
+```
+</details>
+
+<details>
+<summary><strong><code>context_transfer</code></strong> — Transfer context between tabs</summary>
+
+Copy context entries from one tab to another. Optionally specify which keys to transfer; defaults to all.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `from_tab` | integer | ✅ | Source tab index (0-based) |
+| `to_tab` | integer | ✅ | Destination tab index (0-based) |
+| `keys` | string[] | | Specific keys to transfer (omit for all) |
+
+**Response:**
+```json
+{ "transferred": true, "keys": ["user_id", "token"], "from_tab": 0, "to_tab": 1 }
+```
+</details>
+
+##### Smart Forms
+
+<details>
+<summary><strong><code>form_infer</code></strong> — Analyze form fields and infer semantic purpose</summary>
+
+Analyze form fields on the page and infer their semantic purpose (e.g. email, password, phone, address) using field names, labels, placeholders, and input types.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `selector` | string | | CSS selector to target a specific form (defaults to first form on page) |
+
+**Response:**
+```json
+{
+  "fields": [
+    { "name": "email", "type": "email", "label": "Email Address", "placeholder": "you@example.com", "required": true, "inferred_purpose": "email" },
+    { "name": "pwd", "type": "password", "label": "Password", "placeholder": "", "required": true, "inferred_purpose": "password" }
+  ],
+  "count": 2
+}
+```
+</details>
+
+<details>
+<summary><strong><code>form_auto_fill</code></strong> — Auto-fill form by matching data keys to fields</summary>
+
+Automatically fill form fields by matching data object keys to inferred field purposes. Uses fuzzy matching with a configurable confidence threshold.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `data` | object | ✅ | Key-value pairs to fill (e.g. `{"email": "a@b.com", "password": "secret"}`) |
+| `selector` | string | | CSS selector to target a specific form |
+| `confidence_threshold` | number | | Minimum match confidence 0–1 (default `0.7`) |
+
+**Response:**
+```json
+{
+  "filled": [
+    { "field": "email", "matched_key": "email", "confidence": 0.95 },
+    { "field": "pwd", "matched_key": "password", "confidence": 0.85 }
+  ],
+  "skipped": [],
+  "count": 2
+}
+```
+</details>
+
+<details>
+<summary><strong><code>form_validate</code></strong> — Check HTML5 form validation state</summary>
+
+Check the HTML5 constraint validation state of all forms on the page. Reports validity per field and overall form validity.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "valid": false,
+  "fields": [
+    { "name": "email", "valid": true, "message": "" },
+    { "name": "age", "valid": false, "message": "Value must be greater than 0" }
+  ],
+  "invalid_count": 1
+}
 ```
 </details>
 
@@ -2419,6 +2582,11 @@ Workflow automation, AI task planning, and execution control.
 | `patterns` | — | List available automation patterns |
 | `rate_limit` | `{max_per_second?, max_per_minute?}` | Check/configure rate limiter |
 | `retry` | `{url, operation, payload?}` | Enqueue a retry with exponential backoff |
+| | | **Error Recovery** |
+| `retry_adapt` | `{action, params, max_retries?, strategy?, on_error?, alternative_action?, alternative_params?}` | Smart retry with adaptive strategy |
+| `error_classify` | `{error_message}` | Classify an error message into categories |
+| `recovery_suggest` | `{error_type, context?}` | Get recovery suggestions for error type |
+| `error_history` | — | Get recent error log |
 
 #### Action Details
 
@@ -2561,6 +2729,103 @@ Add a failed operation to the retry queue with exponential backoff.
 **Response:**
 ```json
 { "id": "retry-abc123", "queue_stats": { "pending": 3, "total": 5, "max_retries": 3 } }
+```
+</details>
+
+##### Error Recovery
+
+<details>
+<summary><strong><code>retry_adapt</code></strong> — Smart retry with adaptive strategy</summary>
+
+Execute an action with intelligent retry logic. Supports multiple strategies (exponential backoff, linear, immediate) and optional fallback to an alternative action on exhaustion.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `action` | string | ✅ | Primary action to attempt |
+| `params` | object | ✅ | Parameters for the primary action |
+| `max_retries` | integer | | Maximum retry attempts (default `3`) |
+| `strategy` | string | | Retry strategy: `exponential`, `linear`, `immediate` (default `exponential`) |
+| `on_error` | string | | Error handling mode: `retry`, `fallback`, `abort` (default `retry`) |
+| `alternative_action` | string | | Fallback action if primary exhausts retries (requires `on_error: "fallback"`) |
+| `alternative_params` | object | | Parameters for the fallback action |
+
+**Response:**
+```json
+{
+  "strategy": "exponential",
+  "max_retries": 3,
+  "action": "goto",
+  "fallback": { "action": "goto", "params": { "url": "https://cached.example.com" } },
+  "plan": ["attempt_1: 0ms", "attempt_2: 1000ms", "attempt_3: 4000ms", "fallback"]
+}
+```
+</details>
+
+<details>
+<summary><strong><code>error_classify</code></strong> — Classify an error message</summary>
+
+Classify an error message into a structured category with severity and recoverability assessment.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `error_message` | string | ✅ | The error message to classify |
+
+**Response:**
+```json
+{
+  "category": "network",
+  "severity": "medium",
+  "recoverable": true,
+  "suggestions": ["Check network connectivity", "Retry with exponential backoff", "Verify URL is reachable"]
+}
+```
+</details>
+
+<details>
+<summary><strong><code>recovery_suggest</code></strong> — Get recovery suggestions for error type</summary>
+
+Get contextual recovery strategies for a specific error type. Optionally provide additional context for more targeted suggestions.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `error_type` | string | ✅ | Error type or category (e.g. `timeout`, `selector_not_found`, `network`) |
+| `context` | object | | Additional context (e.g. `{"url": "...", "selector": "..."}`) |
+
+**Response:**
+```json
+{
+  "error_type": "timeout",
+  "strategies": [
+    { "name": "increase_timeout", "description": "Double the timeout value", "confidence": 0.8 },
+    { "name": "wait_for_network_idle", "description": "Wait for network idle before action", "confidence": 0.7 },
+    { "name": "retry_with_reload", "description": "Reload page and retry", "confidence": 0.6 }
+  ]
+}
+```
+</details>
+
+<details>
+<summary><strong><code>error_history</code></strong> — Get recent error log</summary>
+
+Retrieve the recent error log for the current session. Useful for debugging recurring issues and identifying patterns.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "errors": [
+    { "timestamp": "2025-01-15T10:30:00Z", "category": "timeout", "message": "Element not found within 30s", "action": "wait", "recoverable": true },
+    { "timestamp": "2025-01-15T10:29:55Z", "category": "network", "message": "net::ERR_CONNECTION_REFUSED", "action": "goto", "recoverable": true }
+  ],
+  "count": 2
+}
 ```
 </details>
 
