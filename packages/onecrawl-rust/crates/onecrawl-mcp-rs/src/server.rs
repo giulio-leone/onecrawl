@@ -174,15 +174,702 @@ impl OneCrawlMcp {
         }
     }
 
-    // ── Crypto tools ──
+    // ── Consolidated MCP tool dispatchers ──
 
     #[tool(
-        name = "crypto.encrypt",
-        description = "Encrypt text with AES-256-GCM. Returns base64-encoded ciphertext (salt+nonce+ct)."
+        name = "browser",
+        description = "Browser navigation, interaction, and content extraction. All browser operations in one tool.\n\nActions:\n- goto {url} — Navigate to URL\n- click {selector} — Click element (CSS selector or @ref like @e1)\n- type {selector, text} — Type into input\n- screenshot {selector?, full_page?} — Screenshot as PNG base64\n- pdf {landscape?} — Export page as PDF\n- back — Navigate back\n- forward — Navigate forward\n- reload — Reload page\n- wait {selector, timeout_ms?} — Wait for element (default 30s)\n- evaluate {js} — Execute JavaScript, returns result\n- snapshot {interactive_only?, cursor?, compact?, depth?, selector?} — Accessibility snapshot with @refs\n- css {selector} — CSS query on live DOM\n- xpath {expression} — XPath query\n- find_text {text, tag?} — Find by visible text\n- text {selector?} — Extract visible text\n- html {selector?} — Extract raw HTML\n- markdown {selector?} — Extract as Markdown\n- structured — Extract JSON-LD, OpenGraph, etc.\n- stream {start_url, selector, next_selector?, max_pages?} — Paginated extraction\n- detect_forms — Detect forms and fields\n- fill_form {form_selector?, fields, submit?} — Fill and submit form\n- snapshot_diff {before, after} — Diff two text snapshots\n- parse_a11y {html} — Parse HTML into accessibility tree (offline)\n- parse_selector {html, selector} — CSS query on HTML string (offline)\n- parse_text {html} — Extract text from HTML (offline)\n- parse_links {html} — Extract links from HTML (offline)"
     )]
+    async fn tool_browser(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        match action.as_str() {
+            "goto" => {
+                let params: NavigateParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("goto: {e}")))?;
+                self.navigation_goto(params).await
+            }
+            "click" => {
+                let params: ClickParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("click: {e}")))?;
+                self.navigation_click(params).await
+            }
+            "type" => {
+                let params: TypeTextParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("type: {e}")))?;
+                self.navigation_type(params).await
+            }
+            "screenshot" => {
+                let params: ScreenshotParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("screenshot: {e}")))?;
+                self.navigation_screenshot(params).await
+            }
+            "pdf" => {
+                let params: PdfExportParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("pdf: {e}")))?;
+                self.navigation_pdf(params).await
+            }
+            "back" => self.navigation_back().await,
+            "forward" => self.navigation_forward().await,
+            "reload" => self.navigation_reload().await,
+            "wait" => {
+                let params: WaitForSelectorParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("wait: {e}")))?;
+                self.navigation_wait(params).await
+            }
+            "evaluate" => {
+                let params: EvaluateJsParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("evaluate: {e}")))?;
+                self.navigation_evaluate(params).await
+            }
+            "snapshot" => {
+                let params: AgentSnapshotParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("snapshot: {e}")))?;
+                self.navigation_snapshot(params).await
+            }
+            "css" => {
+                let params: CssSelectorParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("css: {e}")))?;
+                self.scraping_css(params).await
+            }
+            "xpath" => {
+                let params: XPathParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("xpath: {e}")))?;
+                self.scraping_xpath(params).await
+            }
+            "find_text" => {
+                let params: FindByTextParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("find_text: {e}")))?;
+                self.scraping_find_text(params).await
+            }
+            "text" => {
+                let params: ExtractTextParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("text: {e}")))?;
+                self.scraping_text(params).await
+            }
+            "html" => {
+                let params: ExtractHtmlParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("html: {e}")))?;
+                self.scraping_html(params).await
+            }
+            "markdown" => {
+                let params: ExtractMarkdownParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("markdown: {e}")))?;
+                self.scraping_markdown(params).await
+            }
+            "structured" => self.scraping_structured().await,
+            "stream" => {
+                let params: StreamExtractParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("stream: {e}")))?;
+                self.scraping_stream(params).await
+            }
+            "detect_forms" => {
+                let params: DetectFormsParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("detect_forms: {e}")))?;
+                self.scraping_detect_forms(params).await
+            }
+            "fill_form" => {
+                let params: FillFormParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("fill_form: {e}")))?;
+                self.scraping_fill_form(params).await
+            }
+            "snapshot_diff" => {
+                let params: SnapshotDiffParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("snapshot_diff: {e}")))?;
+                self.scraping_snapshot_diff(params).await
+            }
+            "parse_a11y" => {
+                let params: HtmlRequest = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("parse_a11y: {e}")))?;
+                self.parse_accessibility_tree(params)
+            }
+            "parse_selector" => {
+                let params: SelectorRequest = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("parse_selector: {e}")))?;
+                self.query_selector(params)
+            }
+            "parse_text" => {
+                let params: HtmlRequest = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("parse_text: {e}")))?;
+                self.html_extract_text(params)
+            }
+            "parse_links" => {
+                let params: HtmlRequest = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("parse_links: {e}")))?;
+                self.html_extract_links(params)
+            }
+            other => Err(mcp_err(format!(
+                "unknown browser action: {other}. Available: goto, click, type, screenshot, pdf, \
+                 back, forward, reload, wait, evaluate, snapshot, css, xpath, find_text, text, \
+                 html, markdown, structured, stream, detect_forms, fill_form, snapshot_diff, \
+                 parse_a11y, parse_selector, parse_text, parse_links"
+            )))
+        }
+    }
+
+    #[tool(
+        name = "crawl",
+        description = "Web crawling, robots.txt, sitemaps, and DOM snapshot management.\n\nActions:\n- spider {url, max_depth?, max_pages?, same_origin?} — Crawl website\n- robots {url, user_agent?, test_path?} — Parse robots.txt\n- sitemap {entries} — Generate XML sitemap\n- dom_snapshot {label} — Take labeled DOM snapshot\n- dom_compare {before, after} — Compare two snapshots"
+    )]
+    async fn tool_crawl(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        match action.as_str() {
+            "spider" => {
+                let params: SpiderCrawlParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("spider: {e}")))?;
+                self.crawling_spider(params).await
+            }
+            "robots" => {
+                let params: CheckRobotsParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("robots: {e}")))?;
+                self.crawling_robots(params).await
+            }
+            "sitemap" => {
+                let params: GenerateSitemapParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("sitemap: {e}")))?;
+                self.crawling_sitemap(params)
+            }
+            "dom_snapshot" => {
+                let params: TakeSnapshotParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("dom_snapshot: {e}")))?;
+                self.crawling_snapshot(params).await
+            }
+            "dom_compare" => {
+                let params: CompareSnapshotsParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("dom_compare: {e}")))?;
+                self.crawling_compare(params).await
+            }
+            other => Err(mcp_err(format!(
+                "unknown crawl action: {other}. Available: spider, robots, sitemap,                  dom_snapshot, dom_compare"
+            )))
+        }
+    }
+
+    #[tool(
+        name = "agent",
+        description = "AI agent orchestration — command chains, element screenshots, API capture, iframes, remote CDP, safety policies, skills, screencast, recording, and iOS automation.\n\nActions:\n- execute_chain {commands} — Execute multiple commands in sequence\n- element_screenshot {selector} — Screenshot a specific element\n- api_capture_start — Start capturing API calls\n- api_capture_summary — Get captured API call summary\n- iframe_list — List all iframes on page\n- iframe_snapshot {index, interactive_only?} — Snapshot an iframe\n- connect_remote {ws_url, headers?} — Connect to remote CDP\n- safety_set {policy} — Set safety policy JSON\n- safety_status — Get current safety policy status\n- skills_list — List available skills\n- screencast_start {quality?, max_width?, max_height?} — Start screencast\n- screencast_stop — Stop screencast\n- screencast_frame — Get latest screencast frame\n- recording_start {output?, fps?, quality?} — Start video recording\n- recording_stop — Stop recording and save\n- recording_status — Get recording status\n- ios_devices — List iOS devices\n- ios_connect {device_id, wda_url?} — Connect to iOS device\n- ios_navigate {url} — Navigate iOS Safari\n- ios_tap {x, y} — Tap on iOS screen\n- ios_screenshot — Take iOS screenshot"
+    )]
+    async fn tool_agent(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        match action.as_str() {
+            "execute_chain" => {
+                let params: ExecuteChainParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("execute_chain: {e}")))?;
+                self.agent_execute_chain(params).await
+            }
+            "element_screenshot" => {
+                let params: ElementScreenshotParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("element_screenshot: {e}")))?;
+                self.agent_element_screenshot(params).await
+            }
+            "api_capture_start" => {
+                let params: ApiCaptureStartParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("api_capture_start: {e}")))?;
+                self.agent_api_capture_start(params).await
+            }
+            "api_capture_summary" => {
+                let params: ApiCaptureSummaryParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("api_capture_summary: {e}")))?;
+                self.agent_api_capture_summary(params).await
+            }
+            "iframe_list" => {
+                let params: IframeListParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("iframe_list: {e}")))?;
+                self.agent_iframe_list(params).await
+            }
+            "iframe_snapshot" => {
+                let params: IframeSnapshotParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("iframe_snapshot: {e}")))?;
+                self.agent_iframe_snapshot(params).await
+            }
+            "connect_remote" => {
+                let params: RemoteCdpParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("connect_remote: {e}")))?;
+                self.agent_connect_remote(params).await
+            }
+            "safety_set" => {
+                let params: SafetyPolicySetParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("safety_set: {e}")))?;
+                self.agent_safety_policy_set(params).await
+            }
+            "safety_status" => {
+                let params: SafetyStatusParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("safety_status: {e}")))?;
+                self.agent_safety_status(params).await
+            }
+            "skills_list" => {
+                let params: SkillsListParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("skills_list: {e}")))?;
+                self.agent_skills_list(params)
+            }
+            "screencast_start" => {
+                let params: ScreencastStartParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("screencast_start: {e}")))?;
+                self.agent_screencast_start(params).await
+            }
+            "screencast_stop" => {
+                let params: ScreencastStopParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("screencast_stop: {e}")))?;
+                self.agent_screencast_stop(params).await
+            }
+            "screencast_frame" => {
+                let params: ScreencastFrameParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("screencast_frame: {e}")))?;
+                self.agent_screencast_frame(params).await
+            }
+            "recording_start" => {
+                let params: RecordingStartParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("recording_start: {e}")))?;
+                self.agent_recording_start(params).await
+            }
+            "recording_stop" => {
+                let params: RecordingStopParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("recording_stop: {e}")))?;
+                self.agent_recording_stop(params).await
+            }
+            "recording_status" => {
+                let params: RecordingStatusParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("recording_status: {e}")))?;
+                self.agent_recording_status(params).await
+            }
+            "ios_devices" => {
+                let params: IosDevicesParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("ios_devices: {e}")))?;
+                self.agent_ios_devices(params).await
+            }
+            "ios_connect" => {
+                let params: IosConnectParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("ios_connect: {e}")))?;
+                self.agent_ios_connect(params).await
+            }
+            "ios_navigate" => {
+                let params: IosNavigateParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("ios_navigate: {e}")))?;
+                self.agent_ios_navigate(params).await
+            }
+            "ios_tap" => {
+                let params: IosTapParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("ios_tap: {e}")))?;
+                self.agent_ios_tap(params).await
+            }
+            "ios_screenshot" => {
+                let params: IosScreenshotParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("ios_screenshot: {e}")))?;
+                self.agent_ios_screenshot(params).await
+            }
+            other => Err(mcp_err(format!(
+                "unknown agent action: {other}. Available: execute_chain, element_screenshot,                  api_capture_start, api_capture_summary, iframe_list, iframe_snapshot,                  connect_remote, safety_set, safety_status, skills_list, screencast_start,                  screencast_stop, screencast_frame, recording_start, recording_stop,                  recording_status, ios_devices, ios_connect, ios_navigate, ios_tap, ios_screenshot"
+            )))
+        }
+    }
+
+    #[tool(
+        name = "stealth",
+        description = "Anti-detection and bot evasion — stealth patches, fingerprinting, CAPTCHA detection.\n\nActions:\n- inject — Inject stealth patches into page\n- test — Test if current page detects bot\n- fingerprint {user_agent?} — Generate and apply browser fingerprint\n- block_domains {domains} — Block tracking domains\n- detect_captcha — Detect CAPTCHAs on page"
+    )]
+    async fn tool_stealth(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        match action.as_str() {
+            "inject" => {
+                let params: InjectStealthParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("inject: {e}")))?;
+                self.stealth_inject(params).await
+            }
+            "test" => {
+                let params: BotDetectionTestParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("test: {e}")))?;
+                self.stealth_test(params).await
+            }
+            "fingerprint" => {
+                let params: ApplyFingerprintParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("fingerprint: {e}")))?;
+                self.stealth_fingerprint(params).await
+            }
+            "block_domains" => {
+                let params: BlockDomainsParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("block_domains: {e}")))?;
+                self.stealth_block_domains(params).await
+            }
+            "detect_captcha" => {
+                let params: DetectCaptchaParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("detect_captcha: {e}")))?;
+                self.stealth_detect_captcha(params).await
+            }
+            other => Err(mcp_err(format!(
+                "unknown stealth action: {other}. Available: inject, test, fingerprint,                  block_domains, detect_captcha"
+            )))
+        }
+    }
+
+    #[tool(
+        name = "data",
+        description = "Data processing, HTTP requests, link analysis, and network intelligence.\n\nActions:\n- pipeline {input, steps} — Multi-step data pipeline\n- http_get {url, headers?} — HTTP GET request\n- http_post {url, body?, content_type?, headers?} — HTTP POST request\n- links {base_url?} — Extract link graph from page\n- graph {edges} — Analyze link graph\n- net_capture {duration_ms?} — Capture network traffic\n- net_analyze {traffic?} — Analyze captured API traffic\n- net_sdk {traffic, language?} — Generate API SDK code\n- net_mock {traffic?} — Generate mock server config\n- net_replay {sequence} — Replay captured requests"
+    )]
+    async fn tool_data(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        match action.as_str() {
+            "pipeline" => {
+                let params: PipelineExecuteParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("pipeline: {e}")))?;
+                self.data_pipeline(params)
+            }
+            "http_get" => {
+                let params: HttpGetParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("http_get: {e}")))?;
+                self.data_http_get(params).await
+            }
+            "http_post" => {
+                let params: HttpPostParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("http_post: {e}")))?;
+                self.data_http_post(params).await
+            }
+            "links" => {
+                let params: ExtractLinksParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("links: {e}")))?;
+                self.data_links(params).await
+            }
+            "graph" => {
+                let params: AnalyzeGraphParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("graph: {e}")))?;
+                self.data_graph(params)
+            }
+            "net_capture" => {
+                let params: NetIntelCaptureParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("net_capture: {e}")))?;
+                self.net_capture(params).await
+            }
+            "net_analyze" => {
+                let params: NetIntelAnalyzeParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("net_analyze: {e}")))?;
+                self.net_analyze(params).await
+            }
+            "net_sdk" => {
+                let params: NetIntelSdkParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("net_sdk: {e}")))?;
+                self.net_sdk(params).await
+            }
+            "net_mock" => {
+                let params: NetIntelMockParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("net_mock: {e}")))?;
+                self.net_mock(params).await
+            }
+            "net_replay" => {
+                let params: NetIntelReplayParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("net_replay: {e}")))?;
+                self.net_replay(params).await
+            }
+            other => Err(mcp_err(format!(
+                "unknown data action: {other}. Available: pipeline, http_get, http_post,                  links, graph, net_capture, net_analyze, net_sdk, net_mock, net_replay"
+            )))
+        }
+    }
+
+    #[tool(
+        name = "secure",
+        description = "Cryptography, encrypted storage, and WebAuthn passkey management.\n\nActions:\n- encrypt {plaintext, password} — AES-256-GCM encryption\n- decrypt {ciphertext, password} — AES-256-GCM decryption\n- pkce — Generate PKCE S256 challenge pair\n- totp {secret} — Generate 6-digit TOTP code\n- kv_set {key, value} — Store encrypted key-value pair\n- kv_get {key} — Retrieve value by key\n- kv_list — List all stored keys\n- passkey_enable — Enable virtual WebAuthn authenticator\n- passkey_add {rp_id, user_name, credential_id?} — Add passkey credential\n- passkey_list — List stored passkeys\n- passkey_log — Get WebAuthn operation log\n- passkey_disable — Disable authenticator\n- passkey_remove {credential_id} — Remove passkey by ID"
+    )]
+    async fn tool_secure(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        match action.as_str() {
+            "encrypt" => {
+                let params: EncryptRequest = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("encrypt: {e}")))?;
+                self.encrypt(params)
+            }
+            "decrypt" => {
+                let params: DecryptRequest = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("decrypt: {e}")))?;
+                self.decrypt(params)
+            }
+            "pkce" => self.generate_pkce(),
+            "totp" => {
+                let params: TotpRequest = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("totp: {e}")))?;
+                self.generate_totp(params)
+            }
+            "kv_set" => {
+                let params: StoreSetRequest = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("kv_set: {e}")))?;
+                self.store_set(params)
+            }
+            "kv_get" => {
+                let params: StoreGetRequest = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("kv_get: {e}")))?;
+                self.store_get(params)
+            }
+            "kv_list" => self.store_list(),
+            "passkey_enable" => {
+                let params: PasskeyEnableParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("passkey_enable: {e}")))?;
+                self.auth_passkey_enable(params).await
+            }
+            "passkey_add" => {
+                let params: PasskeyAddParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("passkey_add: {e}")))?;
+                self.auth_passkey_add(params).await
+            }
+            "passkey_list" => {
+                let params: PasskeyListParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("passkey_list: {e}")))?;
+                self.auth_passkey_list(params).await
+            }
+            "passkey_log" => {
+                let params: PasskeyLogParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("passkey_log: {e}")))?;
+                self.auth_passkey_log(params).await
+            }
+            "passkey_disable" => {
+                let params: PasskeyDisableParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("passkey_disable: {e}")))?;
+                self.auth_passkey_disable(params).await
+            }
+            "passkey_remove" => {
+                let params: PasskeyRemoveParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("passkey_remove: {e}")))?;
+                self.auth_passkey_remove(params).await
+            }
+            other => Err(mcp_err(format!(
+                "unknown secure action: {other}. Available: encrypt, decrypt, pkce, totp,                  kv_set, kv_get, kv_list, passkey_enable, passkey_add, passkey_list,                  passkey_log, passkey_disable, passkey_remove"
+            )))
+        }
+    }
+
+    #[tool(
+        name = "computer",
+        description = "AI computer use protocol, smart element resolution, and browser pool management.\n\nActions:\n- act {action_type, coordinate?, text?, key?} — Perform computer action\n- observe {observation_type?} — Observe screen state\n- batch {actions} — Execute multiple actions in sequence\n- smart_find {description, strategy?} — Find element by description\n- smart_click {description} — Click element by description\n- smart_fill {description, value} — Fill input by description\n- pool_list — List browser pool instances\n- pool_status — Get pool status and stats"
+    )]
+    async fn tool_computer(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        match action.as_str() {
+            "act" => {
+                let params: ComputerUseActionParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("act: {e}")))?;
+                self.computer_act(params).await
+            }
+            "observe" => {
+                let params: ComputerUseObserveParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("observe: {e}")))?;
+                self.computer_observe(params).await
+            }
+            "batch" => {
+                let params: ComputerUseBatchParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("batch: {e}")))?;
+                self.computer_batch(params).await
+            }
+            "smart_find" => {
+                let params: SmartFindParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("smart_find: {e}")))?;
+                self.smart_find(params).await
+            }
+            "smart_click" => {
+                let params: SmartClickParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("smart_click: {e}")))?;
+                self.smart_click(params).await
+            }
+            "smart_fill" => {
+                let params: SmartFillParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("smart_fill: {e}")))?;
+                self.smart_fill(params).await
+            }
+            "pool_list" => {
+                let params: PoolListParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("pool_list: {e}")))?;
+                self.pool_list(params).await
+            }
+            "pool_status" => {
+                let params: PoolStatusParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("pool_status: {e}")))?;
+                self.pool_status(params).await
+            }
+            other => Err(mcp_err(format!(
+                "unknown computer action: {other}. Available: act, observe, batch,                  smart_find, smart_click, smart_fill, pool_list, pool_status"
+            )))
+        }
+    }
+
+    #[tool(
+        name = "memory",
+        description = "Persistent agent memory — store, recall, and search across sessions.\n\nActions:\n- store {key, value, domain?, ttl_secs?} — Store a memory\n- recall {key, domain?} — Recall a memory by key\n- search {query, domain?, limit?} — Search memories\n- forget {key, domain?} — Delete a memory\n- domain_strategy {domain, strategy} — Set domain-specific strategy\n- stats — Get memory statistics"
+    )]
+    async fn tool_memory(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        match action.as_str() {
+            "store" => {
+                let params: MemoryStoreParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("store: {e}")))?;
+                self.memory_store(params).await
+            }
+            "recall" => {
+                let params: MemoryRecallParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("recall: {e}")))?;
+                self.memory_recall(params).await
+            }
+            "search" => {
+                let params: MemorySearchParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("search: {e}")))?;
+                self.memory_search(params).await
+            }
+            "forget" => {
+                let params: MemoryForgetParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("forget: {e}")))?;
+                self.memory_forget(params).await
+            }
+            "domain_strategy" => {
+                let params: MemoryDomainStrategyParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("domain_strategy: {e}")))?;
+                self.memory_domain_strategy(params).await
+            }
+            "stats" => {
+                let params: MemoryStatsParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("stats: {e}")))?;
+                self.memory_stats(params).await
+            }
+            other => Err(mcp_err(format!(
+                "unknown memory action: {other}. Available: store, recall, search, forget,                  domain_strategy, stats"
+            )))
+        }
+    }
+
+    #[tool(
+        name = "automate",
+        description = "Workflow automation, AI task planning, and execution control.\n\nActions:\n- workflow_validate {workflow} — Validate a workflow definition\n- workflow_run {workflow} — Execute a workflow\n- plan {goal, context?} — Generate automation plan from goal\n- execute {plan, max_retries?} — Execute a generated plan\n- patterns — List available automation patterns\n- rate_limit {action?, max_per_minute?} — Check/configure rate limiter\n- retry {url?, operation?, reason?} — Enqueue retry with backoff"
+    )]
+    async fn tool_automate(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        match action.as_str() {
+            "workflow_validate" => {
+                let params: WorkflowValidateParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("workflow_validate: {e}")))?;
+                self.workflow_validate(params).await
+            }
+            "workflow_run" => {
+                let params: WorkflowRunParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("workflow_run: {e}")))?;
+                self.workflow_run(params).await
+            }
+            "plan" => {
+                let params: PlannerPlanParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("plan: {e}")))?;
+                self.planner_plan(params).await
+            }
+            "execute" => {
+                let params: PlannerExecuteParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("execute: {e}")))?;
+                self.planner_execute(params).await
+            }
+            "patterns" => {
+                let params: PlannerPatternsParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("patterns: {e}")))?;
+                self.planner_patterns(params).await
+            }
+            "rate_limit" => {
+                let params: RateLimitCheckParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("rate_limit: {e}")))?;
+                self.automation_rate_limit(params).await
+            }
+            "retry" => {
+                let params: RetryEnqueueParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("retry: {e}")))?;
+                self.automation_retry(params).await
+            }
+            other => Err(mcp_err(format!(
+                "unknown automate action: {other}. Available: workflow_validate, workflow_run,                  plan, execute, patterns, rate_limit, retry"
+            )))
+        }
+    }
+
+    #[tool(
+        name = "perf",
+        description = "Performance monitoring, budgets, and visual regression testing.\n\nActions:\n- audit {url?} — Collect Core Web Vitals and performance metrics\n- budget {budget, url?} — Check performance against budget\n- compare {baseline, current, threshold_pct?} — Detect performance regressions\n- trace {url, settle_ms?} — Full performance trace with navigation\n- vrt_run {suite, baseline_dir} — Run visual regression test suite\n- vrt_compare {baseline, current, threshold?} — Compare two screenshots\n- vrt_update {suite_name, baseline_dir, tests} — Update VRT baselines"
+    )]
+    async fn tool_perf(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        match action.as_str() {
+            "audit" => {
+                let params: PerfAuditParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("audit: {e}")))?;
+                self.perf_audit(params).await
+            }
+            "budget" => {
+                let params: PerfBudgetCheckParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("budget: {e}")))?;
+                self.perf_budget(params).await
+            }
+            "compare" => {
+                let params: PerfCompareParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("compare: {e}")))?;
+                self.perf_compare(params).await
+            }
+            "trace" => {
+                let params: PerfTraceParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("trace: {e}")))?;
+                self.perf_trace(params).await
+            }
+            "vrt_run" => {
+                let params: VrtRunParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("vrt_run: {e}")))?;
+                self.vrt_run(params).await
+            }
+            "vrt_compare" => {
+                let params: VrtCompareParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("vrt_compare: {e}")))?;
+                self.vrt_compare(params).await
+            }
+            "vrt_update" => {
+                let params: VrtUpdateBaselineParams = serde_json::from_value(v)
+                    .map_err(|e| mcp_err(format!("vrt_update: {e}")))?;
+                self.vrt_update_baseline(params).await
+            }
+            other => Err(mcp_err(format!(
+                "unknown perf action: {other}. Available: audit, budget, compare, trace,                  vrt_run, vrt_compare, vrt_update"
+            )))
+        }
+    }
+
+    // ── Crypto tools ──
+
     fn encrypt(
         &self,
-        Parameters(req): Parameters<EncryptRequest>,
+        req: EncryptRequest,
     ) -> Result<CallToolResult, McpError> {
         let payload = onecrawl_crypto::encrypt(req.plaintext.as_bytes(), &req.password)
             .map_err(|e| mcp_err(e.to_string()))?;
@@ -207,10 +894,9 @@ impl OneCrawlMcp {
         )]))
     }
 
-    #[tool(name = "crypto.decrypt", description = "Decrypt base64-encoded AES-256-GCM ciphertext (salt+nonce+ct).")]
     fn decrypt(
         &self,
-        Parameters(req): Parameters<DecryptRequest>,
+        req: DecryptRequest,
     ) -> Result<CallToolResult, McpError> {
         let raw = B64
             .decode(&req.ciphertext)
@@ -236,7 +922,6 @@ impl OneCrawlMcp {
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
-    #[tool(name = "crypto.generate_pkce", description = "Generate a PKCE S256 challenge pair (code_verifier + code_challenge).")]
     fn generate_pkce(&self) -> Result<CallToolResult, McpError> {
         let challenge =
             onecrawl_crypto::generate_pkce_challenge().map_err(|e| mcp_err(e.to_string()))?;
@@ -246,10 +931,9 @@ impl OneCrawlMcp {
         })
     }
 
-    #[tool(name = "crypto.generate_totp", description = "Generate a 6-digit TOTP code from a base32 secret.")]
     fn generate_totp(
         &self,
-        Parameters(req): Parameters<TotpRequest>,
+        req: TotpRequest,
     ) -> Result<CallToolResult, McpError> {
         let config = onecrawl_core::TotpConfig {
             secret: req.secret,
@@ -262,10 +946,9 @@ impl OneCrawlMcp {
 
     // ── Parser tools ──
 
-    #[tool(name = "parser.parse_a11y_tree", description = "Parse HTML into an accessibility tree (text representation).")]
     fn parse_accessibility_tree(
         &self,
-        Parameters(req): Parameters<HtmlRequest>,
+        req: HtmlRequest,
     ) -> Result<CallToolResult, McpError> {
         let tree = onecrawl_parser::get_accessibility_tree(&req.html)
             .map_err(|e| mcp_err(e.to_string()))?;
@@ -273,13 +956,9 @@ impl OneCrawlMcp {
         Ok(CallToolResult::success(vec![Content::text(rendered)]))
     }
 
-    #[tool(
-        name = "parser.query_selector",
-        description = "Query HTML with a CSS selector. Returns JSON array of matching elements."
-    )]
     fn query_selector(
         &self,
-        Parameters(req): Parameters<SelectorRequest>,
+        req: SelectorRequest,
     ) -> Result<CallToolResult, McpError> {
         let elements = onecrawl_parser::query_selector(&req.html, &req.selector)
             .map_err(|e| mcp_err(e.to_string()))?;
@@ -287,10 +966,9 @@ impl OneCrawlMcp {
         Ok(CallToolResult::success(vec![Content::text(json)]))
     }
 
-    #[tool(name = "parser.extract_text", description = "Extract visible text from HTML.")]
     fn html_extract_text(
         &self,
-        Parameters(req): Parameters<HtmlRequest>,
+        req: HtmlRequest,
     ) -> Result<CallToolResult, McpError> {
         let texts =
             onecrawl_parser::extract_text(&req.html, "body").map_err(|e| mcp_err(e.to_string()))?;
@@ -299,13 +977,9 @@ impl OneCrawlMcp {
         )]))
     }
 
-    #[tool(
-        name = "parser.extract_links",
-        description = "Extract all links from HTML. Returns JSON array with href, text, is_external."
-    )]
     fn html_extract_links(
         &self,
-        Parameters(req): Parameters<HtmlRequest>,
+        req: HtmlRequest,
     ) -> Result<CallToolResult, McpError> {
         let links = onecrawl_parser::extract::extract_links(&req.html)
             .map_err(|e| mcp_err(e.to_string()))?;
@@ -322,10 +996,9 @@ impl OneCrawlMcp {
 
     // ── Storage tools ──
 
-    #[tool(name = "storage.set", description = "Store a key-value pair in encrypted storage.")]
     fn store_set(
         &self,
-        Parameters(req): Parameters<StoreSetRequest>,
+        req: StoreSetRequest,
     ) -> Result<CallToolResult, McpError> {
         let store = self.open_store()?;
         store
@@ -337,10 +1010,9 @@ impl OneCrawlMcp {
         ))]))
     }
 
-    #[tool(name = "storage.get", description = "Retrieve a value from encrypted storage by key.")]
     fn store_get(
         &self,
-        Parameters(req): Parameters<StoreGetRequest>,
+        req: StoreGetRequest,
     ) -> Result<CallToolResult, McpError> {
         let store = self.open_store()?;
         let value = store.get(&req.key).map_err(|e| mcp_err(e.to_string()))?;
@@ -356,7 +1028,6 @@ impl OneCrawlMcp {
         }
     }
 
-    #[tool(name = "storage.list_keys", description = "List all keys in encrypted storage.")]
     fn store_list(&self) -> Result<CallToolResult, McpError> {
         let store = self.open_store()?;
         let keys = store.list("").map_err(|e| mcp_err(e.to_string()))?;
@@ -368,10 +1039,9 @@ impl OneCrawlMcp {
     //  CDP tools — Navigation & Page Control
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(name = "navigation.goto", description = "Navigate the browser to a URL. Launches a headless browser on first call.")]
     async fn navigation_goto(
         &self,
-        Parameters(p): Parameters<NavigateParams>,
+        p: NavigateParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::navigation::goto(&page, &p.url)
@@ -383,10 +1053,9 @@ impl OneCrawlMcp {
         text_ok(format!("navigated to {} — title: {title}", p.url))
     }
 
-    #[tool(name = "navigation.click", description = "Click an element on the page by CSS selector or @ref (e.g. @e1 from snapshot).")]
     async fn navigation_click(
         &self,
-        Parameters(p): Parameters<ClickParams>,
+        p: ClickParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let selector = onecrawl_cdp::accessibility::resolve_ref(&p.selector);
@@ -396,10 +1065,9 @@ impl OneCrawlMcp {
         text_ok(format!("clicked {}", p.selector))
     }
 
-    #[tool(name = "navigation.type", description = "Type text into an input element identified by CSS selector or @ref (e.g. @e1 from snapshot).")]
     async fn navigation_type(
         &self,
-        Parameters(p): Parameters<TypeTextParams>,
+        p: TypeTextParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let selector = onecrawl_cdp::accessibility::resolve_ref(&p.selector);
@@ -409,13 +1077,9 @@ impl OneCrawlMcp {
         text_ok(format!("typed {} chars into {}", p.text.len(), p.selector))
     }
 
-    #[tool(
-        name = "navigation.screenshot",
-        description = "Take a screenshot of the current page as base64-encoded PNG. Optionally target a specific element or capture the full scrollable page."
-    )]
     async fn navigation_screenshot(
         &self,
-        Parameters(p): Parameters<ScreenshotParams>,
+        p: ScreenshotParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let bytes = if let Some(sel) = &p.selector {
@@ -438,10 +1102,9 @@ impl OneCrawlMcp {
         )]))
     }
 
-    #[tool(name = "navigation.pdf", description = "Export the current page as a PDF document. Returns base64-encoded PDF data.")]
     async fn navigation_pdf(
         &self,
-        Parameters(p): Parameters<PdfExportParams>,
+        p: PdfExportParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let opts = onecrawl_cdp::PdfOptions {
@@ -461,7 +1124,6 @@ impl OneCrawlMcp {
         ))
     }
 
-    #[tool(name = "navigation.back", description = "Navigate back in browser history.")]
     async fn navigation_back(&self) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::navigation::go_back(&page)
@@ -470,7 +1132,6 @@ impl OneCrawlMcp {
         text_ok("navigated back")
     }
 
-    #[tool(name = "navigation.forward", description = "Navigate forward in browser history.")]
     async fn navigation_forward(&self) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::navigation::go_forward(&page)
@@ -479,7 +1140,6 @@ impl OneCrawlMcp {
         text_ok("navigated forward")
     }
 
-    #[tool(name = "navigation.reload", description = "Reload the current page.")]
     async fn navigation_reload(&self) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::navigation::reload(&page)
@@ -488,10 +1148,9 @@ impl OneCrawlMcp {
         text_ok("page reloaded")
     }
 
-    #[tool(name = "navigation.wait", description = "Wait for a CSS selector or @ref to appear in the DOM within an optional timeout.")]
     async fn navigation_wait(
         &self,
-        Parameters(p): Parameters<WaitForSelectorParams>,
+        p: WaitForSelectorParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let timeout = p.timeout_ms.unwrap_or(30_000);
@@ -502,10 +1161,9 @@ impl OneCrawlMcp {
         text_ok(format!("selector {} found", p.selector))
     }
 
-    #[tool(name = "navigation.evaluate", description = "Evaluate arbitrary JavaScript in the browser page context. Returns the result as JSON.")]
     async fn navigation_evaluate(
         &self,
-        Parameters(p): Parameters<EvaluateJsParams>,
+        p: EvaluateJsParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let result = onecrawl_cdp::page::evaluate_js(&page, &p.js)
@@ -514,13 +1172,9 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(
-        name = "navigation.snapshot",
-        description = "Take an AI-optimized accessibility snapshot of the page. Returns element refs (@e1, @e2...) that can be used with click, fill, type commands. Use --interactive to get only actionable elements."
-    )]
     async fn navigation_snapshot(
         &self,
-        Parameters(p): Parameters<AgentSnapshotParams>,
+        p: AgentSnapshotParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let opts = onecrawl_cdp::accessibility::AgentSnapshotOptions {
@@ -553,13 +1207,9 @@ impl OneCrawlMcp {
     //  CDP tools — Scraping & Extraction
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(
-        name = "scraping.css",
-        description = "Query the live DOM with a CSS selector. Supports ::text and ::attr(name) pseudo-elements. Returns JSON array of matching elements."
-    )]
     async fn scraping_css(
         &self,
-        Parameters(p): Parameters<CssSelectorParams>,
+        p: CssSelectorParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let result = onecrawl_cdp::selectors::css_select(&page, &p.selector)
@@ -568,10 +1218,9 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(name = "scraping.xpath", description = "Query the live DOM with an XPath expression. Returns JSON array of matching elements.")]
     async fn scraping_xpath(
         &self,
-        Parameters(p): Parameters<XPathParams>,
+        p: XPathParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let result = onecrawl_cdp::selectors::xpath_select(&page, &p.expression)
@@ -580,10 +1229,9 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(name = "scraping.find_text", description = "Find elements by visible text content. Optionally restrict search to a specific HTML tag.")]
     async fn scraping_find_text(
         &self,
-        Parameters(p): Parameters<FindByTextParams>,
+        p: FindByTextParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let result =
@@ -593,10 +1241,9 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(name = "scraping.text", description = "Extract visible text content from the live page, optionally scoped to a CSS selector.")]
     async fn scraping_text(
         &self,
-        Parameters(p): Parameters<ExtractTextParams>,
+        p: ExtractTextParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let result = onecrawl_cdp::extract::extract(
@@ -609,10 +1256,9 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(name = "scraping.html", description = "Extract raw HTML from the live page, optionally scoped to a CSS selector.")]
     async fn scraping_html(
         &self,
-        Parameters(p): Parameters<ExtractHtmlParams>,
+        p: ExtractHtmlParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let result = onecrawl_cdp::extract::extract(
@@ -625,10 +1271,9 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(name = "scraping.markdown", description = "Extract page content as clean Markdown, optionally scoped to a CSS selector.")]
     async fn scraping_markdown(
         &self,
-        Parameters(p): Parameters<ExtractMarkdownParams>,
+        p: ExtractMarkdownParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let result = onecrawl_cdp::extract::extract(
@@ -641,10 +1286,6 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(
-        name = "scraping.structured",
-        description = "Extract structured data from the page including JSON-LD, OpenGraph, Twitter Card, and meta tags."
-    )]
     async fn scraping_structured(&self) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let result = onecrawl_cdp::structured_data::extract_all(&page)
@@ -653,13 +1294,9 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(
-        name = "scraping.stream",
-        description = "Schema-based extraction of repeating items using field rules with optional pagination support."
-    )]
     async fn scraping_stream(
         &self,
-        Parameters(p): Parameters<StreamExtractParams>,
+        p: StreamExtractParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let fields: Vec<onecrawl_cdp::ExtractionRule> = serde_json::from_str(&p.fields)
@@ -688,10 +1325,9 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(name = "scraping.detect_forms", description = "Detect all forms on the current page and enumerate their fields, types, and attributes.")]
     async fn scraping_detect_forms(
         &self,
-        Parameters(_p): Parameters<DetectFormsParams>,
+        _p: DetectFormsParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let forms = onecrawl_cdp::form_filler::detect_forms(&page)
@@ -700,10 +1336,9 @@ impl OneCrawlMcp {
         json_ok(&forms)
     }
 
-    #[tool(name = "scraping.fill_form", description = "Fill form fields by selector-to-value mapping and optionally submit the form.")]
     async fn scraping_fill_form(
         &self,
-        Parameters(p): Parameters<FillFormParams>,
+        p: FillFormParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let values: HashMap<String, String> = serde_json::from_str(&p.data)
@@ -720,13 +1355,9 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(
-        name = "scraping.snapshot_diff",
-        description = "Compute a line-level unified diff between two accessibility snapshot texts. Returns additions, removals, unchanged count, and the unified diff output."
-    )]
     async fn scraping_snapshot_diff(
         &self,
-        Parameters(p): Parameters<SnapshotDiffParams>,
+        p: SnapshotDiffParams,
     ) -> Result<CallToolResult, McpError> {
         let result = onecrawl_cdp::snapshot_diff::diff_snapshots(&p.before, &p.after);
         json_ok(&result)
@@ -736,13 +1367,9 @@ impl OneCrawlMcp {
     //  CDP tools — Crawling
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(
-        name = "crawling.spider",
-        description = "Crawl a website starting from one or more seed URLs. Follows links with configurable depth, domain, and pattern filters."
-    )]
     async fn crawling_spider(
         &self,
-        Parameters(p): Parameters<SpiderCrawlParams>,
+        p: SpiderCrawlParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let config = onecrawl_cdp::SpiderConfig {
@@ -770,10 +1397,9 @@ impl OneCrawlMcp {
         })
     }
 
-    #[tool(name = "crawling.robots", description = "Fetch and parse robots.txt for a domain. Optionally test if a specific path is allowed for a given user-agent.")]
     async fn crawling_robots(
         &self,
-        Parameters(p): Parameters<CheckRobotsParams>,
+        p: CheckRobotsParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let robots = onecrawl_cdp::robots::fetch_robots(&page, &p.base_url)
@@ -792,10 +1418,9 @@ impl OneCrawlMcp {
         })
     }
 
-    #[tool(name = "crawling.sitemap", description = "Generate a standards-compliant XML sitemap from a list of URL entries with priority and changefreq.")]
     fn crawling_sitemap(
         &self,
-        Parameters(p): Parameters<GenerateSitemapParams>,
+        p: GenerateSitemapParams,
     ) -> Result<CallToolResult, McpError> {
         let entries: Vec<onecrawl_cdp::sitemap::SitemapEntry> = serde_json::from_str(&p.entries)
             .map_err(|e| mcp_err(format!("invalid entries JSON: {e}")))?;
@@ -809,10 +1434,9 @@ impl OneCrawlMcp {
         text_ok(xml)
     }
 
-    #[tool(name = "crawling.snapshot", description = "Take a labeled DOM snapshot of the current page for later comparison with crawling.compare.")]
     async fn crawling_snapshot(
         &self,
-        Parameters(p): Parameters<TakeSnapshotParams>,
+        p: TakeSnapshotParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let snap = onecrawl_cdp::snapshot::take_snapshot(&page)
@@ -823,10 +1447,9 @@ impl OneCrawlMcp {
         text_ok(format!("snapshot '{}' saved", p.label))
     }
 
-    #[tool(name = "crawling.compare", description = "Compare two previously taken DOM snapshots by label and return a structured diff report.")]
     async fn crawling_compare(
         &self,
-        Parameters(p): Parameters<CompareSnapshotsParams>,
+        p: CompareSnapshotsParams,
     ) -> Result<CallToolResult, McpError> {
         let state = self.browser.lock().await;
         let before = state
@@ -845,13 +1468,9 @@ impl OneCrawlMcp {
     //  CDP tools — Stealth & Anti-Detection
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(
-        name = "stealth.inject",
-        description = "Inject comprehensive stealth anti-bot patches into the browser page. Returns list of applied patches."
-    )]
     async fn stealth_inject(
         &self,
-        Parameters(_p): Parameters<InjectStealthParams>,
+        _p: InjectStealthParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let patches = onecrawl_cdp::antibot::inject_stealth_full(&page)
@@ -863,13 +1482,9 @@ impl OneCrawlMcp {
         })
     }
 
-    #[tool(
-        name = "stealth.test",
-        description = "Run bot detection tests on the current page. Returns a detection score and detailed test results."
-    )]
     async fn stealth_test(
         &self,
-        Parameters(_p): Parameters<BotDetectionTestParams>,
+        _p: BotDetectionTestParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let result = onecrawl_cdp::antibot::bot_detection_test(&page)
@@ -878,10 +1493,9 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(name = "stealth.fingerprint", description = "Generate and apply a realistic browser fingerprint with configurable user-agent to evade bot detection.")]
     async fn stealth_fingerprint(
         &self,
-        Parameters(p): Parameters<ApplyFingerprintParams>,
+        p: ApplyFingerprintParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let mut fp = onecrawl_cdp::stealth::generate_fingerprint();
@@ -898,13 +1512,9 @@ impl OneCrawlMcp {
         })
     }
 
-    #[tool(
-        name = "stealth.block_domains",
-        description = "Block network requests to specified domains or a built-in category such as ads, trackers, or social widgets."
-    )]
     async fn stealth_block_domains(
         &self,
-        Parameters(p): Parameters<BlockDomainsParams>,
+        p: BlockDomainsParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let count = if let Some(cat) = &p.category {
@@ -923,10 +1533,9 @@ impl OneCrawlMcp {
         text_ok(format!("{count} domains blocked"))
     }
 
-    #[tool(name = "stealth.detect_captcha", description = "Detect CAPTCHAs on the current page. Returns the CAPTCHA type, provider, and confidence score.")]
     async fn stealth_detect_captcha(
         &self,
-        Parameters(_p): Parameters<DetectCaptchaParams>,
+        _p: DetectCaptchaParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let detection = onecrawl_cdp::captcha::detect_captcha(&page)
@@ -939,10 +1548,9 @@ impl OneCrawlMcp {
     //  CDP tools — Data Processing
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(name = "data.pipeline", description = "Execute a multi-step data pipeline with filter, transform, sort, and deduplicate operations on JSON input.")]
     fn data_pipeline(
         &self,
-        Parameters(p): Parameters<PipelineExecuteParams>,
+        p: PipelineExecuteParams,
     ) -> Result<CallToolResult, McpError> {
         let steps: Vec<onecrawl_cdp::PipelineStep> = serde_json::from_str(&p.steps)
             .map_err(|e| mcp_err(format!("invalid steps JSON: {e}")))?;
@@ -956,10 +1564,9 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(name = "data.http_get", description = "Perform an HTTP GET request through the browser session. Returns status code, headers, and response body.")]
     async fn data_http_get(
         &self,
-        Parameters(p): Parameters<HttpGetParams>,
+        p: HttpGetParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let headers: Option<HashMap<String, String>> = match &p.headers {
@@ -975,10 +1582,9 @@ impl OneCrawlMcp {
         json_ok(&resp)
     }
 
-    #[tool(name = "data.http_post", description = "Perform an HTTP POST request through the browser session. Returns status code, headers, and response body.")]
     async fn data_http_post(
         &self,
-        Parameters(p): Parameters<HttpPostParams>,
+        p: HttpPostParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let headers: Option<HashMap<String, String>> = match &p.headers {
@@ -995,10 +1601,9 @@ impl OneCrawlMcp {
         json_ok(&resp)
     }
 
-    #[tool(name = "data.links", description = "Extract all links from the live page and return as directed edges suitable for graph analysis.")]
     async fn data_links(
         &self,
-        Parameters(p): Parameters<ExtractLinksParams>,
+        p: ExtractLinksParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let edges = onecrawl_cdp::link_graph::extract_links(&page, &p.base_url)
@@ -1007,10 +1612,9 @@ impl OneCrawlMcp {
         json_ok(&edges)
     }
 
-    #[tool(name = "data.graph", description = "Analyze a link graph to compute stats, find orphan pages, identify hubs, and detect broken links.")]
     fn data_graph(
         &self,
-        Parameters(p): Parameters<AnalyzeGraphParams>,
+        p: AnalyzeGraphParams,
     ) -> Result<CallToolResult, McpError> {
         let edges: Vec<onecrawl_cdp::LinkEdge> = serde_json::from_str(&p.edges)
             .map_err(|e| mcp_err(format!("invalid edges JSON: {e}")))?;
@@ -1023,10 +1627,9 @@ impl OneCrawlMcp {
     //  CDP tools — Automation
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(name = "automation.rate_limit", description = "Check rate limiter status and whether new requests can proceed. Initializes the limiter on first call.")]
     async fn automation_rate_limit(
         &self,
-        Parameters(p): Parameters<RateLimitCheckParams>,
+        p: RateLimitCheckParams,
     ) -> Result<CallToolResult, McpError> {
         let mut state = self.browser.lock().await;
         if state.rate_limiter.is_none() {
@@ -1048,10 +1651,9 @@ impl OneCrawlMcp {
         })
     }
 
-    #[tool(name = "automation.retry", description = "Enqueue a failed URL or operation into the retry queue with exponential backoff and jitter.")]
     async fn automation_retry(
         &self,
-        Parameters(p): Parameters<RetryEnqueueParams>,
+        p: RetryEnqueueParams,
     ) -> Result<CallToolResult, McpError> {
         let mut state = self.browser.lock().await;
         if state.retry_queue.is_none() {
@@ -1079,10 +1681,9 @@ impl OneCrawlMcp {
 
     //  Passkey / WebAuthn tools
 
-    #[tool(name = "auth.passkey_enable", description = "Enable a virtual WebAuthn authenticator for passkey simulation.")]
     async fn auth_passkey_enable(
         &self,
-        Parameters(p): Parameters<PasskeyEnableParams>,
+        p: PasskeyEnableParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let config = onecrawl_cdp::webauthn::VirtualAuthenticator {
@@ -1105,10 +1706,9 @@ impl OneCrawlMcp {
         text_ok("Virtual authenticator enabled")
     }
 
-    #[tool(name = "auth.passkey_add", description = "Add a passkey credential to the virtual authenticator.")]
     async fn auth_passkey_add(
         &self,
-        Parameters(p): Parameters<PasskeyAddParams>,
+        p: PasskeyAddParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let cred = onecrawl_cdp::webauthn::VirtualCredential {
@@ -1123,10 +1723,9 @@ impl OneCrawlMcp {
         text_ok("Credential added")
     }
 
-    #[tool(name = "auth.passkey_list", description = "List all stored passkey credentials.")]
     async fn auth_passkey_list(
         &self,
-        Parameters(_p): Parameters<PasskeyListParams>,
+        _p: PasskeyListParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let creds = onecrawl_cdp::webauthn::get_virtual_credentials(&page)
@@ -1135,10 +1734,9 @@ impl OneCrawlMcp {
         json_ok(&creds)
     }
 
-    #[tool(name = "auth.passkey_log", description = "Get the WebAuthn operation log.")]
     async fn auth_passkey_log(
         &self,
-        Parameters(_p): Parameters<PasskeyLogParams>,
+        _p: PasskeyLogParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let log = onecrawl_cdp::webauthn::get_webauthn_log(&page)
@@ -1147,10 +1745,9 @@ impl OneCrawlMcp {
         json_ok(&log)
     }
 
-    #[tool(name = "auth.passkey_disable", description = "Disable the virtual WebAuthn authenticator.")]
     async fn auth_passkey_disable(
         &self,
-        Parameters(_p): Parameters<PasskeyDisableParams>,
+        _p: PasskeyDisableParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::webauthn::disable_virtual_authenticator(&page)
@@ -1159,10 +1756,9 @@ impl OneCrawlMcp {
         text_ok("Virtual authenticator disabled")
     }
 
-    #[tool(name = "auth.passkey_remove", description = "Remove a passkey credential by ID.")]
     async fn auth_passkey_remove(
         &self,
-        Parameters(p): Parameters<PasskeyRemoveParams>,
+        p: PasskeyRemoveParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let removed = onecrawl_cdp::webauthn::remove_virtual_credential(&page, &p.credential_id)
@@ -1175,13 +1771,9 @@ impl OneCrawlMcp {
     //  Agent tools — Enhanced Agentic API Layer
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(
-        name = "agent.execute_chain",
-        description = "Execute multiple commands in sequence. Commands: navigation.goto, navigation.click, navigation.type, navigation.wait, navigation.evaluate, navigation.snapshot, scraping.css, scraping.text. Returns {results, completed, total}."
-    )]
     async fn agent_execute_chain(
         &self,
-        Parameters(p): Parameters<ExecuteChainParams>,
+        p: ExecuteChainParams,
     ) -> Result<CallToolResult, McpError> {
         let stop_on_error = p.stop_on_error.unwrap_or(true);
         let total = p.commands.len();
@@ -1222,13 +1814,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "agent.element_screenshot",
-        description = "Take a screenshot of a specific element by CSS selector or @ref. Supports @ref notation (e.g. @e1 from navigation.snapshot). Returns base64 PNG with element bounds."
-    )]
     async fn agent_element_screenshot(
         &self,
-        Parameters(p): Parameters<ElementScreenshotParams>,
+        p: ElementScreenshotParams,
     ) -> Result<CallToolResult, McpError> {
         if p.selector.is_empty() {
             return Err(mcp_err("selector must not be empty"));
@@ -1267,13 +1855,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "agent.api_capture_start",
-        description = "Inject a fetch/XHR interceptor to capture all API calls made by the page. Call agent.api_capture_summary to read the log."
-    )]
     async fn agent_api_capture_start(
         &self,
-        Parameters(_p): Parameters<ApiCaptureStartParams>,
+        _p: ApiCaptureStartParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let js = r#"
@@ -1332,13 +1916,9 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(
-        name = "agent.api_capture_summary",
-        description = "Get a summary of all network API calls (fetch/XHR) captured since api_capture_start. Returns summary of XHR/fetch calls made since api_capture_start. Per-page, resets on navigation."
-    )]
     async fn agent_api_capture_summary(
         &self,
-        Parameters(p): Parameters<ApiCaptureSummaryParams>,
+        p: ApiCaptureSummaryParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let clear = p.clear.unwrap_or(false);
@@ -1357,13 +1937,9 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(
-        name = "agent.iframe_list",
-        description = "List all iframes on the current page with metadata (src, name, id, dimensions, sandbox)."
-    )]
     async fn agent_iframe_list(
         &self,
-        Parameters(_p): Parameters<IframeListParams>,
+        _p: IframeListParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let iframes = onecrawl_cdp::iframe::list_iframes(&page)
@@ -1375,13 +1951,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "agent.iframe_snapshot",
-        description = "Take an accessibility snapshot inside a specific iframe by index. Index is 0-based. Use agent.iframe_list first to discover available iframes."
-    )]
     async fn agent_iframe_snapshot(
         &self,
-        Parameters(p): Parameters<IframeSnapshotParams>,
+        p: IframeSnapshotParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let interactive_only = if p.interactive_only.unwrap_or(false) { "true" } else { "false" };
@@ -1437,13 +2009,9 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(
-        name = "agent.connect_remote",
-        description = "Connect to a remote CDP WebSocket endpoint (e.g. Browserbase, BrowserCloud). Subsequent tools will use the remote browser."
-    )]
     async fn agent_connect_remote(
         &self,
-        Parameters(p): Parameters<RemoteCdpParams>,
+        p: RemoteCdpParams,
     ) -> Result<CallToolResult, McpError> {
         let mut state = self.browser.lock().await;
 
@@ -1489,13 +2057,9 @@ impl OneCrawlMcp {
     //  Safety Policy tools
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(
-        name = "agent.safety_policy_set",
-        description = "Set or update the safety policy for this session. Controls allowed/blocked domains, URL patterns, commands, rate limits, and confirmation requirements. Pass a policy_file path to load from JSON, or set fields directly."
-    )]
     async fn agent_safety_policy_set(
         &self,
-        Parameters(p): Parameters<SafetyPolicySetParams>,
+        p: SafetyPolicySetParams,
     ) -> Result<CallToolResult, McpError> {
         let policy = if let Some(ref path) = p.policy_file {
             onecrawl_cdp::SafetyState::load_from_file(std::path::Path::new(path))
@@ -1526,14 +2090,10 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "agent.safety_status",
-        description = "Get current safety state: active policy, action counts, rate limit window, and all constraints."
-    )]
     async fn agent_safety_status(
         &self,
         #[allow(unused_variables)]
-        Parameters(_p): Parameters<SafetyStatusParams>,
+        _p: SafetyStatusParams,
     ) -> Result<CallToolResult, McpError> {
         let state = self.browser.lock().await;
         match &state.safety {
@@ -1545,14 +2105,10 @@ impl OneCrawlMcp {
         }
     }
 
-    #[tool(
-        name = "agent.skills_list",
-        description = "List all available skill packages (built-in and discovered). Returns name, version, description, and tool list for each skill."
-    )]
     fn agent_skills_list(
         &self,
         #[allow(unused_variables)]
-        Parameters(_p): Parameters<SkillsListParams>,
+        _p: SkillsListParams,
     ) -> Result<CallToolResult, McpError> {
         let builtins = onecrawl_cdp::skills::SkillRegistry::builtins();
         let skills: Vec<serde_json::Value> = builtins
@@ -1574,13 +2130,9 @@ impl OneCrawlMcp {
             .collect();
         json_ok(&skills)
     }
-    #[tool(
-        name = "agent.screencast_start",
-        description = "Start live browser screencast via CDP Page.startScreencast. Configure format, quality, resolution, and frame rate."
-    )]
     async fn agent_screencast_start(
         &self,
-        Parameters(p): Parameters<ScreencastStartParams>,
+        p: ScreencastStartParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let opts = onecrawl_cdp::screencast::ScreencastOptions {
@@ -1603,14 +2155,10 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "agent.screencast_stop",
-        description = "Stop the active browser screencast."
-    )]
     async fn agent_screencast_stop(
         &self,
         #[allow(unused_variables)]
-        Parameters(_p): Parameters<ScreencastStopParams>,
+        _p: ScreencastStopParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::screencast::stop_screencast(&page)
@@ -1619,13 +2167,9 @@ impl OneCrawlMcp {
         json_ok(&serde_json::json!({ "status": "stopped" }))
     }
 
-    #[tool(
-        name = "agent.screencast_frame",
-        description = "Capture a single screencast frame as base64-encoded image data."
-    )]
     async fn agent_screencast_frame(
         &self,
-        Parameters(p): Parameters<ScreencastFrameParams>,
+        p: ScreencastFrameParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let opts = onecrawl_cdp::screencast::ScreencastOptions {
@@ -1644,13 +2188,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "agent.recording_start",
-        description = "Start recording the browser session. Frames are captured and stored in memory until stopped."
-    )]
     async fn agent_recording_start(
         &self,
-        Parameters(p): Parameters<RecordingStartParams>,
+        p: RecordingStartParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let output = p.output.unwrap_or_else(|| "recording.webm".into());
@@ -1687,14 +2227,10 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "agent.recording_stop",
-        description = "Stop recording, save frames as image sequence, and return the output path."
-    )]
     async fn agent_recording_stop(
         &self,
         #[allow(unused_variables)]
-        Parameters(_p): Parameters<RecordingStopParams>,
+        _p: RecordingStopParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let _ = onecrawl_cdp::screencast::stop_screencast(&page).await;
@@ -1738,14 +2274,10 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "agent.recording_status",
-        description = "Get the current recording state (idle, recording, or stopped) with frame count."
-    )]
     async fn agent_recording_status(
         &self,
         #[allow(unused_variables)]
-        Parameters(_p): Parameters<RecordingStatusParams>,
+        _p: RecordingStatusParams,
     ) -> Result<CallToolResult, McpError> {
         let state = self.browser.lock().await;
         match state.recording.as_ref() {
@@ -1769,14 +2301,10 @@ impl OneCrawlMcp {
     //  iOS / Mobile Safari tools
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(
-        name = "agent.ios_devices",
-        description = "List available iOS simulator devices (via xcrun simctl). Returns device name, UDID, platform, and version."
-    )]
     async fn agent_ios_devices(
         &self,
         #[allow(unused_variables)]
-        Parameters(_p): Parameters<IosDevicesParams>,
+        _p: IosDevicesParams,
     ) -> Result<CallToolResult, McpError> {
         let devices = onecrawl_cdp::ios::IosClient::list_devices()
             .map_err(|e| mcp_err(format!("iOS list devices failed: {e}")))?;
@@ -1786,13 +2314,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "agent.ios_connect",
-        description = "Start an iOS Safari session via WebDriverAgent. Requires WebDriverAgent running. Session persists for subsequent ios_* calls."
-    )]
     async fn agent_ios_connect(
         &self,
-        Parameters(p): Parameters<IosConnectParams>,
+        p: IosConnectParams,
     ) -> Result<CallToolResult, McpError> {
         let config = onecrawl_cdp::ios::IosSessionConfig {
             wda_url: p.wda_url.unwrap_or_else(|| "http://localhost:8100".to_string()),
@@ -1812,13 +2336,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "agent.ios_navigate",
-        description = "Navigate Mobile Safari to a URL. Requires an active iOS session (use agent.ios_connect first)."
-    )]
     async fn agent_ios_navigate(
         &self,
-        Parameters(p): Parameters<IosNavigateParams>,
+        p: IosNavigateParams,
     ) -> Result<CallToolResult, McpError> {
         let state = self.browser.lock().await;
         let client = state.ios_client.as_ref()
@@ -1831,13 +2351,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "agent.ios_tap",
-        description = "Tap at screen coordinates on the iOS device. Requires an active iOS session (use agent.ios_connect first)."
-    )]
     async fn agent_ios_tap(
         &self,
-        Parameters(p): Parameters<IosTapParams>,
+        p: IosTapParams,
     ) -> Result<CallToolResult, McpError> {
         let state = self.browser.lock().await;
         let client = state.ios_client.as_ref()
@@ -1851,14 +2367,10 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "agent.ios_screenshot",
-        description = "Take a screenshot of the iOS device screen. Returns base64-encoded image data. Requires an active iOS session (use agent.ios_connect first)."
-    )]
     async fn agent_ios_screenshot(
         &self,
         #[allow(unused_variables)]
-        Parameters(_p): Parameters<IosScreenshotParams>,
+        _p: IosScreenshotParams,
     ) -> Result<CallToolResult, McpError> {
         let state = self.browser.lock().await;
         let client = state.ios_client.as_ref()
@@ -1875,13 +2387,9 @@ impl OneCrawlMcp {
 
     // ──────────────── Computer Use Protocol ─────────────────
 
-    #[tool(
-        name = "computer.act",
-        description = "Execute a browser action (click, type, key, scroll, navigate, fill, select, drag, evaluate) and return the page observation (URL, title, accessibility snapshot, optional screenshot). Computer-use protocol for AI agents."
-    )]
     async fn computer_act(
         &self,
-        Parameters(p): Parameters<ComputerUseActionParams>,
+        p: ComputerUseActionParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let mut action: onecrawl_cdp::computer_use::AgentAction =
@@ -1905,13 +2413,9 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
-    #[tool(
-        name = "computer.observe",
-        description = "Observe current browser state: URL, title, accessibility snapshot with @refs, viewport size, optional screenshot. No action taken — pure observation for AI planning."
-    )]
     async fn computer_observe(
         &self,
-        Parameters(p): Parameters<ComputerUseObserveParams>,
+        p: ComputerUseObserveParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let obs = onecrawl_cdp::computer_use::observe(
@@ -1925,13 +2429,9 @@ impl OneCrawlMcp {
         json_ok(&obs)
     }
 
-    #[tool(
-        name = "computer.batch",
-        description = "Execute a sequence of browser actions and return observations after each step. Efficient for multi-step workflows. Stops on first error by default."
-    )]
     async fn computer_batch(
         &self,
-        Parameters(p): Parameters<ComputerUseBatchParams>,
+        p: ComputerUseBatchParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let stop_on_error = p.stop_on_error.unwrap_or(true);
@@ -1975,13 +2475,9 @@ impl OneCrawlMcp {
     //  Browser Pool tools
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(
-        name = "pool.list",
-        description = "List all browser instances in the pool with their ID, status, current URL, and creation time."
-    )]
     async fn pool_list(
         &self,
-        #[allow(unused_variables)] Parameters(_p): Parameters<PoolListParams>,
+        #[allow(unused_variables)] _p: PoolListParams,
     ) -> Result<CallToolResult, McpError> {
         let state = self.browser.lock().await;
         let instances = state.pool.list();
@@ -1991,13 +2487,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "pool.status",
-        description = "Get pool statistics: current size, max size, idle count, and busy count."
-    )]
     async fn pool_status(
         &self,
-        #[allow(unused_variables)] Parameters(_p): Parameters<PoolStatusParams>,
+        #[allow(unused_variables)] _p: PoolStatusParams,
     ) -> Result<CallToolResult, McpError> {
         let state = self.browser.lock().await;
         let pool = &state.pool;
@@ -2015,13 +2507,9 @@ impl OneCrawlMcp {
     //  Smart Actions tools
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(
-        name = "smart.find",
-        description = "Smart element discovery — finds elements using fuzzy text, ARIA roles, attributes, or CSS selectors. Returns ranked matches with confidence scores."
-    )]
     async fn smart_find(
         &self,
-        Parameters(p): Parameters<SmartFindParams>,
+        p: SmartFindParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let matches = onecrawl_cdp::smart_actions::smart_find(&page, &p.query)
@@ -2034,13 +2522,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "smart.click",
-        description = "Smart click — finds the best matching element using fuzzy text, ARIA roles, or CSS selectors, then clicks it. Returns the matched element info."
-    )]
     async fn smart_click(
         &self,
-        Parameters(p): Parameters<SmartClickParams>,
+        p: SmartClickParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let matched = onecrawl_cdp::smart_actions::smart_click(&page, &p.query)
@@ -2053,13 +2537,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "smart.fill",
-        description = "Smart fill — finds an input element using fuzzy text, placeholder, or CSS selector, then types the given value into it."
-    )]
     async fn smart_fill(
         &self,
-        Parameters(p): Parameters<SmartFillParams>,
+        p: SmartFillParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let matched = onecrawl_cdp::smart_actions::smart_fill(&page, &p.query, &p.value)
@@ -2088,13 +2568,9 @@ impl OneCrawlMcp {
         state.memory.as_mut().unwrap()
     }
 
-    #[tool(
-        name = "memory.store",
-        description = "Store a memory entry — persists data across sessions. Use for learned patterns, domain strategies, selector mappings, or any knowledge the agent should remember."
-    )]
     async fn memory_store(
         &self,
-        Parameters(p): Parameters<MemoryStoreParams>,
+        p: MemoryStoreParams,
     ) -> Result<CallToolResult, McpError> {
         let mut state = self.browser.lock().await;
         let category = match p.category.as_deref() {
@@ -2116,13 +2592,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "memory.recall",
-        description = "Recall a specific memory entry by key. Returns the stored value, category, domain, and access statistics."
-    )]
     async fn memory_recall(
         &self,
-        Parameters(p): Parameters<MemoryRecallParams>,
+        p: MemoryRecallParams,
     ) -> Result<CallToolResult, McpError> {
         let mut state = self.browser.lock().await;
         let mem = Self::ensure_memory(&mut state);
@@ -2140,13 +2612,9 @@ impl OneCrawlMcp {
         }
     }
 
-    #[tool(
-        name = "memory.search",
-        description = "Search agent memory by query text, optionally filtered by category and domain. Returns matching entries ranked by relevance."
-    )]
     async fn memory_search(
         &self,
-        Parameters(p): Parameters<MemorySearchParams>,
+        p: MemorySearchParams,
     ) -> Result<CallToolResult, McpError> {
         let mut state = self.browser.lock().await;
         let category = match p.category.as_deref() {
@@ -2178,13 +2646,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "memory.forget",
-        description = "Forget a specific memory entry by key, or clear all memories for a domain. Returns how many entries were removed."
-    )]
     async fn memory_forget(
         &self,
-        Parameters(p): Parameters<MemoryForgetParams>,
+        p: MemoryForgetParams,
     ) -> Result<CallToolResult, McpError> {
         let mut state = self.browser.lock().await;
         let mem = Self::ensure_memory(&mut state);
@@ -2200,13 +2664,9 @@ impl OneCrawlMcp {
         }
     }
 
-    #[tool(
-        name = "memory.domain_strategy",
-        description = "Store or recall a domain-specific strategy (login selectors, navigation patterns, popup handlers, rate limits). Pass strategy JSON to store, omit to recall."
-    )]
     async fn memory_domain_strategy(
         &self,
-        Parameters(p): Parameters<MemoryDomainStrategyParams>,
+        p: MemoryDomainStrategyParams,
     ) -> Result<CallToolResult, McpError> {
         let mut state = self.browser.lock().await;
         let mem = Self::ensure_memory(&mut state);
@@ -2231,13 +2691,9 @@ impl OneCrawlMcp {
         }
     }
 
-    #[tool(
-        name = "memory.stats",
-        description = "Get memory statistics — total entries, breakdown by category and domain, and capacity info."
-    )]
     async fn memory_stats(
         &self,
-        #[allow(unused_variables)] Parameters(_p): Parameters<MemoryStatsParams>,
+        #[allow(unused_variables)] _p: MemoryStatsParams,
     ) -> Result<CallToolResult, McpError> {
         let mut state = self.browser.lock().await;
         let mem = Self::ensure_memory(&mut state);
@@ -2255,13 +2711,9 @@ impl OneCrawlMcp {
     //  Workflow DSL tools
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(
-        name = "workflow.validate",
-        description = "Validate a workflow definition. Returns validation errors if any, or confirms the workflow is valid."
-    )]
     async fn workflow_validate(
         &self,
-        Parameters(p): Parameters<WorkflowValidateParams>,
+        p: WorkflowValidateParams,
     ) -> Result<CallToolResult, McpError> {
         let workflow = onecrawl_cdp::workflow::parse_json(&p.workflow)
             .map_err(|e| mcp_err(e.to_string()))?;
@@ -2281,13 +2733,9 @@ impl OneCrawlMcp {
         }
     }
 
-    #[tool(
-        name = "workflow.run",
-        description = "Execute a workflow — runs a series of browser automation steps defined in JSON. Supports variables, conditionals, loops, error handling, and sub-workflows."
-    )]
     async fn workflow_run(
         &self,
-        Parameters(p): Parameters<WorkflowRunParams>,
+        p: WorkflowRunParams,
     ) -> Result<CallToolResult, McpError> {
         let mut workflow = if p.workflow.trim().starts_with('{') {
             onecrawl_cdp::workflow::parse_json(&p.workflow)
@@ -2573,13 +3021,9 @@ impl OneCrawlMcp {
     //  Network Intelligence tools
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(
-        name = "net.capture",
-        description = "Capture network traffic from the current page. Returns API endpoints with request/response details, timing, and classification."
-    )]
     async fn net_capture(
         &self,
-        Parameters(p): Parameters<NetIntelCaptureParams>,
+        p: NetIntelCaptureParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let duration = p.duration_seconds.unwrap_or(10);
@@ -2715,13 +3159,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "net.analyze",
-        description = "Analyze captured network traffic to discover API schemas, auth patterns, and endpoint templates. Input: endpoints JSON from net.capture."
-    )]
     async fn net_analyze(
         &self,
-        Parameters(p): Parameters<NetIntelAnalyzeParams>,
+        p: NetIntelAnalyzeParams,
     ) -> Result<CallToolResult, McpError> {
         let endpoints: Vec<onecrawl_cdp::network_intel::ApiEndpoint> = serde_json::from_str(&p.capture)
             .map_err(|e| mcp_err(format!("invalid capture data: {e}")))?;
@@ -2790,13 +3230,9 @@ impl OneCrawlMcp {
         json_ok(&serde_json::to_value(&schema).unwrap())
     }
 
-    #[tool(
-        name = "net.sdk",
-        description = "Generate an SDK client from an API schema. Supports TypeScript and Python. Input: schema JSON from net.analyze."
-    )]
     async fn net_sdk(
         &self,
-        Parameters(p): Parameters<NetIntelSdkParams>,
+        p: NetIntelSdkParams,
     ) -> Result<CallToolResult, McpError> {
         let schema: onecrawl_cdp::network_intel::ApiSchema = serde_json::from_str(&p.schema)
             .map_err(|e| mcp_err(format!("invalid schema: {e}")))?;
@@ -2813,13 +3249,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "net.mock",
-        description = "Generate a mock server configuration from captured endpoints. Returns endpoint definitions with recorded responses."
-    )]
     async fn net_mock(
         &self,
-        Parameters(p): Parameters<NetIntelMockParams>,
+        p: NetIntelMockParams,
     ) -> Result<CallToolResult, McpError> {
         let endpoints: Vec<onecrawl_cdp::network_intel::ApiEndpoint> = serde_json::from_str(&p.endpoints)
             .map_err(|e| mcp_err(format!("invalid endpoints: {e}")))?;
@@ -2828,13 +3260,9 @@ impl OneCrawlMcp {
         json_ok(&serde_json::to_value(&config).unwrap())
     }
 
-    #[tool(
-        name = "net.replay",
-        description = "Generate a replay sequence from captured network traffic. Can be used to reproduce exact API call sequences."
-    )]
     async fn net_replay(
         &self,
-        Parameters(p): Parameters<NetIntelReplayParams>,
+        p: NetIntelReplayParams,
     ) -> Result<CallToolResult, McpError> {
         let endpoints: Vec<onecrawl_cdp::network_intel::ApiEndpoint> = serde_json::from_str(&p.endpoints)
             .map_err(|e| mcp_err(format!("invalid endpoints: {e}")))?;
@@ -2848,13 +3276,9 @@ impl OneCrawlMcp {
     //  Visual Regression Testing tools
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(
-        name = "vrt.run",
-        description = "Run a visual regression test suite. Captures screenshots, compares against baselines, generates diff images and JUnit report."
-    )]
     async fn vrt_run(
         &self,
-        Parameters(p): Parameters<VrtRunParams>,
+        p: VrtRunParams,
     ) -> Result<CallToolResult, McpError> {
         let suite = if p.suite.trim().starts_with('{') {
             serde_json::from_str::<onecrawl_cdp::VrtSuite>(&p.suite)
@@ -2950,13 +3374,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "vrt.compare",
-        description = "Quick visual comparison — capture a screenshot of a URL and compare against stored baseline. Creates baseline if none exists."
-    )]
     async fn vrt_compare(
         &self,
-        Parameters(p): Parameters<VrtCompareParams>,
+        p: VrtCompareParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::navigation::goto(&page, &p.url)
@@ -2998,13 +3418,9 @@ impl OneCrawlMcp {
         json_ok(&serde_json::to_value(&result).unwrap())
     }
 
-    #[tool(
-        name = "vrt.update_baseline",
-        description = "Update the baseline for a specific test by copying the current screenshot as the new baseline."
-    )]
     async fn vrt_update_baseline(
         &self,
-        Parameters(p): Parameters<VrtUpdateBaselineParams>,
+        p: VrtUpdateBaselineParams,
     ) -> Result<CallToolResult, McpError> {
         let baseline_dir = p.baseline_dir.as_deref().unwrap_or(".vrt/baselines");
         let current_dir = ".vrt/current";
@@ -3033,13 +3449,9 @@ impl OneCrawlMcp {
     //  AI Task Planner tools
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(
-        name = "planner.plan",
-        description = "Generate an executable task plan from a natural language goal. Analyzes the goal, matches patterns, and creates a step-by-step plan with fallbacks and confidence scores."
-    )]
     async fn planner_plan(
         &self,
-        Parameters(p): Parameters<PlannerPlanParams>,
+        p: PlannerPlanParams,
     ) -> Result<CallToolResult, McpError> {
         let mut context = p.context.unwrap_or_default();
         let auto_context = onecrawl_cdp::task_planner::extract_context(&p.goal);
@@ -3051,13 +3463,9 @@ impl OneCrawlMcp {
         json_ok(&serde_json::to_value(&plan).unwrap())
     }
 
-    #[tool(
-        name = "planner.execute",
-        description = "Execute a task plan — runs all planned steps with automatic fallbacks and retries. Accepts plan JSON from planner.plan, or a natural language goal (plans + executes in one call)."
-    )]
     async fn planner_execute(
         &self,
-        Parameters(p): Parameters<PlannerExecuteParams>,
+        p: PlannerExecuteParams,
     ) -> Result<CallToolResult, McpError> {
         let plan: onecrawl_cdp::TaskPlan = if p.plan.trim().starts_with('{') {
             serde_json::from_str(&p.plan)
@@ -3150,14 +3558,10 @@ impl OneCrawlMcp {
         json_ok(&serde_json::to_value(&result).unwrap())
     }
 
-    #[tool(
-        name = "planner.patterns",
-        description = "List all built-in goal patterns the planner recognizes. Shows keywords, categories, and template steps for each pattern."
-    )]
     async fn planner_patterns(
         &self,
         #[allow(unused_variables)]
-        Parameters(_p): Parameters<PlannerPatternsParams>,
+        _p: PlannerPatternsParams,
     ) -> Result<CallToolResult, McpError> {
         let patterns = onecrawl_cdp::task_planner::builtin_patterns();
         let summary: Vec<serde_json::Value> = patterns.iter().map(|p| {
@@ -3178,13 +3582,9 @@ impl OneCrawlMcp {
     //  Performance Monitor tools
     // ════════════════════════════════════════════════════════════════
 
-    #[tool(
-        name = "perf.audit",
-        description = "Collect performance metrics from the current page — Core Web Vitals (LCP, FID, CLS, FCP, TTFB, INP), navigation timing, resource counts, and memory usage."
-    )]
     async fn perf_audit(
         &self,
-        Parameters(p): Parameters<PerfAuditParams>,
+        p: PerfAuditParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
 
@@ -3222,13 +3622,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "perf.budget",
-        description = "Check page performance against a budget. Returns pass/fail for each metric with severity levels."
-    )]
     async fn perf_budget(
         &self,
-        Parameters(p): Parameters<PerfBudgetCheckParams>,
+        p: PerfBudgetCheckParams,
     ) -> Result<CallToolResult, McpError> {
         let budget: onecrawl_cdp::PerfBudget = serde_json::from_str(&p.budget)
             .map_err(|e| mcp_err(format!("invalid budget: {e}")))?;
@@ -3260,13 +3656,9 @@ impl OneCrawlMcp {
         json_ok(&serde_json::to_value(&budget_result).unwrap())
     }
 
-    #[tool(
-        name = "perf.compare",
-        description = "Compare two performance snapshots to detect regressions. Returns metrics that regressed beyond the threshold."
-    )]
     async fn perf_compare(
         &self,
-        Parameters(p): Parameters<PerfCompareParams>,
+        p: PerfCompareParams,
     ) -> Result<CallToolResult, McpError> {
         let baseline: onecrawl_cdp::PerfSnapshot = serde_json::from_str(&p.baseline)
             .map_err(|e| mcp_err(format!("invalid baseline: {e}")))?;
@@ -3286,13 +3678,9 @@ impl OneCrawlMcp {
         }))
     }
 
-    #[tool(
-        name = "perf.trace",
-        description = "Full performance trace — navigates to a URL, waits for page to settle, then collects comprehensive metrics including Core Web Vitals ratings."
-    )]
     async fn perf_trace(
         &self,
-        Parameters(p): Parameters<PerfTraceParams>,
+        p: PerfTraceParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let start = std::time::Instant::now();

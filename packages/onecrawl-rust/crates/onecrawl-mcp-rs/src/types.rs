@@ -2,6 +2,23 @@
 
 use rmcp::schemars;
 
+// ──────────────────── Consolidated Tool Action ─────────────────────
+
+fn default_empty_object() -> serde_json::Value {
+    serde_json::Value::Object(serde_json::Map::new())
+}
+
+/// Universal action-based tool param used by all consolidated super-tools.
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct ToolAction {
+    #[schemars(description = "Action to perform. See tool description for available actions.")]
+    pub action: String,
+
+    #[schemars(description = "Parameters for the action as a JSON object.")]
+    #[serde(default = "default_empty_object")]
+    pub params: serde_json::Value,
+}
+
 // ──────────────────────────── Request Parameter Types ────────────────────────────
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
