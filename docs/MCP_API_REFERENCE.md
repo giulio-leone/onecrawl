@@ -1,6 +1,6 @@
 # OneCrawl MCP API Reference
 
-> **98 tools across 17 namespaces** for browser automation, web scraping, anti-detection, and AI-driven computer use.
+> **108 tools across 20 namespaces** for browser automation, web scraping, anti-detection, and AI-driven computer use.
 
 ---
 
@@ -48,6 +48,9 @@ A headless Chromium browser is launched automatically on the first CDP tool call
 | [memory.*](#memory) | 6 | Agent Memory — persistent cross-session memory, domain strategies |
 | [workflow.*](#workflow) | 2 | Workflow DSL — JSON workflow definitions with steps, conditionals, loops |
 | [net.*](#net) | 5 | Network Intelligence — API discovery, SDK generation, mock servers |
+| [vrt.*](#vrt) | 3 | Visual Regression Testing — screenshot comparison, baseline management |
+| [planner.*](#planner) | 3 | AI Task Planner — goal→plan generation, step execution, pattern library |
+| [perf.*](#perf) | 4 | Performance Monitor — Core Web Vitals, budgets, regression detection |
 
 ---
 
@@ -2208,6 +2211,254 @@ Chain commands include structured step-level errors:
 | `timeout` | Operation exceeded time limit | Increase `timeout_ms` or check page load |
 | `invalid base64` | Malformed encrypted data | Verify data was produced by `crypto.encrypt` |
 | `selector must not be empty` | Empty string passed as selector | Provide a valid CSS selector or `@ref` |
+
+---
+
+<a id="vrt"></a>
+## vrt.* — Visual Regression Testing
+
+Compare screenshots against baselines to detect unintended visual changes. Supports per-test thresholds and JUnit XML reporting.
+
+---
+
+### `vrt.run`
+
+Run a visual regression test suite. Navigates to each URL, takes screenshots, and compares against baselines.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `suite` | string | ✅ | JSON suite definition: `{"name": "...", "tests": [{"name": "...", "url": "...", "selector?": "...", "threshold?": 0.01}]}` |
+| `baseline_dir` | string | ✅ | Directory path for baseline screenshots |
+
+**Returns:**
+```json
+{
+  "suite": "homepage",
+  "total": 3,
+  "passed": 2,
+  "failed": 1,
+  "results": [
+    { "name": "hero", "passed": true, "mismatch_pct": 0.002 },
+    { "name": "footer", "passed": false, "mismatch_pct": 0.05 }
+  ],
+  "junit_xml_path": "/tmp/vrt-homepage.xml"
+}
+```
+
+### `vrt.compare`
+
+Compare two screenshots and return pixel-level diff metrics.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `baseline` | string | ✅ | Base64-encoded baseline image |
+| `current` | string | ✅ | Base64-encoded current image |
+| `threshold` | number | — | Mismatch threshold (default: 0.01 = 1%) |
+
+**Returns:**
+```json
+{
+  "match": false,
+  "mismatch_pct": 0.032,
+  "total_pixels": 1920000,
+  "diff_pixels": 61440
+}
+```
+
+### `vrt.update_baseline`
+
+Update baseline screenshots for a VRT suite (accept current as new baseline).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `suite_name` | string | ✅ | Name of the suite to update |
+| `baseline_dir` | string | ✅ | Directory path for baselines |
+| `tests` | string | ✅ | JSON array of test names to update |
+
+**Returns:**
+```json
+{
+  "updated": 2,
+  "paths": [
+    "/baselines/homepage/hero.png",
+    "/baselines/homepage/footer.png"
+  ]
+}
+```
+
+---
+
+<a id="planner"></a>
+## planner.* — AI Task Planner
+
+Generate and execute automation plans from natural language goals. Uses pattern matching against 7 built-in patterns (auth, search, extraction, form, navigation, interaction, monitoring).
+
+---
+
+### `planner.plan`
+
+Generate an executable automation plan from a natural language goal.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `goal` | string | ✅ | Natural language goal (e.g., "log in to the admin panel") |
+| `context` | string | — | Additional context (current URL, page state, etc.) |
+
+**Returns:**
+```json
+{
+  "pattern": "auth",
+  "confidence": 0.92,
+  "steps": [
+    { "action": "navigate", "url": "https://example.com/login" },
+    { "action": "fill", "selector": "#email", "value": "{{email}}" },
+    { "action": "fill", "selector": "#password", "value": "{{password}}" },
+    { "action": "click", "selector": "button[type=submit]" }
+  ],
+  "fallback_patterns": ["form", "navigation"]
+}
+```
+
+### `planner.execute`
+
+Execute a generated plan step-by-step with self-healing retries and fallback strategies.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `plan` | string | ✅ | JSON plan from `planner.plan` output |
+| `max_retries` | number | — | Max retries per step (default: 2) |
+
+**Returns:**
+```json
+{
+  "completed": true,
+  "steps_executed": 4,
+  "results": [
+    { "step": 0, "action": "navigate", "success": true },
+    { "step": 1, "action": "fill", "success": true },
+    { "step": 2, "action": "fill", "success": true },
+    { "step": 3, "action": "click", "success": true }
+  ],
+  "errors": []
+}
+```
+
+### `planner.patterns`
+
+List all available automation patterns with their descriptions and trigger keywords.
+
+**Parameters:** None
+
+**Returns:**
+```json
+[
+  {
+    "name": "auth",
+    "description": "Authentication and login flows",
+    "keywords": ["login", "sign in", "authenticate", "credentials"],
+    "example_goals": ["log in to the admin panel", "authenticate with SSO"]
+  },
+  {
+    "name": "search",
+    "description": "Search and filter operations",
+    "keywords": ["search", "find", "filter", "query"],
+    "example_goals": ["search for product X", "filter results by date"]
+  }
+]
+```
+
+---
+
+<a id="perf"></a>
+## perf.* — Performance Monitor
+
+Collect Core Web Vitals, enforce performance budgets, detect regressions, and run full page traces.
+
+---
+
+### `perf.audit`
+
+Collect performance metrics from the current page — Core Web Vitals (LCP, FID, CLS, FCP, TTFB, INP), navigation timing, resource counts, and memory usage. Each vital is rated as good/needs_improvement/poor per Google's thresholds.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | — | URL to audit (navigates first). Omit to audit current page. |
+
+**Returns:**
+```json
+{
+  "url": "https://example.com",
+  "vitals": { "lcp_ms": 1800, "fid_ms": 50, "cls": 0.05, "fcp_ms": 900, "ttfb_ms": 200, "inp_ms": 120 },
+  "ratings": { "lcp": "good", "fid": "good", "cls": "good", "fcp": "good", "ttfb": "good", "inp": "good" },
+  "navigation_timing": { "dns_ms": 10, "connect_ms": 30, "request_ms": 150, "response_ms": 50, "dom_interactive_ms": 800 },
+  "resource_count": { "total": 42, "scripts": 12, "stylesheets": 3, "images": 15, "fonts": 4, "other": 8 },
+  "memory": { "used_mb": 45.2, "total_mb": 128 }
+}
+```
+
+### `perf.budget`
+
+Check page performance against a budget. Returns pass/fail for each metric with severity levels (ok/warning/critical).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `budget` | string | ✅ | JSON budget: `{"name": "...", "lcp_ms": 2500, "cls": 0.1, "max_requests": 50, ...}` |
+| `url` | string | — | URL to check (uses current page if omitted) |
+
+**Returns:**
+```json
+{
+  "budget_name": "production",
+  "passed": false,
+  "violations": 1,
+  "checks": [
+    { "metric": "lcp_ms", "budget": 2500, "actual": 1800, "passed": true, "severity": "ok" },
+    { "metric": "cls", "budget": 0.1, "actual": 0.05, "passed": true, "severity": "ok" },
+    { "metric": "max_requests", "budget": 50, "actual": 62, "passed": false, "severity": "critical" }
+  ]
+}
+```
+
+### `perf.compare`
+
+Compare two performance snapshots to detect regressions. Returns metrics that regressed beyond the threshold.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `baseline` | string | ✅ | Baseline snapshot JSON (from `perf.audit`) |
+| `current` | string | ✅ | Current snapshot JSON (from `perf.audit`) |
+| `threshold_pct` | number | — | Regression threshold percentage (default: 10) |
+
+**Returns:**
+```json
+{
+  "regressed": true,
+  "regressions": [
+    { "metric": "lcp_ms", "baseline": 1800, "current": 2400, "delta": 600, "delta_pct": 33.3, "severity": "critical" }
+  ]
+}
+```
+
+### `perf.trace`
+
+Full performance trace — navigates to a URL, waits for the page to settle, then collects comprehensive metrics including Core Web Vitals with ratings.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | ✅ | URL to trace |
+| `settle_ms` | number | — | Wait time in ms after load for late metrics (default: 3000) |
+
+**Returns:**
+```json
+{
+  "url": "https://example.com",
+  "trace_duration_ms": 4500,
+  "vitals": { "lcp_ms": 1800, "fid_ms": 50, "cls": 0.05, "fcp_ms": 900, "ttfb_ms": 200, "inp_ms": 120 },
+  "ratings": { "lcp": "good", "fid": "good", "cls": "good", "fcp": "good", "ttfb": "good", "inp": "good" },
+  "navigation_timing": { "dns_ms": 10, "connect_ms": 30, "request_ms": 150, "response_ms": 50, "dom_interactive_ms": 800 },
+  "resource_count": { "total": 42, "scripts": 12, "stylesheets": 3, "images": 15, "fonts": 4, "other": 8 }
+}
+```
 
 ---
 
