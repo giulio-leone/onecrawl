@@ -137,6 +137,11 @@ impl EventBus {
 
     /// Emit an event to the bus.
     pub async fn emit(&self, event: BusEvent) -> Result<(), String> {
+        // Validate event_type: newlines/carriage returns would panic in axum SSE
+        if event.event_type.contains('\n') || event.event_type.contains('\r') {
+            return Err("event_type must not contain newline or carriage return characters".into());
+        }
+
         // Broadcast (ignore send errors — no subscribers is fine)
         let _ = self.tx.send(event.clone());
 
