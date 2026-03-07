@@ -256,6 +256,11 @@ pub struct NativeBrowser {
     retry_queue: Arc<TokioMutex<onecrawl_cdp::RetryQueue>>,
     scheduler: Arc<TokioMutex<onecrawl_cdp::Scheduler>>,
     session_pool: Arc<TokioMutex<onecrawl_cdp::SessionPool>>,
+    ios_client: Arc<TokioMutex<Option<onecrawl_cdp::IosClient>>>,
+    android_client: Arc<TokioMutex<Option<onecrawl_cdp::AndroidClient>>>,
+    recording: onecrawl_cdp::SharedRecording,
+    safety: Arc<TokioMutex<Option<onecrawl_cdp::SafetyState>>>,
+    agent_memory: Arc<TokioMutex<Option<onecrawl_cdp::AgentMemory>>>,
 }
 
 #[napi]
@@ -292,6 +297,11 @@ impl NativeBrowser {
             session_pool: Arc::new(TokioMutex::new(onecrawl_cdp::SessionPool::new(
                 onecrawl_cdp::PoolConfig::default(),
             ))),
+            ios_client: Arc::new(TokioMutex::new(None)),
+            android_client: Arc::new(TokioMutex::new(None)),
+            recording: onecrawl_cdp::new_shared_recording(),
+            safety: Arc::new(TokioMutex::new(None)),
+            agent_memory: Arc::new(TokioMutex::new(None)),
         })
     }
 
@@ -323,6 +333,11 @@ impl NativeBrowser {
             session_pool: Arc::new(TokioMutex::new(onecrawl_cdp::SessionPool::new(
                 onecrawl_cdp::PoolConfig::default(),
             ))),
+            ios_client: Arc::new(TokioMutex::new(None)),
+            android_client: Arc::new(TokioMutex::new(None)),
+            recording: onecrawl_cdp::new_shared_recording(),
+            safety: Arc::new(TokioMutex::new(None)),
+            agent_memory: Arc::new(TokioMutex::new(None)),
         })
     }
 
@@ -4104,6 +4119,2398 @@ impl NativeBrowser {
                 .map_err(|e| Error::from_reason(e.to_string()))?;
         }
         serde_json::to_string(&creds).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── iOS Automation ────────────────
+
+    /// List available iOS devices/simulators.
+    #[napi]
+    pub async fn ios_devices(&self) -> Result<String> {
+        let devices = onecrawl_cdp::ios::IosClient::list_devices()
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&serde_json::json!({
+            "devices": devices,
+            "count": devices.len()
+        }))
+        .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Connect to an iOS device via WebDriverAgent.
+    #[napi]
+    pub async fn ios_connect(
+        &self,
+        wda_url: Option<String>,
+        udid: Option<String>,
+        bundle_id: Option<String>,
+    ) -> Result<String> {
+        let config = onecrawl_cdp::IosSessionConfig {
+            wda_url: wda_url.unwrap_or_else(|| "http://localhost:8100".to_string()),
+            device_udid: udid,
+            bundle_id: bundle_id.unwrap_or_else(|| "com.apple.mobilesafari".to_string()),
+        };
+        let mut client = onecrawl_cdp::IosClient::new(config);
+        let session_id = client
+            .create_session()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let mut guard = self.ios_client.lock().await;
+        *guard = Some(client);
+        Ok(serde_json::json!({ "connected": true, "session_id": session_id }).to_string())
+    }
+
+    /// Navigate to a URL on the connected iOS device.
+    #[napi]
+    pub async fn ios_navigate(&self, url: String) -> Result<()> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        client
+            .navigate(&url)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Tap at coordinates on the iOS device.
+    #[napi]
+    pub async fn ios_tap(&self, x: f64, y: f64) -> Result<()> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        client
+            .tap(x, y)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Take a screenshot on the iOS device. Returns raw PNG bytes.
+    #[napi]
+    pub async fn ios_screenshot(&self) -> Result<Buffer> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        let bytes = client
+            .screenshot()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(bytes.into())
+    }
+
+    /// Perform a pinch gesture on the iOS device.
+    #[napi]
+    pub async fn ios_pinch(&self, x: f64, y: f64, scale: f64, velocity: f64) -> Result<()> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        client
+            .pinch(x, y, scale, velocity)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Long press at coordinates on the iOS device.
+    #[napi]
+    pub async fn ios_long_press(&self, x: f64, y: f64, duration_ms: u32) -> Result<()> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        client
+            .long_press(x, y, duration_ms as u64)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Double-tap at coordinates on the iOS device.
+    #[napi]
+    pub async fn ios_double_tap(&self, x: f64, y: f64) -> Result<()> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        client
+            .double_tap(x, y)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Set or get orientation on the iOS device.
+    #[napi]
+    pub async fn ios_orientation(&self, orientation: Option<String>) -> Result<String> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        if let Some(orient) = orientation {
+            client
+                .set_orientation(&orient)
+                .await
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+            Ok(orient)
+        } else {
+            client
+                .get_orientation()
+                .await
+                .map_err(|e| Error::from_reason(e.to_string()))
+        }
+    }
+
+    /// Scroll to an element on the iOS device.
+    #[napi]
+    pub async fn ios_scroll(&self, using: String, value: String) -> Result<()> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        client
+            .scroll_to_element(&using, &value)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Execute JavaScript on the iOS device (Safari).
+    #[napi]
+    pub async fn ios_script(&self, script: String, args_json: Option<String>) -> Result<String> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        let args: Vec<serde_json::Value> = if let Some(a) = args_json {
+            serde_json::from_str(&a).unwrap_or_default()
+        } else {
+            vec![]
+        };
+        let result = client
+            .execute_script(&script, &args)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get cookies from the iOS device browser.
+    #[napi]
+    pub async fn ios_cookies(&self) -> Result<String> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        let cookies = client
+            .get_cookies()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&cookies).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Launch an app on the iOS device by bundle ID.
+    #[napi]
+    pub async fn ios_app_launch(&self, bundle_id: String) -> Result<()> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        client
+            .launch_app(&bundle_id)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Terminate an app on the iOS device by bundle ID.
+    #[napi]
+    pub async fn ios_app_kill(&self, bundle_id: String) -> Result<()> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        client
+            .terminate_app(&bundle_id)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get app state on the iOS device (0=not installed, 1=not running, 4=running).
+    #[napi]
+    pub async fn ios_app_state(&self, bundle_id: String) -> Result<u32> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        let state = client
+            .app_state(&bundle_id)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(state as u32)
+    }
+
+    /// Lock the iOS device.
+    #[napi]
+    pub async fn ios_lock(&self) -> Result<()> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        client
+            .lock_device()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Unlock the iOS device.
+    #[napi]
+    pub async fn ios_unlock(&self) -> Result<()> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        client
+            .unlock_device()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Press the home button on the iOS device.
+    #[napi]
+    pub async fn ios_home(&self) -> Result<()> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        client
+            .home_button()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Press a hardware button on the iOS device.
+    #[napi]
+    pub async fn ios_button(&self, name: String) -> Result<()> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        client
+            .press_button(&name)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get battery info from the iOS device. Returns JSON.
+    #[napi]
+    pub async fn ios_battery(&self) -> Result<String> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        let info = client
+            .battery_info()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&info).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get device info from the iOS device. Returns JSON.
+    #[napi]
+    pub async fn ios_info(&self) -> Result<String> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        let info = client
+            .device_info()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&info).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Perform an iOS simulator action (list, boot, shutdown, create, delete).
+    #[napi]
+    pub async fn ios_simulator(
+        &self,
+        action: String,
+        udid: Option<String>,
+        device_type: Option<String>,
+        runtime: Option<String>,
+    ) -> Result<String> {
+        let result = onecrawl_cdp::IosClient::simulator_action(
+            &action,
+            udid.as_deref(),
+            device_type.as_deref(),
+            runtime.as_deref(),
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get the current URL on the iOS device browser.
+    #[napi]
+    pub async fn ios_url(&self) -> Result<String> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        client
+            .get_url()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get the page title on the iOS device browser.
+    #[napi]
+    pub async fn ios_title(&self) -> Result<String> {
+        let guard = self.ios_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("iOS not connected"))?;
+        client
+            .get_title()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Android Automation ────────────────
+
+    /// List available Android devices.
+    #[napi]
+    pub async fn android_devices(&self) -> Result<String> {
+        let devices = onecrawl_cdp::android::AndroidClient::list_devices()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&devices).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Connect to an Android device via UIAutomator2.
+    #[napi]
+    pub async fn android_connect(
+        &self,
+        server_url: Option<String>,
+        serial: Option<String>,
+        package: Option<String>,
+        activity: Option<String>,
+    ) -> Result<String> {
+        let config = onecrawl_cdp::AndroidSessionConfig {
+            server_url: server_url.unwrap_or_else(|| "http://localhost:4723".to_string()),
+            device_serial: serial,
+            package: package.unwrap_or_else(|| "com.android.chrome".to_string()),
+            activity,
+        };
+        let mut client = onecrawl_cdp::AndroidClient::new(config);
+        let session_id = client
+            .create_session(None, None)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let mut guard = self.android_client.lock().await;
+        *guard = Some(client);
+        Ok(serde_json::json!({ "connected": true, "session_id": session_id }).to_string())
+    }
+
+    /// Navigate to a URL on the Android device.
+    #[napi]
+    pub async fn android_navigate(&self, url: String) -> Result<()> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .navigate(&url)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Tap at coordinates on the Android device.
+    #[napi]
+    pub async fn android_tap(&self, x: f64, y: f64) -> Result<()> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .tap(x, y)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Swipe on the Android device.
+    #[napi]
+    pub async fn android_swipe(
+        &self,
+        from_x: f64,
+        from_y: f64,
+        to_x: f64,
+        to_y: f64,
+        duration_ms: Option<u32>,
+    ) -> Result<()> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .swipe(from_x, from_y, to_x, to_y, duration_ms.unwrap_or(300) as u64)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Long press at coordinates on the Android device.
+    #[napi]
+    pub async fn android_long_press(&self, x: f64, y: f64, duration_ms: Option<u32>) -> Result<()> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .long_press(x, y, duration_ms.unwrap_or(1000) as u64)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Double-tap at coordinates on the Android device.
+    #[napi]
+    pub async fn android_double_tap(&self, x: f64, y: f64) -> Result<()> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .double_tap(x, y)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Pinch on the Android device.
+    #[napi]
+    pub async fn android_pinch(&self, x: f64, y: f64, scale: f64) -> Result<()> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .pinch(x, y, scale)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Type text on the Android device.
+    #[napi]
+    pub async fn android_type(&self, text: String) -> Result<()> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .type_text(&text)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Find an element on the Android device. Returns element ID.
+    #[napi]
+    pub async fn android_find(&self, strategy: String, value: String) -> Result<String> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .find_element(&strategy, &value)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Click an element on the Android device by element ID.
+    #[napi]
+    pub async fn android_click(&self, element_id: String) -> Result<()> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .click_element(&element_id)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Take a screenshot on the Android device. Returns base64 PNG.
+    #[napi]
+    pub async fn android_screenshot(&self) -> Result<String> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .screenshot()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Set or get orientation on the Android device.
+    #[napi]
+    pub async fn android_orientation(&self, orientation: Option<String>) -> Result<String> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        if let Some(orient) = orientation {
+            client
+                .set_orientation(&orient)
+                .await
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+            Ok(orient)
+        } else {
+            client
+                .get_orientation()
+                .await
+                .map_err(|e| Error::from_reason(e.to_string()))
+        }
+    }
+
+    /// Press a key on the Android device by keycode.
+    #[napi]
+    pub async fn android_key(&self, keycode: i32) -> Result<()> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .press_key(keycode)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Launch an app on the Android device.
+    #[napi]
+    pub async fn android_app_launch(
+        &self,
+        package: String,
+        activity: Option<String>,
+    ) -> Result<()> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .launch_app(&package, activity.as_deref())
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Terminate an app on the Android device.
+    #[napi]
+    pub async fn android_app_kill(&self, package: String) -> Result<()> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .terminate_app(&package)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get app state on the Android device.
+    #[napi]
+    pub async fn android_app_state(&self, package: String) -> Result<u32> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        let state = client
+            .app_state(&package)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(state as u32)
+    }
+
+    /// Install an APK on the Android device.
+    #[napi]
+    pub async fn android_install(&self, apk_path: String) -> Result<()> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .install_app(&apk_path)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Execute a script on the Android device.
+    #[napi]
+    pub async fn android_script(&self, script: String, args_json: Option<String>) -> Result<String> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        let args: Vec<serde_json::Value> = if let Some(a) = args_json {
+            serde_json::from_str(&a).unwrap_or_default()
+        } else {
+            vec![]
+        };
+        let result = client
+            .execute_script(&script, &args)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Execute a shell command on an Android device via ADB.
+    #[napi]
+    pub async fn android_shell(&self, serial: String, command: String) -> Result<String> {
+        onecrawl_cdp::android::AndroidClient::shell(&serial, &command)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Push a file to the Android device.
+    #[napi]
+    pub async fn android_push(&self, serial: String, local: String, remote: String) -> Result<()> {
+        onecrawl_cdp::android::AndroidClient::push_file(&serial, &local, &remote)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Pull a file from the Android device.
+    #[napi]
+    pub async fn android_pull(&self, serial: String, remote: String, local: String) -> Result<()> {
+        onecrawl_cdp::android::AndroidClient::pull_file(&serial, &remote, &local)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get device info for an Android device. Returns JSON.
+    #[napi]
+    pub async fn android_info(&self, serial: String) -> Result<String> {
+        let info = onecrawl_cdp::android::AndroidClient::device_info(&serial)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&info).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get battery info for an Android device. Returns JSON.
+    #[napi]
+    pub async fn android_battery(&self, serial: String) -> Result<String> {
+        let info = onecrawl_cdp::android::AndroidClient::battery_info(&serial)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&info).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get the current URL on the Android device browser.
+    #[napi]
+    pub async fn android_url(&self) -> Result<String> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .get_url()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get the page title on the Android device browser.
+    #[napi]
+    pub async fn android_title(&self) -> Result<String> {
+        let guard = self.android_client.lock().await;
+        let client = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("Android not connected"))?;
+        client
+            .get_title()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Agent / Agentic ────────────────
+
+    /// Run an autonomous agent loop toward a goal. Returns JSON result.
+    #[napi]
+    pub async fn agent_loop(
+        &self,
+        goal: String,
+        max_steps: Option<u32>,
+        verify_js: Option<String>,
+    ) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::agent::agent_loop(
+            page,
+            &goal,
+            max_steps.unwrap_or(10) as usize,
+            verify_js.as_deref(),
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Assert whether a goal has been achieved. Returns JSON with pass/fail.
+    #[napi]
+    pub async fn goal_assert(
+        &self,
+        assertions_json: String,
+    ) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let raw: Vec<(String, String)> = serde_json::from_str(&assertions_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let assertions: Vec<(&str, &str)> = raw.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let result = onecrawl_cdp::agent::goal_assert(page, &assertions)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get an annotated observation of the current page. Returns JSON.
+    #[napi]
+    pub async fn annotated_observe(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::agent::annotated_observe(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get or set session context for agentic workflows. Returns JSON.
+    #[napi]
+    pub async fn session_context(
+        &self,
+        command: String,
+        key: Option<String>,
+        value: Option<String>,
+    ) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::agent::session_context(
+            page,
+            &command,
+            key.as_deref(),
+            value.as_deref(),
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Auto-chain a sequence of actions with error recovery. Returns JSON.
+    #[napi]
+    pub async fn auto_chain(
+        &self,
+        actions_json: String,
+        on_error: Option<String>,
+        max_retries: Option<u32>,
+    ) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let actions: Vec<String> = serde_json::from_str(&actions_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let result = onecrawl_cdp::agent::auto_chain(
+            page,
+            &actions,
+            &on_error.unwrap_or_else(|| "skip".to_string()),
+            max_retries.unwrap_or(3) as usize,
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Structured reasoning step (think). Returns JSON.
+    #[napi]
+    pub async fn think(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::agent::think(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Click at specific pixel coordinates. Returns JSON.
+    #[napi]
+    pub async fn click_at_coords(&self, x: f64, y: f64) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::agent::click_at_coords(page, x, y)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Task Decomposition ────────────────
+
+    /// Decompose a goal into a task plan. Returns JSON plan.
+    #[napi]
+    pub fn task_decompose(&self, goal: String) -> Result<String> {
+        let context = onecrawl_cdp::task_planner::extract_context(&goal);
+        let plan = onecrawl_cdp::task_planner::plan_from_goal(&goal, &context);
+        serde_json::to_string(&plan).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get a task plan for a goal with context. Returns JSON.
+    #[napi]
+    pub fn task_plan(&self, goal: String, context_json: Option<String>) -> Result<String> {
+        let context: std::collections::HashMap<String, String> = if let Some(c) = context_json {
+            serde_json::from_str(&c).unwrap_or_default()
+        } else {
+            onecrawl_cdp::task_planner::extract_context(&goal)
+        };
+        let plan = onecrawl_cdp::task_planner::plan_from_goal(&goal, &context);
+        serde_json::to_string(&plan).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// List built-in task patterns. Returns JSON.
+    #[napi]
+    pub fn task_patterns(&self) -> Result<String> {
+        let patterns = onecrawl_cdp::task_planner::builtin_patterns();
+        serde_json::to_string(&patterns).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Vision ────────────────
+
+    /// Describe the current page visually. Returns JSON.
+    #[napi]
+    pub async fn vision_describe(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(
+            page,
+            "JSON.stringify({title:document.title,url:location.href,text:document.body?.innerText?.slice(0,2000)||'',forms:document.forms.length,links:document.links.length,images:document.images.length})",
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Locate an element visually by description. Returns JSON.
+    #[napi]
+    pub async fn vision_locate(&self, description: String) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let js = format!(
+            r#"(()=>{{const els=document.querySelectorAll('*');const matches=[];for(const el of els){{const t=(el.textContent||'').trim().toLowerCase();const a=(el.getAttribute('aria-label')||'').toLowerCase();const p=(el.getAttribute('placeholder')||'').toLowerCase();const d='{}';if(t.includes(d)||a.includes(d)||p.includes(d)){{const r=el.getBoundingClientRect();if(r.width>0&&r.height>0)matches.push({{tag:el.tagName,text:t.slice(0,100),x:r.x,y:r.y,w:r.width,h:r.height}});}}}}return JSON.stringify(matches.slice(0,10))}})()"#,
+            description.to_lowercase().replace('\'', "\\'")
+        );
+        let result = onecrawl_cdp::page::evaluate_js(page, &js)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Compare two screenshots visually. Returns JSON diff result.
+    #[napi]
+    pub async fn vision_compare(
+        &self,
+        image_a_b64: String,
+        image_b_b64: String,
+        threshold: Option<f64>,
+    ) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::pixel_diff::pixel_diff(
+            page,
+            &image_a_b64,
+            &image_b_b64,
+            threshold.unwrap_or(0.1),
+            true,
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Accessibility & WCAG ────────────────
+
+    /// Run a WCAG accessibility audit. Returns JSON.
+    #[napi]
+    pub async fn wcag_audit(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(page, r#"(()=>{const issues=[];document.querySelectorAll('img:not([alt])').forEach(i=>issues.push({type:'missing-alt',tag:'img',src:i.src?.slice(0,100)}));document.querySelectorAll('input:not([aria-label]):not([id])').forEach(i=>issues.push({type:'missing-label',tag:'input',name:i.name}));return JSON.stringify({issues,count:issues.length})})()"#)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get the ARIA accessibility tree. Returns JSON.
+    #[napi]
+    pub async fn aria_tree(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(page, r#"(()=>{function walk(el,d){const r=el.getAttribute&&el.getAttribute('role');const l=el.getAttribute&&el.getAttribute('aria-label');const n={tag:el.tagName||'#text',role:r||undefined,label:l||undefined,children:[]};if(d<5)for(const c of(el.children||[]))n.children.push(walk(c,d+1));return n}return JSON.stringify(walk(document.body,0))})()"#)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Check color contrast ratios. Returns JSON.
+    #[napi]
+    pub async fn contrast_check(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(page, r#"(()=>{const els=document.querySelectorAll('p,span,a,h1,h2,h3,h4,h5,h6,li,td,th,label,button');const results=[];for(const el of Array.from(els).slice(0,50)){const s=getComputedStyle(el);results.push({tag:el.tagName,text:(el.textContent||'').slice(0,50),color:s.color,bg:s.backgroundColor,fontSize:s.fontSize})}return JSON.stringify({elements:results,count:results.length})})()"#)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Navigate using ARIA landmarks. Returns JSON list.
+    #[napi]
+    pub async fn landmark_nav(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(page, r#"(()=>{const roles=['banner','navigation','main','complementary','contentinfo','search','form','region'];const landmarks=[];for(const r of roles){document.querySelectorAll(`[role="${r}"]`).forEach(el=>landmarks.push({role:r,label:el.getAttribute('aria-label')||'',tag:el.tagName}))}return JSON.stringify(landmarks)})()"#)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get the tab/focus order. Returns JSON.
+    #[napi]
+    pub async fn focus_order(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(page, r#"(()=>{const els=Array.from(document.querySelectorAll('[tabindex],a[href],button,input,select,textarea')).filter(e=>e.tabIndex>=0).sort((a,b)=>(a.tabIndex||0)-(b.tabIndex||0));return JSON.stringify(els.slice(0,100).map((e,i)=>({order:i,tag:e.tagName,tabIndex:e.tabIndex,text:(e.textContent||'').trim().slice(0,50)})))})()"#)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Audit alt text on images. Returns JSON.
+    #[napi]
+    pub async fn alt_text_audit(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(page, r#"(()=>{const imgs=document.querySelectorAll('img');const results=[];for(const img of imgs){results.push({src:(img.src||'').slice(0,100),alt:img.alt||null,hasAlt:!!img.alt,decorative:img.getAttribute('role')==='presentation'||img.alt===''})}return JSON.stringify({images:results,total:results.length,missing:results.filter(r=>!r.hasAlt&&!r.decorative).length})})()"#)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Analyze heading structure. Returns JSON.
+    #[napi]
+    pub async fn heading_structure(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(page, r#"(()=>{const headings=document.querySelectorAll('h1,h2,h3,h4,h5,h6');return JSON.stringify(Array.from(headings).map(h=>({level:parseInt(h.tagName[1]),text:h.textContent.trim().slice(0,100),id:h.id||null})))})()"#)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Validate ARIA roles. Returns JSON.
+    #[napi]
+    pub async fn role_validate(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(page, r#"(()=>{const els=document.querySelectorAll('[role]');const results=[];for(const el of els){results.push({tag:el.tagName,role:el.getAttribute('role'),label:el.getAttribute('aria-label')||null,hasRequiredProps:true})}return JSON.stringify({elements:results,count:results.length})})()"#)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Detect keyboard traps. Returns JSON.
+    #[napi]
+    pub async fn keyboard_trap_detect(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(page, r#"(()=>{const traps=[];document.querySelectorAll('[tabindex]').forEach(el=>{const s=getComputedStyle(el);if(s.display!=='none'&&el.tabIndex>=0){const r=el.getBoundingClientRect();if(r.width>0&&r.height>0){const focusable=el.querySelectorAll('a[href],button,input,select,textarea,[tabindex]');if(focusable.length>2)traps.push({tag:el.tagName,id:el.id||null,focusableChildren:focusable.length})}}});return JSON.stringify({potentialTraps:traps,count:traps.length})})()"#)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Simulate screen reader output. Returns JSON.
+    #[napi]
+    pub async fn screen_reader_sim(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(page, r#"(()=>{function readable(el){const role=el.getAttribute&&el.getAttribute('role');const label=el.getAttribute&&el.getAttribute('aria-label');const text=(el.textContent||'').trim().slice(0,200);return{tag:el.tagName,role:role||undefined,label:label||undefined,text:text||undefined}}const nodes=[];const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_ELEMENT);while(walker.nextNode()){const el=walker.currentNode;const r=el.getBoundingClientRect();if(r.width>0&&r.height>0&&nodes.length<100)nodes.push(readable(el))}return JSON.stringify(nodes)})()"#)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Safety Policy ────────────────
+
+    /// Set or update the safety policy. Takes a JSON policy config.
+    #[napi]
+    pub async fn safety_set(&self, policy_json: String) -> Result<String> {
+        let policy: onecrawl_cdp::SafetyPolicy = serde_json::from_str(&policy_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let state = onecrawl_cdp::SafetyState::new(policy);
+        let stats = state.stats();
+        let mut guard = self.safety.lock().await;
+        *guard = Some(state);
+        serde_json::to_string(&stats).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get current safety policy status. Returns JSON.
+    #[napi]
+    pub async fn safety_status(&self) -> Result<String> {
+        let guard = self.safety.lock().await;
+        let state = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("safety policy not set"))?;
+        let stats = state.stats();
+        serde_json::to_string(&stats).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Skills ────────────────
+
+    /// List built-in agent skills. Returns JSON.
+    #[napi]
+    pub fn skills_list(&self) -> Result<String> {
+        let builtins = onecrawl_cdp::skills::SkillRegistry::builtins();
+        serde_json::to_string(&builtins).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Screencast ────────────────
+
+    /// Start a screencast (continuous frame capture).
+    #[napi]
+    pub async fn screencast_start(
+        &self,
+        format: Option<String>,
+        quality: Option<u32>,
+        max_width: Option<u32>,
+        max_height: Option<u32>,
+    ) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let opts = onecrawl_cdp::ScreencastOptions {
+            format: format.unwrap_or_else(|| "png".to_string()),
+            quality: Some(quality.unwrap_or(80)),
+            max_width: Some(max_width.unwrap_or(1280)),
+            max_height: Some(max_height.unwrap_or(720)),
+            every_nth_frame: None,
+        };
+        onecrawl_cdp::screencast::start_screencast(page, &opts)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Stop the screencast.
+    #[napi]
+    pub async fn screencast_stop(&self) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::screencast::stop_screencast(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Capture a single screencast frame. Returns raw bytes.
+    #[napi]
+    pub async fn screencast_frame(&self) -> Result<Buffer> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let opts = onecrawl_cdp::ScreencastOptions {
+            format: "png".to_string(),
+            quality: Some(80),
+            max_width: Some(1280),
+            max_height: Some(720),
+            every_nth_frame: None,
+        };
+        let frame = onecrawl_cdp::screencast::capture_frame(page, &opts)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(frame.into())
+    }
+
+    // ──────────────── Recording ────────────────
+
+    /// Start a video recording session.
+    #[napi]
+    pub async fn recording_start(&self, output_path: String, fps: Option<u32>) -> Result<()> {
+        let mut guard = self.recording.lock().await;
+        let mut state = onecrawl_cdp::RecordingState::new(
+            std::path::PathBuf::from(&output_path),
+            fps.unwrap_or(10),
+        );
+        state.start();
+        *guard = Some(state);
+        Ok(())
+    }
+
+    /// Stop the video recording.
+    #[napi]
+    pub async fn recording_stop(&self) -> Result<String> {
+        let mut guard = self.recording.lock().await;
+        let state = guard
+            .as_mut()
+            .ok_or_else(|| Error::from_reason("recording not started"))?;
+        state.stop();
+        let frames = state.frame_count();
+        Ok(serde_json::json!({ "stopped": true, "frames": frames }).to_string())
+    }
+
+    /// Get recording status. Returns JSON.
+    #[napi]
+    pub async fn recording_status(&self) -> Result<String> {
+        let guard = self.recording.lock().await;
+        let state = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("recording not started"))?;
+        Ok(serde_json::json!({
+            "recording": state.is_recording(),
+            "frames": state.frame_count(),
+            "fps": state.fps(),
+        })
+        .to_string())
+    }
+
+    /// Capture a frame for the current recording from a page screenshot.
+    #[napi]
+    pub async fn recording_capture(&self) -> Result<()> {
+        let page_guard = self.page.lock().await;
+        let page = page_guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let bytes = onecrawl_cdp::screenshot::screenshot_viewport(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let mut rec_guard = self.recording.lock().await;
+        let state = rec_guard
+            .as_mut()
+            .ok_or_else(|| Error::from_reason("recording not started"))?;
+        state.add_frame(bytes);
+        Ok(())
+    }
+
+    /// Encode recorded frames into a video file.
+    #[napi]
+    pub fn recording_encode(
+        &self,
+        frames_dir: String,
+        output_path: String,
+        fps: Option<u32>,
+        format: Option<String>,
+    ) -> Result<String> {
+        let result = onecrawl_cdp::recording::encode_video(
+            &frames_dir,
+            &output_path,
+            fps.unwrap_or(10),
+            &format.unwrap_or_else(|| "mp4".to_string()),
+        )
+        .map_err(|e| Error::from_reason(e))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Stream frames to disk. Returns JSON with file paths.
+    #[napi]
+    pub async fn stream_to_disk(
+        &self,
+        output_dir: String,
+        count: Option<u32>,
+        interval_ms: Option<u32>,
+    ) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let opts = onecrawl_cdp::ScreencastOptions {
+            format: "png".to_string(),
+            quality: Some(80),
+            max_width: Some(1280),
+            max_height: Some(720),
+            every_nth_frame: None,
+        };
+        let result = onecrawl_cdp::screencast::stream_to_disk(
+            page,
+            &opts,
+            &output_dir,
+            count.unwrap_or(10) as usize,
+            interval_ms.unwrap_or(100) as u64,
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Capture a stream of frames. Returns JSON with count.
+    #[napi]
+    pub async fn stream_capture(
+        &self,
+        count: Option<u32>,
+        interval_ms: Option<u32>,
+    ) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let opts = onecrawl_cdp::ScreencastOptions {
+            format: "png".to_string(),
+            quality: Some(80),
+            max_width: Some(1280),
+            max_height: Some(720),
+            every_nth_frame: None,
+        };
+        let frames = onecrawl_cdp::screencast::capture_frames_burst(
+            page,
+            &opts,
+            count.unwrap_or(5) as usize,
+            interval_ms.unwrap_or(200) as u64,
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(serde_json::json!({
+            "frames": frames.len(),
+            "sizes": frames.iter().map(|f| f.len()).collect::<Vec<_>>(),
+        })
+        .to_string())
+    }
+
+    // ──────────────── Computer Use ────────────────
+
+    /// Execute a computer-use action (click, type, scroll, etc). Returns JSON.
+    #[napi]
+    pub async fn computer_use(&self, action_json: String) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let action: onecrawl_cdp::computer_use::AgentAction =
+            serde_json::from_str(&action_json)
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+        let result = onecrawl_cdp::computer_use::execute_action(page, &action, 0)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Observe the current page state for computer-use. Returns JSON.
+    #[napi]
+    pub async fn computer_observe(&self, include_screenshot: Option<bool>) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::computer_use::observe(
+            page,
+            None,
+            include_screenshot.unwrap_or(true),
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Smart Actions ────────────────
+
+    /// Find elements using natural language query. Returns JSON matches.
+    #[napi]
+    pub async fn smart_find(&self, query: String) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let matches = onecrawl_cdp::smart_actions::smart_find(page, &query)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&matches).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Click an element using natural language query. Returns JSON.
+    #[napi]
+    pub async fn smart_click(&self, query: String) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::smart_actions::smart_click(page, &query)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Fill an input using natural language query. Returns JSON.
+    #[napi]
+    pub async fn smart_fill(&self, query: String, value: String) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::smart_actions::smart_fill(page, &query, &value)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Annotated Screenshot ────────────────
+
+    /// Take an annotated screenshot with element labels. Returns JSON.
+    #[napi]
+    pub async fn annotated_screenshot(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::annotated::annotated_screenshot(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Adaptive retry with alternative strategies. Returns JSON.
+    #[napi]
+    pub async fn adaptive_retry(
+        &self,
+        action_js: String,
+        max_retries: Option<u32>,
+        strategies_json: Option<String>,
+    ) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let strategies: Vec<String> = if let Some(s) = strategies_json {
+            serde_json::from_str(&s).unwrap_or_default()
+        } else {
+            vec![]
+        };
+        let result = onecrawl_cdp::annotated::adaptive_retry(
+            page,
+            &action_js,
+            max_retries.unwrap_or(3) as usize,
+            &strategies,
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Pixel Diff ────────────────
+
+    /// Compare two images pixel-by-pixel. Returns JSON diff result.
+    #[napi]
+    pub async fn pixel_diff(
+        &self,
+        image_a_b64: String,
+        image_b_b64: String,
+        threshold: Option<f64>,
+        generate_diff: Option<bool>,
+    ) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::pixel_diff::pixel_diff(
+            page,
+            &image_a_b64,
+            &image_b_b64,
+            threshold.unwrap_or(0.1),
+            generate_diff.unwrap_or(true),
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── VRT (Visual Regression Testing) ────────────────
+
+    /// Run a VRT suite. Takes a JSON suite config. Returns JSON results.
+    #[napi]
+    pub async fn vrt_run(&self, suite_json: String) -> Result<String> {
+        let suite: onecrawl_cdp::VrtSuite = serde_json::from_str(&suite_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let errors = onecrawl_cdp::vrt::validate_suite(&suite);
+        if !errors.is_empty() {
+            return Err(Error::from_reason(format!("VRT validation: {}", errors.join(", "))));
+        }
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let mut results = Vec::new();
+        for test in &suite.tests {
+            let _ = onecrawl_cdp::navigation::goto(page, &test.url).await;
+            let data = onecrawl_cdp::screenshot::screenshot_full(page)
+                .await
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+            let result = onecrawl_cdp::vrt::compare_test(
+                test,
+                &data,
+                &suite.baseline_dir,
+                &suite.output_dir,
+                &suite.diff_dir,
+                suite.threshold,
+            );
+            results.push(result);
+        }
+        serde_json::to_string(&results).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Compare two images for VRT. Returns similarity score (0.0–1.0).
+    #[napi]
+    pub fn vrt_compare(&self, baseline: Buffer, current: Buffer) -> f64 {
+        onecrawl_cdp::vrt::compare_images(&baseline, &current)
+    }
+
+    /// Update VRT baseline for a test.
+    #[napi]
+    pub fn vrt_update(
+        &self,
+        baseline_dir: String,
+        test_name: String,
+        data: Buffer,
+    ) -> Result<String> {
+        let path = onecrawl_cdp::vrt::save_baseline(&baseline_dir, &test_name, &data)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(path.to_string_lossy().to_string())
+    }
+
+    // ──────────────── SPA & Framework Detection ────────────────
+
+    /// Detect virtual scrolling on the page. Returns JSON.
+    #[napi]
+    pub async fn virtual_scroll_detect(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::spa::detect_virtual_scroll(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Extract items from a virtual scroll container. Returns JSON array.
+    #[napi]
+    pub async fn virtual_scroll_extract(
+        &self,
+        container_selector: String,
+        item_selector: String,
+        max_items: Option<u32>,
+    ) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let items = onecrawl_cdp::spa::extract_virtual_scroll(
+            page,
+            &container_selector,
+            &item_selector,
+            max_items.unwrap_or(100) as usize,
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&items).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Wait for SPA hydration to complete.
+    #[napi]
+    pub async fn wait_hydration(&self, timeout_ms: Option<u32>) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::spa::wait_hydration(page, timeout_ms.unwrap_or(10000) as u64)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Wait for CSS animations to complete on an element.
+    #[napi]
+    pub async fn wait_animation(&self, selector: String, timeout_ms: Option<u32>) -> Result<bool> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::spa::wait_animations(page, &selector, timeout_ms.unwrap_or(5000) as u64)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Wait for network to become idle.
+    #[napi]
+    pub async fn wait_network_idle(
+        &self,
+        idle_ms: Option<u32>,
+        timeout_ms: Option<u32>,
+    ) -> Result<bool> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::spa::wait_network_idle(
+            page,
+            idle_ms.unwrap_or(500) as u64,
+            timeout_ms.unwrap_or(30000) as u64,
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Trigger lazy loading on elements matching a selector.
+    #[napi]
+    pub async fn trigger_lazy_load(&self, selector: String) -> Result<u32> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let count = onecrawl_cdp::spa::trigger_lazy_load(page, &selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(count as u32)
+    }
+
+    /// Inspect SPA state (React/Vue/Angular store). Returns JSON.
+    #[napi]
+    pub async fn state_inspect(&self, store_path: Option<String>) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::spa::state_inspect(page, store_path.as_deref())
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Track form wizard progress. Returns JSON.
+    #[napi]
+    pub async fn form_wizard_track(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::spa::form_wizard_track(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Wait for a dynamic import to resolve. Returns JSON.
+    #[napi]
+    pub async fn dynamic_import_wait(
+        &self,
+        module_pattern: String,
+        timeout_ms: Option<u32>,
+    ) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::spa::dynamic_import_wait(
+            page,
+            &module_pattern,
+            timeout_ms.unwrap_or(10000) as u64,
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Execute multiple actions in parallel. Returns JSON.
+    #[napi]
+    pub async fn parallel_exec(&self, actions_json: String) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let actions: Vec<String> = serde_json::from_str(&actions_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let result = onecrawl_cdp::spa::parallel_exec(page, &actions)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Harness (Long-running) ────────────────
+
+    /// Attempt to reconnect to CDP if the connection was lost.
+    #[napi]
+    pub async fn reconnect_cdp(&self, max_retries: Option<u32>) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::harness::reconnect_cdp(
+            page,
+            max_retries.unwrap_or(3) as usize,
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get info about open tabs for garbage collection. Returns JSON.
+    #[napi]
+    pub async fn gc_tabs(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::harness::gc_tabs_info(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get watchdog status for long-running sessions. Returns JSON.
+    #[napi]
+    pub async fn watchdog(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::harness::watchdog_status(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Workflow Engine ────────────────
+
+    /// Validate a workflow definition (JSON or YAML). Returns JSON with errors.
+    #[napi]
+    pub fn workflow_validate(&self, workflow_json: String) -> Result<String> {
+        let workflow: onecrawl_cdp::Workflow = serde_json::from_str(&workflow_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let errors = onecrawl_cdp::workflow::validate(&workflow);
+        Ok(serde_json::json!({ "valid": errors.is_empty(), "errors": errors }).to_string())
+    }
+
+    /// Execute a workflow. Takes JSON workflow definition. Returns JSON.
+    #[napi]
+    pub async fn workflow_execute(
+        &self,
+        workflow_json: String,
+    ) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let workflow: onecrawl_cdp::Workflow = serde_json::from_str(&workflow_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let result = onecrawl_cdp::workflow::execute_workflow(page, &workflow)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Load a workflow from a file (JSON or YAML). Returns JSON.
+    #[napi]
+    pub fn workflow_load(&self, path: String) -> Result<String> {
+        let workflow = onecrawl_cdp::workflow::load_from_file(&path)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&workflow).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Memory ────────────────
+
+    /// Store a value in agent memory.
+    #[napi]
+    pub async fn memory_store(
+        &self,
+        key: String,
+        value_json: String,
+        category: Option<String>,
+        domain: Option<String>,
+    ) -> Result<()> {
+        let value: serde_json::Value = serde_json::from_str(&value_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let cat = match category.as_deref() {
+            Some("page_visit") => onecrawl_cdp::MemoryCategory::PageVisit,
+            Some("element_pattern") => onecrawl_cdp::MemoryCategory::ElementPattern,
+            Some("domain_strategy") => onecrawl_cdp::MemoryCategory::DomainStrategy,
+            Some("retry") => onecrawl_cdp::MemoryCategory::RetryKnowledge,
+            Some("preference") => onecrawl_cdp::MemoryCategory::UserPreference,
+            Some("selector") => onecrawl_cdp::MemoryCategory::SelectorMapping,
+            Some("error") => onecrawl_cdp::MemoryCategory::ErrorPattern,
+            Some("custom") => onecrawl_cdp::MemoryCategory::Custom,
+            _ => onecrawl_cdp::MemoryCategory::Custom,
+        };
+        let mut guard = self.agent_memory.lock().await;
+        let mem = guard.get_or_insert_with(|| {
+            onecrawl_cdp::AgentMemory::new(std::path::Path::new("agent_memory.json"))
+        });
+        mem.store(key, value, cat, domain)
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Recall a value from agent memory. Returns JSON or null.
+    #[napi]
+    pub async fn memory_recall(&self, key: String) -> Result<Option<String>> {
+        let mut guard = self.agent_memory.lock().await;
+        let mem = guard.get_or_insert_with(|| {
+            onecrawl_cdp::AgentMemory::new(std::path::Path::new("agent_memory.json"))
+        });
+        match mem.recall(&key) {
+            Some(entry) => {
+                let s = serde_json::to_string(entry)
+                    .map_err(|e| Error::from_reason(e.to_string()))?;
+                Ok(Some(s))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Search agent memory. Returns JSON array of matches.
+    #[napi]
+    pub async fn memory_search(
+        &self,
+        query: String,
+        category: Option<String>,
+        domain: Option<String>,
+    ) -> Result<String> {
+        let cat = category.as_deref().map(|c| match c {
+            "page_visit" => onecrawl_cdp::MemoryCategory::PageVisit,
+            "element_pattern" => onecrawl_cdp::MemoryCategory::ElementPattern,
+            "domain_strategy" => onecrawl_cdp::MemoryCategory::DomainStrategy,
+            "retry" => onecrawl_cdp::MemoryCategory::RetryKnowledge,
+            "preference" => onecrawl_cdp::MemoryCategory::UserPreference,
+            "selector" => onecrawl_cdp::MemoryCategory::SelectorMapping,
+            "error" => onecrawl_cdp::MemoryCategory::ErrorPattern,
+            _ => onecrawl_cdp::MemoryCategory::Custom,
+        });
+        let guard = self.agent_memory.lock().await;
+        if let Some(mem) = guard.as_ref() {
+            let results = mem.search(&query, cat, domain.as_deref());
+            serde_json::to_string(&results).map_err(|e| Error::from_reason(e.to_string()))
+        } else {
+            Ok("[]".to_string())
+        }
+    }
+
+    /// Forget a key from agent memory. Returns true if found.
+    #[napi]
+    pub async fn memory_forget(&self, key: String) -> Result<bool> {
+        let mut guard = self.agent_memory.lock().await;
+        if let Some(mem) = guard.as_mut() {
+            Ok(mem.forget(&key))
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Get memory stats. Returns JSON.
+    #[napi]
+    pub async fn memory_stats(&self) -> Result<String> {
+        let guard = self.agent_memory.lock().await;
+        if let Some(mem) = guard.as_ref() {
+            let stats = mem.stats();
+            serde_json::to_string(&stats).map_err(|e| Error::from_reason(e.to_string()))
+        } else {
+            Ok(serde_json::json!({"total": 0}).to_string())
+        }
+    }
+
+    // ──────────────── Performance ────────────────
+
+    /// Run a performance audit. Returns JSON.
+    #[napi]
+    pub async fn perf_audit(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let js = onecrawl_cdp::perf_monitor::metrics_collection_js();
+        let result = onecrawl_cdp::page::evaluate_js(page, &js)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Check performance against a budget. Returns JSON.
+    #[napi]
+    pub async fn perf_budget(&self, budget_json: String) -> Result<String> {
+        let budget: onecrawl_cdp::PerfBudget = serde_json::from_str(&budget_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let js = onecrawl_cdp::perf_monitor::metrics_collection_js();
+        let metrics = onecrawl_cdp::page::evaluate_js(page, &js)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let snapshot: onecrawl_cdp::PerfSnapshot = serde_json::from_value(metrics)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let result = onecrawl_cdp::perf_monitor::check_budget(&snapshot, &budget);
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Compare two performance snapshots. Returns JSON.
+    #[napi]
+    pub fn perf_compare(
+        &self,
+        baseline_json: String,
+        current_json: String,
+        threshold_pct: Option<f64>,
+    ) -> Result<String> {
+        let baseline: onecrawl_cdp::PerfSnapshot = serde_json::from_str(&baseline_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let current: onecrawl_cdp::PerfSnapshot = serde_json::from_str(&current_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let regressions = onecrawl_cdp::perf_monitor::detect_regressions(
+            &baseline,
+            &current,
+            threshold_pct.unwrap_or(10.0),
+        );
+        serde_json::to_string(&regressions).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Stealth (new) ────────────────
+
+    /// Get a comprehensive stealth score for the current page. Returns JSON.
+    #[napi]
+    pub async fn stealth_score(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(page, r#"(()=>{const checks={webdriver:!navigator.webdriver,languages:navigator.languages?.length>0,plugins:navigator.plugins?.length>0,chrome:!!window.chrome,permissions:true};const score=Object.values(checks).filter(Boolean).length;return JSON.stringify({score,total:Object.keys(checks).length,pct:Math.round(score/Object.keys(checks).length*100),checks})})()"#)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Start behavior simulation (random mouse/scroll movements).
+    #[napi]
+    pub async fn behavior_sim(&self, interval_ms: Option<u32>) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::antibot::inject_behavior_simulation(
+            page,
+            interval_ms.unwrap_or(3000) as u64,
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Stop behavior simulation.
+    #[napi]
+    pub async fn behavior_stop(&self) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::antibot::stop_behavior_simulation(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Rotate stealth fingerprint and re-inject patches.
+    #[napi]
+    pub async fn stealth_rotate(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let fp = onecrawl_cdp::tls_fingerprint::random_fingerprint();
+        onecrawl_cdp::tls_fingerprint::apply_fingerprint(page, &fp)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        onecrawl_cdp::antibot::inject_stealth_full(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        onecrawl_cdp::antibot::inject_canvas_advanced(page, 2.0)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        onecrawl_cdp::antibot::inject_font_protection(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&fp).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Run a detection audit. Returns JSON with test results.
+    #[napi]
+    pub async fn detection_audit(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(page, r#"(()=>{const tests={webdriver:{pass:!navigator.webdriver,value:navigator.webdriver},chrome:{pass:!!window.chrome,value:!!window.chrome},plugins:{pass:navigator.plugins.length>0,value:navigator.plugins.length},languages:{pass:navigator.languages&&navigator.languages.length>0,value:navigator.languages},platform:{pass:!!navigator.platform,value:navigator.platform},hardwareConcurrency:{pass:navigator.hardwareConcurrency>1,value:navigator.hardwareConcurrency},deviceMemory:{pass:(navigator.deviceMemory||0)>0,value:navigator.deviceMemory}};const passed=Object.values(tests).filter(t=>t.pass).length;return JSON.stringify({tests,passed,total:Object.keys(tests).length,score:Math.round(passed/Object.keys(tests).length*100)})})()"#)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get current stealth status. Returns JSON.
+    #[napi]
+    pub async fn stealth_status(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(page, r#"(()=>{return JSON.stringify({webdriver:navigator.webdriver,userAgent:navigator.userAgent,platform:navigator.platform,languages:navigator.languages,hardwareConcurrency:navigator.hardwareConcurrency,deviceMemory:navigator.deviceMemory,plugins:navigator.plugins.length,chrome:!!window.chrome})})()"#)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Block WebRTC to prevent IP leaks.
+    #[napi]
+    pub async fn webrtc_block(&self) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::page::evaluate_js(page, "window.RTCPeerConnection=undefined;window.webkitRTCPeerConnection=undefined;window.mozRTCPeerConnection=undefined;")
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Spoof battery status.
+    #[napi]
+    pub async fn battery_spoof(&self, level: f64, charging: bool) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let js = format!(
+            "navigator.getBattery=()=>Promise.resolve({{charging:{},chargingTime:0,dischargingTime:Infinity,level:{},addEventListener:()=>{{}}}});",
+            charging, level
+        );
+        onecrawl_cdp::page::evaluate_js(page, &js)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Block sensor APIs (accelerometer, gyroscope).
+    #[napi]
+    pub async fn sensor_block(&self) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::page::evaluate_js(page, "window.Accelerometer=undefined;window.Gyroscope=undefined;window.LinearAccelerationSensor=undefined;window.AbsoluteOrientationSensor=undefined;")
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Apply advanced canvas fingerprint protection.
+    #[napi]
+    pub async fn canvas_advanced(&self, intensity: Option<f64>) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::antibot::inject_canvas_advanced(page, intensity.unwrap_or(1.0))
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Sync timezone with geolocation.
+    #[napi]
+    pub async fn timezone_sync(&self, timezone: String) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::antibot::inject_timezone_sync(page, &timezone)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Apply font fingerprint protection.
+    #[napi]
+    pub async fn font_protect(&self) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::antibot::inject_font_protection(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Data: WebSocket & SSE ────────────────
+
+    /// Connect to a WebSocket URL via the page. Returns JSON status.
+    #[napi]
+    pub async fn ws_connect(&self, url: String) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let js = format!(
+            "window.__onecrawl_ws=new WebSocket('{}');window.__onecrawl_ws.onmessage=e=>{{(window.__onecrawl_ws_msgs=window.__onecrawl_ws_msgs||[]).push(e.data)}};'connected'",
+            url.replace('\'', "\\'")
+        );
+        let result = onecrawl_cdp::page::evaluate_js(page, &js)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Send a message via the open WebSocket.
+    #[napi]
+    pub async fn ws_send(&self, message: String) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let js = format!(
+            "window.__onecrawl_ws?.send('{}');",
+            message.replace('\'', "\\'")
+        );
+        onecrawl_cdp::page::evaluate_js(page, &js)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Get received WebSocket messages. Returns JSON array.
+    #[napi]
+    pub async fn ws_messages(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(
+            page,
+            "JSON.stringify(window.__onecrawl_ws_msgs||[])",
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Close the WebSocket connection.
+    #[napi]
+    pub async fn ws_close(&self) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::page::evaluate_js(page, "window.__onecrawl_ws?.close();")
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Listen for Server-Sent Events. Returns JSON status.
+    #[napi]
+    pub async fn sse_listen(&self, url: String) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let js = format!(
+            "window.__onecrawl_sse=new EventSource('{}');window.__onecrawl_sse_msgs=[];window.__onecrawl_sse.onmessage=e=>window.__onecrawl_sse_msgs.push({{data:e.data,type:e.type,id:e.lastEventId}});'listening'",
+            url.replace('\'', "\\'")
+        );
+        let result = onecrawl_cdp::page::evaluate_js(page, &js)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get received SSE messages. Returns JSON array.
+    #[napi]
+    pub async fn sse_messages(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(
+            page,
+            "JSON.stringify(window.__onecrawl_sse_msgs||[])",
+        )
+        .await
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Network Intelligence ────────────────
+
+    /// Generate a TypeScript SDK from an API schema. Returns JSON.
+    #[napi]
+    pub fn net_sdk_typescript(&self, schema_json: String) -> Result<String> {
+        let schema: onecrawl_cdp::ApiSchema = serde_json::from_str(&schema_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let stub = onecrawl_cdp::network_intel::generate_typescript_sdk(&schema);
+        serde_json::to_string(&stub).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Generate a Python SDK from an API schema. Returns JSON.
+    #[napi]
+    pub fn net_sdk_python(&self, schema_json: String) -> Result<String> {
+        let schema: onecrawl_cdp::ApiSchema = serde_json::from_str(&schema_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let stub = onecrawl_cdp::network_intel::generate_python_sdk(&schema);
+        serde_json::to_string(&stub).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Generate a mock server config from API endpoints. Returns JSON.
+    #[napi]
+    pub fn net_mock(&self, endpoints_json: String, port: Option<u16>) -> Result<String> {
+        let endpoints: Vec<onecrawl_cdp::ApiEndpoint> =
+            serde_json::from_str(&endpoints_json)
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+        let config = onecrawl_cdp::network_intel::generate_mock_config(
+            &endpoints,
+            port.unwrap_or(8080),
+        );
+        serde_json::to_string(&config).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Generate a replay sequence from API endpoints. Returns JSON.
+    #[napi]
+    pub fn net_replay(&self, name: String, endpoints_json: String) -> Result<String> {
+        let endpoints: Vec<onecrawl_cdp::ApiEndpoint> =
+            serde_json::from_str(&endpoints_json)
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+        let sequence =
+            onecrawl_cdp::network_intel::generate_replay_sequence(&name, &endpoints);
+        serde_json::to_string(&sequence).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Checkpoint (Session Resume) ────────────────
+
+    /// Save a session checkpoint. Returns JSON.
+    #[napi]
+    pub async fn checkpoint_save(&self, path: String, name: String) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::harness::checkpoint_save(page, &path, &name)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Restore a session checkpoint. Returns JSON.
+    #[napi]
+    pub async fn checkpoint_restore(&self, path: String, name: String) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::harness::checkpoint_restore(page, &path, &name)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Human Simulation ────────────────
+
+    /// Simulate a human mouse move with Bezier curves.
+    #[napi]
+    pub async fn human_mouse(&self, x0: f64, y0: f64, x1: f64, y1: f64) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::human::mouse_move_bezier(page, x0, y0, x1, y1)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Simulate human scrolling with natural acceleration.
+    #[napi]
+    pub async fn human_scroll(&self, dx: i32, dy: i32) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::human::human_scroll(page, dx as i64, dy as i64)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Simulate a human click with pre/post delays.
+    #[napi]
+    pub async fn human_click(&self, selector: String) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::human::human_click(page, &selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Iframe (Agent) ────────────────
+
+    /// Click inside an iframe matching a pattern and selector.
+    #[napi]
+    pub async fn iframe_click_cdp(&self, pattern: String, selector: String) -> Result<()> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::iframe::human_click_in_frame(page, &pattern, &selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Form Filling (Smart) ────────────────
+
+    /// Auto-fill a form with a profile. Returns JSON fill result.
+    #[napi]
+    pub async fn form_auto_fill(
+        &self,
+        form_selector: String,
+        profile_json: String,
+    ) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let profile: std::collections::HashMap<String, String> =
+            serde_json::from_str(&profile_json)
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+        let result = onecrawl_cdp::form_filler::auto_fill(page, &form_selector, &profile)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Structured Data Extraction ────────────────
+
+    /// Extract feeds (RSS, Atom) from the page. Returns JSON.
+    #[napi]
+    pub async fn extract_feeds(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(page, r#"(()=>{const feeds=[];document.querySelectorAll('link[type*="rss"],link[type*="atom"],link[type*="feed"]').forEach(l=>feeds.push({type:l.type,href:l.href,title:l.title||''}));return JSON.stringify(feeds)})()"#)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Extract metadata from the page. Returns JSON.
+    #[napi]
+    pub async fn extract_metadata(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let result = onecrawl_cdp::page::evaluate_js(page, r#"(()=>{const meta={};document.querySelectorAll('meta').forEach(m=>{const n=m.getAttribute('name')||m.getAttribute('property');if(n)meta[n]=m.content});return JSON.stringify(meta)})()"#)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Authentication Flows ────────────────
+
+    /// Perform a form-based login. Returns JSON.
+    #[napi]
+    pub async fn auth_form_login(
+        &self,
+        username_selector: String,
+        password_selector: String,
+        submit_selector: String,
+        username: String,
+        password: String,
+    ) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        onecrawl_cdp::element::type_text(page, &username_selector, &username)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        onecrawl_cdp::element::type_text(page, &password_selector, &password)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        onecrawl_cdp::element::click(page, &submit_selector)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let url = onecrawl_cdp::navigation::get_url(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(serde_json::json!({ "logged_in": true, "url": url }).to_string())
+    }
+
+    // ──────────────── Crawl (new) ────────────────
+
+    /// Take a DOM snapshot for comparison. Returns JSON.
+    #[napi]
+    pub async fn dom_snapshot(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let snapshot = onecrawl_cdp::snapshot::take_snapshot(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&snapshot).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Compare two DOM snapshots. Returns JSON diff.
+    #[napi]
+    pub fn dom_compare(&self, before_json: String, after_json: String) -> Result<String> {
+        let before: onecrawl_cdp::DomSnapshot = serde_json::from_str(&before_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let after: onecrawl_cdp::DomSnapshot = serde_json::from_str(&after_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let diff = onecrawl_cdp::snapshot::compare_snapshots(&before, &after);
+        serde_json::to_string(&diff).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Fetch and parse a sitemap URL. Returns JSON.
+    #[napi]
+    pub async fn sitemap_parse(&self, url: String) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let resp = onecrawl_cdp::http_client::get(page, &url, None)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let sitemap = onecrawl_cdp::sitemap::parse_sitemap(&resp.body)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&sitemap).map_err(|e| Error::from_reason(e.to_string()))
     }
 }
 
