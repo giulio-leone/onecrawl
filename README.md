@@ -13,11 +13,11 @@ packages/onecrawl-rust/
 │   ├── onecrawl-storage/    # Encrypted key-value store (sled)
 │   ├── onecrawl-cdp/        # Chrome DevTools Protocol — 63 modules (chromiumoxide)
 │   ├── onecrawl-server/     # HTTP REST API with multi-instance management (axum)
-│   ├── onecrawl-cli-rs/     # Native CLI — 200+ commands (clap v4)
-│   └── onecrawl-mcp-rs/     # MCP server — 10 super-tools, 250 actions (rmcp)
+│   ├── onecrawl-cli-rs/     # Native CLI — ~143 commands (clap v4)
+│   └── onecrawl-mcp-rs/     # MCP server — 10 super-tools, ~355 actions (rmcp)
 ├── bindings/
-│   ├── napi/                # Node.js via NAPI-RS → @onecrawl/native (307 methods)
-│   └── python/              # Python via PyO3 → onecrawl
+│   ├── napi/                # Node.js via NAPI-RS → @onecrawl/native (614+ exports)
+│   └── python/              # Python via PyO3 → onecrawl (full MCP parity)
 └── Cargo.toml               # Workspace root
 ```
 
@@ -35,13 +35,14 @@ packages/onecrawl-rust/
 | **Emulation** | Device emulation, geolocation, timezone, media features, network throttling |
 | **Auth** | WebAuthn/Passkey virtual authenticator, cookie/session management, import/export |
 | **Crypto** | AES-256-GCM encryption, PKCE, TOTP, PBKDF2 key derivation |
-| **AI Agent** | Agent memory, workflow DSL, task planner, autonomous computer_use, visual regression testing, performance monitor |
+| **AI Agent** | Agent memory, workflow DSL, task planner, autonomous computer_use, visual regression testing, performance monitor, agent-in-the-loop pause/resume |
 | **Accessibility** | WCAG compliance auditing, ARIA tree, contrast checks, heading structure, keyboard traps, screen reader simulation |
 | **Real-Time** | WebSocket connect/intercept/send, Server-Sent Events, GraphQL subscriptions |
 | **Human Simulation** | Bézier mouse curves, natural typing with typos, human-like scrolling, behavior profiles |
 | **Service Workers** | SW register/unregister/update, Cache Storage management, push simulation, offline mode |
 | **Server** | Multi-instance Chrome, profiles, tabs, accessibility snapshots, action API |
-| **MCP** | 10 super-tools with 250 actions for AI agent orchestration |
+| **MCP** | 10 super-tools with ~355 actions for AI agent orchestration |
+| **Mobile** | Android automation (26 actions via ADB/UIAutomator2), iOS automation (19 actions via WebDriverAgent) |
 
 ## Installation
 
@@ -158,7 +159,7 @@ curl http://localhost:9867/instances/{id}/tabs/{tab}/text
 
 ## MCP Integration
 
-10 super-tools with 250 total actions, using action-based dispatch:
+10 super-tools with ~355 total actions, using action-based dispatch:
 
 ```json
 {"action": "goto", "params": {"url": "https://example.com"}}
@@ -181,16 +182,39 @@ curl http://localhost:9867/instances/{id}/tabs/{tab}/text
 
 ## Node.js Bindings
 
-`@onecrawl/native` exposes **307 methods** via NAPI-RS (direct FFI, no child process overhead):
+`@onecrawl/native` exposes **614+ exports** via NAPI-RS (direct FFI, no child process overhead, full MCP parity):
 
-| Class/Module | Methods | Description |
+| Class/Module | Exports | Description |
 |-------------|---------|-------------|
-| **NativeBrowser** | 290 | Full browser control: navigation, interaction, scraping, crawling, emulation, auth, network, performance |
+| **NativeBrowser** | 580+ | Full browser control: navigation, interaction, scraping, crawling, emulation, auth, network, performance, mobile, agent workflows |
 | **NativeStore** | 7 | Encrypted key-value store (sled) |
 | **Crypto** | 6 | AES-256-GCM, PKCE, TOTP, PBKDF2 |
 | **Parser** | 4 | A11y tree, CSS selector, text/link extraction |
+| **Android** | 26 | ADB/UIAutomator2: tap, swipe, scroll, text, app management, screenshot, recording |
 
 Features: TypeScript types (`index.d.ts`), async/await, Buffer support, 33 test files (3,995 lines), 8-platform cross-compilation.
+
+## Python Bindings
+
+`onecrawl` Python package via PyO3 with full MCP action parity:
+
+```python
+from onecrawl import Browser
+
+browser = Browser()
+browser.launch(headless=True, stealth=True)
+browser.goto("https://example.com")
+
+# Agent-in-the-loop: pause workflow for human/AI decision
+browser.workflow_pause(reason="Review page before proceeding")
+# ... agent or human resumes ...
+browser.workflow_resume()
+
+html = browser.content()
+browser.close()
+```
+
+Features: full MCP action coverage, Android/iOS automation, agent-in-the-loop support, async support.
 
 ## Development
 
@@ -214,11 +238,15 @@ cargo build --release -p onecrawl-cli-rs
 | Rust test suite | 427 tests |
 | Node.js test suite | 33 files, 3,995 lines |
 | CDP modules | 63 |
-| CLI commands | 200+ |
-| MCP super-tools | 10 (250 actions) |
-| NAPI methods | 307 |
+| CLI commands | ~143 |
+| MCP super-tools | 10 (~355 actions) |
+| NAPI exports | 614+ (full MCP parity) |
+| PyO3 bindings | Full MCP parity |
+| Android actions | 26 (ADB/UIAutomator2) |
+| iOS actions | 19 (WebDriverAgent) |
 | Handler modules | 10 (split architecture) |
-| Enum-dispatched actions | 250 (compile-time exhaustive) |
+| Enum-dispatched actions | ~355 (compile-time exhaustive) |
+| Security fixes | 54 issues across 14 review cycles |
 
 ## License
 
