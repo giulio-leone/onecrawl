@@ -64,10 +64,11 @@ impl ElementPort for Element {
 
     async fn query_selector_all(&self, selector: &str) -> Result<Vec<Box<dyn ElementPort>>> {
         let elements = self.find_elements(selector).await?;
-        Ok(elements
-            .into_iter()
-            .map(|el| Box::new(el) as Box<dyn ElementPort>)
-            .collect())
+        let mut result = Vec::with_capacity(elements.len());
+        for el in elements {
+            result.push(Box::new(el) as Box<dyn ElementPort>);
+        }
+        Ok(result)
     }
 
     async fn bounding_box(&self) -> Result<ElementRect> {

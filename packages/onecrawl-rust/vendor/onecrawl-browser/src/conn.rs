@@ -84,14 +84,14 @@ impl<T: EventMessage> Connection<T> {
     /// command
     pub fn submit_command(
         &mut self,
-        method: MethodId,
+        method: &MethodId,
         session_id: Option<SessionId>,
         params: serde_json::Value,
     ) -> serde_json::Result<CallId> {
         let id = self.next_call_id();
         let call = MethodCall {
             id,
-            method,
+            method: method.clone(),
             session_id: session_id.map(Into::into),
             params,
         };

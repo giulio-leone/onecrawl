@@ -95,7 +95,7 @@ impl Handler {
     ) -> Self {
         let discover = SetDiscoverTargetsParams::new(true);
         let _ = conn.submit_command(
-            discover.identifier(),
+            &discover.identifier(),
             None,
             serde_json::to_value(discover).unwrap(),
         );
@@ -224,7 +224,7 @@ impl Handler {
                                 self.on_target_created(event);
                                 let attach = AttachToTargetParams::new(target_id);
                                 let _ = self.conn.submit_command(
-                                    attach.identifier(),
+                                    &attach.identifier(),
                                     None,
                                     serde_json::to_value(attach).unwrap(),
                                 );
@@ -264,7 +264,7 @@ impl Handler {
     ) -> Result<()> {
         let call_id = self
             .conn
-            .submit_command(msg.method.clone(), msg.session_id, msg.params)?;
+            .submit_command(&msg.method, msg.session_id, msg.params)?;
         self.pending_commands.insert(
             call_id,
             (PendingRequest::ExternalCommand(msg.sender), msg.method, now),
@@ -279,7 +279,7 @@ impl Handler {
         now: Instant,
     ) -> Result<()> {
         let call_id = self.conn.submit_command(
-            req.method.clone(),
+            &req.method,
             req.session_id.map(Into::into),
             req.params,
         )?;
@@ -295,7 +295,7 @@ impl Handler {
         let method = msg.identifier();
         let call_id = self
             .conn
-            .submit_command(method.clone(), None, serde_json::to_value(msg).unwrap())
+            .submit_command(&method, None, serde_json::to_value(msg).unwrap())
             .unwrap();
 
         self.pending_commands
@@ -308,7 +308,7 @@ impl Handler {
         let call_id = self
             .conn
             .submit_command(
-                req.method.clone(),
+                &req.method,
                 req.session_id.map(Into::into),
                 req.params,
             )
@@ -325,7 +325,7 @@ impl Handler {
         let call_id = self
             .conn
             .submit_command(
-                method.clone(),
+                &method,
                 None,
                 serde_json::to_value(close_msg).unwrap(),
             )
@@ -373,7 +373,7 @@ impl Handler {
             Ok(_) => {
                 let method = params.identifier();
                 match serde_json::to_value(params) {
-                    Ok(params) => match self.conn.submit_command(method.clone(), None, params) {
+                    Ok(params) => match self.conn.submit_command(&method, None, params) {
                         Ok(call_id) => {
                             self.pending_commands.insert(
                                 call_id,
@@ -405,11 +405,11 @@ impl Handler {
             }
         }
         let CdpEventMessage { params, method, .. } = event;
-        match params.clone() {
-            CdpEvent::TargetTargetCreated(ev) => self.on_target_created(*ev),
-            CdpEvent::TargetAttachedToTarget(ev) => self.on_attached_to_target(ev),
-            CdpEvent::TargetTargetDestroyed(ev) => self.on_target_destroyed(ev),
-            CdpEvent::TargetDetachedFromTarget(ev) => self.on_detached_from_target(ev),
+        match &params {
+            CdpEvent::TargetTargetCreated(ev) => self.on_target_created((**ev).clone()),
+            CdpEvent::TargetAttachedToTarget(ev) => self.on_attached_to_target(ev.clone()),
+            CdpEvent::TargetTargetDestroyed(ev) => self.on_target_destroyed(ev.clone()),
+            CdpEvent::TargetDetachedFromTarget(ev) => self.on_detached_from_target(ev.clone()),
             _ => {}
         }
         onecrawl_protocol::consume_event!(match params {

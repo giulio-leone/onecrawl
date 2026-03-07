@@ -8,6 +8,7 @@ use super::{ElementPort, PagePort};
 
 #[async_trait]
 impl PagePort for Page {
+    #[inline]
     async fn goto_url(&self, url: &str) -> Result<()> {
         self.goto(url).await?;
         Ok(())
@@ -23,6 +24,7 @@ impl PagePort for Page {
         Ok(())
     }
 
+    #[inline]
     async fn current_url(&self) -> Result<Option<String>> {
         self.url().await
     }
@@ -47,12 +49,14 @@ impl PagePort for Page {
 
     async fn query_selector_all(&self, selector: &str) -> Result<Vec<Box<dyn ElementPort>>> {
         let elements = self.find_elements(selector).await?;
-        Ok(elements
-            .into_iter()
-            .map(|el| Box::new(el) as Box<dyn ElementPort>)
-            .collect())
+        let mut result = Vec::with_capacity(elements.len());
+        for el in elements {
+            result.push(Box::new(el) as Box<dyn ElementPort>);
+        }
+        Ok(result)
     }
 
+    #[inline]
     async fn evaluate_expression(&self, expression: &str) -> Result<serde_json::Value> {
         let result = Page::evaluate_expression(self, expression).await?;
         Ok(result.value().cloned().unwrap_or(serde_json::Value::Null))
