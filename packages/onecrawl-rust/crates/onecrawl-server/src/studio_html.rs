@@ -161,7 +161,7 @@ pub fn studio_html() -> &'static str {
     function renderSteps() {
         var container = document.getElementById('workflow-steps');
         container.innerHTML = steps.map(function(step, i) {
-            var meta = STEP_TYPES[step.action.type] || { icon: '?', label: step.action.type };
+            var meta = STEP_TYPES[step.action.type] || { icon: '?', label: escapeHtml(step.action.type) };
             var detail = step.action.url || step.action.selector || step.action.query || step.action.text || (step.action.script ? step.action.script.substring(0,40) : '') || step.action.message || '';
             return '<div class="step-block' + (i === selectedStep ? ' selected' : '') + '" onclick="selectStep(' + i + ')" draggable="true" ondragstart="dragReorder(event,' + i + ')" ondragover="event.preventDefault()" ondrop="dropReorder(event,' + i + ')">' +
                 '<div class="step-header"><span class="step-number">#' + (i+1) + '</span><span class="step-type">' + meta.icon + ' ' + meta.label + '</span></div>' +
