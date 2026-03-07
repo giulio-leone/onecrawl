@@ -13,6 +13,7 @@ mod computer;
 mod crawl;
 mod daemon;
 mod dom;
+mod durable;
 mod harness;
 mod interaction;
 mod ios;
@@ -33,6 +34,7 @@ pub(crate) use computer::ComputerCliAction;
 pub(crate) use crawl::{PipelineAction, StructuredAction, AdaptiveAction, SpiderAction, RobotsAction, GraphAction};
 pub(crate) use daemon::DaemonAction;
 pub(crate) use dom::{FingerprintAction, EmulateAction, DomAction, IframeAction, AdvancedEmulationAction, WindowAction, SetAction};
+pub(crate) use durable::DurableAction;
 pub(crate) use harness::HarnessAction;
 pub(crate) use interaction::{SelectAction, NavAction, KeyboardAction, MouseAction, FindAction};
 pub(crate) use ios::IosAction;
@@ -843,6 +845,13 @@ pub(crate) enum Commands {
     Daemon {
         #[command(subcommand)]
         action: DaemonAction,
+    },
+
+    // ── Durable Sessions ───────────────────────────────────────
+    /// Crash-resilient browser sessions with auto-checkpoint and reconnect
+    Durable {
+        #[command(subcommand)]
+        action: DurableAction,
     },
 
     // ── Skills ──────────────────────────────────────────────────

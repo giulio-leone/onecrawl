@@ -446,6 +446,17 @@ action_enum!(PerfAction, "perf", [
     PixelDiff => "pixel_diff",
 ]);
 
+action_enum!(DurableAction, "durable", [
+    Start => "start",
+    Stop => "stop",
+    Checkpoint => "checkpoint",
+    Restore => "restore",
+    Status => "status",
+    List => "list",
+    Delete => "delete",
+    Config => "config",
+]);
+
 // ──────────────── Tests ─────────────────
 
 #[cfg(test)]

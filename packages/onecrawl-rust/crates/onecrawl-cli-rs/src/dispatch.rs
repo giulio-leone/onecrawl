@@ -1072,6 +1072,38 @@ pub(crate) async fn dispatch(command: Commands) {
             }
         },
 
+        // ── Durable Sessions ──────────────────────────────────────────
+        Commands::Durable { action } => match action {
+            DurableAction::Start {
+                name,
+                checkpoint_interval,
+                persist_state,
+                auto_reconnect,
+                max_uptime,
+                on_crash,
+            } => {
+                commands::browser::durable_start(
+                    &name,
+                    &checkpoint_interval,
+                    persist_state.as_deref(),
+                    auto_reconnect,
+                    max_uptime.as_deref(),
+                    &on_crash,
+                )
+                .await
+            }
+            DurableAction::Stop { name } => commands::browser::durable_stop(&name).await,
+            DurableAction::Checkpoint { name } => {
+                commands::browser::durable_checkpoint(&name).await
+            }
+            DurableAction::Restore { name } => commands::browser::durable_restore(&name).await,
+            DurableAction::Status { name } => {
+                commands::browser::durable_status(name.as_deref()).await
+            }
+            DurableAction::List => commands::browser::durable_list().await,
+            DurableAction::Delete { name } => commands::browser::durable_delete(&name).await,
+        },
+
         // ── Skills ────────────────────────────────────────────────
         Commands::Skills { action } => match action {
             SkillsAction::List => commands::skills::skills_list(),

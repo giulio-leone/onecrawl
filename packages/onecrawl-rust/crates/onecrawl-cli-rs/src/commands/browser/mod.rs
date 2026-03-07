@@ -7,6 +7,7 @@ mod content;
 mod cookies;
 mod crawl;
 mod dom;
+mod durable_cli;
 mod emulation;
 mod helpers;
 mod interact;
@@ -396,4 +397,13 @@ pub use workflow_cli::{
     workflow_validate_cli,
     workflow_resume_cli,
     agent_decide_cli,
+};
+pub use durable_cli::{
+    durable_start,
+    durable_stop,
+    durable_checkpoint,
+    durable_restore,
+    durable_status,
+    durable_list,
+    durable_delete,
 };

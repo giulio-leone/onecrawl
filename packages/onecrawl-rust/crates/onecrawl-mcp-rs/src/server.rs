@@ -1735,6 +1735,54 @@ impl OneCrawlMcp {
         }
     }
 
+    #[tool(
+        name = "durable",
+        description = "Durable browser sessions — crash-resilient with auto-checkpoint, reconnect, and state persistence.\n\nActions:\n- start {name, checkpoint_interval_secs?, state_path?, auto_reconnect?, max_reconnect_attempts?, on_crash?, max_uptime_secs?, persist_auth?} — Start a new durable session\n- stop {name} — Gracefully stop a durable session\n- checkpoint {name} — Force an immediate checkpoint\n- restore {name} — Restore from a saved checkpoint\n- status {name?} — Get status of a durable session\n- list — List all saved durable sessions\n- delete {name} — Delete a saved session state\n- config {name, checkpoint_interval_secs?, auto_reconnect?, on_crash?, max_uptime_secs?} — Update config of a session"
+    )]
+    async fn tool_durable(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        self.enforce_safety("durable", &action).await?;
+        let action = DurableAction::parse(&action)?;
+        match action {
+            DurableAction::Start => {
+                let params: DurableStartParams = parse_params(v, "durable_start")?;
+                self.durable_start(params).await
+            }
+            DurableAction::Stop => {
+                let params: DurableStopParams = parse_params(v, "durable_stop")?;
+                self.durable_stop(params).await
+            }
+            DurableAction::Checkpoint => {
+                let params: DurableCheckpointParams = parse_params(v, "durable_checkpoint")?;
+                self.durable_checkpoint(params).await
+            }
+            DurableAction::Restore => {
+                let params: DurableRestoreParams = parse_params(v, "durable_restore")?;
+                self.durable_restore(params).await
+            }
+            DurableAction::Status => {
+                let params: DurableStatusParams = parse_params(v, "durable_status")?;
+                self.durable_status(params).await
+            }
+            DurableAction::List => {
+                let params: DurableListParams = parse_params(v, "durable_list")?;
+                self.durable_list(params).await
+            }
+            DurableAction::Delete => {
+                let params: DurableDeleteParams = parse_params(v, "durable_delete")?;
+                self.durable_delete(params).await
+            }
+            DurableAction::Config => {
+                let params: DurableConfigParams = parse_params(v, "durable_config")?;
+                self.durable_config(params).await
+            }
+        }
+    }
+
     // ── Public CLI bridge ────────────────────────────────────────────
 
     /// Create an `OneCrawlMcp` reusing an existing browser session.

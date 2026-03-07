@@ -10,3 +10,4 @@ mod computer;
 mod memory;
 mod automate;
 mod perf;
+mod durable;

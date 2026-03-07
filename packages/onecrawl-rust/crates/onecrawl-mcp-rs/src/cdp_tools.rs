@@ -2865,3 +2865,72 @@ pub struct ExtractCompactParams {
 
 #[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
 pub struct StealthStatusParams {}
+
+// ──────────────── Durable Session params ─────────────────
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct DurableStartParams {
+    #[schemars(description = "Unique name for the durable session")]
+    pub name: String,
+    #[schemars(description = "Checkpoint interval in seconds (default 30)")]
+    pub checkpoint_interval_secs: Option<u64>,
+    #[schemars(description = "State directory path (default ~/.onecrawl/states/)")]
+    pub state_path: Option<String>,
+    #[schemars(description = "Enable auto-reconnect on crash (default true)")]
+    pub auto_reconnect: Option<bool>,
+    #[schemars(description = "Maximum reconnect attempts (default 10)")]
+    pub max_reconnect_attempts: Option<u32>,
+    #[schemars(description = "Crash policy: restart, stop, or notify (default restart)")]
+    pub on_crash: Option<String>,
+    #[schemars(description = "Maximum uptime in seconds (omit for unlimited)")]
+    pub max_uptime_secs: Option<u64>,
+    #[schemars(description = "Persist auth state (cookies, storage) (default true)")]
+    pub persist_auth: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct DurableStopParams {
+    #[schemars(description = "Name of the durable session to stop")]
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct DurableCheckpointParams {
+    #[schemars(description = "Name of the durable session to checkpoint")]
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct DurableRestoreParams {
+    #[schemars(description = "Name of the durable session to restore")]
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct DurableStatusParams {
+    #[schemars(description = "Name of the durable session (omit to get default)")]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct DurableListParams {}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct DurableDeleteParams {
+    #[schemars(description = "Name of the durable session to delete")]
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct DurableConfigParams {
+    #[schemars(description = "Name of the durable session")]
+    pub name: String,
+    #[schemars(description = "New checkpoint interval in seconds")]
+    pub checkpoint_interval_secs: Option<u64>,
+    #[schemars(description = "Enable/disable auto-reconnect")]
+    pub auto_reconnect: Option<bool>,
+    #[schemars(description = "New crash policy: restart, stop, or notify")]
+    pub on_crash: Option<String>,
+    #[schemars(description = "New max uptime in seconds (null for unlimited)")]
+    pub max_uptime_secs: Option<u64>,
+}

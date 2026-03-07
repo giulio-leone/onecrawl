@@ -25,6 +25,7 @@ pub mod data_pipeline;
 pub mod dialog;
 pub mod dom_nav;
 pub mod dom_observer;
+pub mod durable;
 pub mod domain_blocker;
 pub mod downloads;
 pub mod element;
@@ -178,6 +179,8 @@ pub use structured_data::{
 };
 pub use tabs::TabInfo;
 pub use tls_fingerprint::BrowserFingerprint;
+
+pub use durable::{CrashPolicy, DurableConfig, DurableSession, DurableState, DurableStatus, parse_duration};
 
 // Re-export chromiumoxide::Page for downstream consumers
 pub use chromiumoxide::Page;
