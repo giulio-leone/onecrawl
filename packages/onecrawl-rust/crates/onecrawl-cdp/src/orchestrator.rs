@@ -475,16 +475,53 @@ impl Orchestrator {
     }
 
     /// Execute a single action on a device handle.
-    #[allow(clippy::too_many_lines)]
     async fn run_action(
         &self,
         handle: &DeviceHandle,
         action: &OrchAction,
     ) -> std::result::Result<Option<serde_json::Value>, String> {
-        match (&handle.config.device_type, action) {
-            // ════════════════════════ Browser ════════════════════════
+        // Common actions supported on all device types
+        match action {
+            OrchAction::Sleep { ms } => {
+                tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
+                return Ok(None);
+            }
+            OrchAction::Log { message } => {
+                let msg = self.interpolate(message);
+                tracing::info!("[{}] {}", handle.config.id, msg);
+                return Ok(None);
+            }
+            OrchAction::SetVariable { name: _, value } => {
+                let val = self.interpolate(value);
+                return Ok(Some(serde_json::Value::String(val)));
+            }
+            OrchAction::Assert { condition, value } => {
+                let cond = self.interpolate(condition);
+                let val = self.interpolate(value);
+                return if cond == val {
+                    Ok(None)
+                } else {
+                    Err(format!("assertion failed: {cond} != {val}"))
+                };
+            }
+            _ => {}
+        }
 
-            (DeviceType::Browser, OrchAction::Navigate { url }) => {
+        match &handle.config.device_type {
+            DeviceType::Browser => self.run_browser_action(handle, action).await,
+            DeviceType::Android => self.run_android_action(handle, action).await,
+            DeviceType::Ios => self.run_ios_action(handle, action).await,
+        }
+    }
+
+    /// Browser-specific action dispatch.
+    async fn run_browser_action(
+        &self,
+        handle: &DeviceHandle,
+        action: &OrchAction,
+    ) -> std::result::Result<Option<serde_json::Value>, String> {
+        match action {
+            OrchAction::Navigate { url } => {
                 let page = browser_page(handle)?;
                 let url = self.interpolate(url);
                 page.goto(&url)
@@ -493,7 +530,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Browser, OrchAction::Click { selector, x, y, text }) => {
+            OrchAction::Click { selector, x, y, text } => {
                 let page = browser_page(handle)?;
                 if let Some(sel) = selector {
                     let sel = self.interpolate(sel);
@@ -526,7 +563,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Browser, OrchAction::Type { selector, text, .. }) => {
+            OrchAction::Type { selector, text, .. } => {
                 let page = browser_page(handle)?;
                 let text = self.interpolate(text);
                 if let Some(sel) = selector {
@@ -543,7 +580,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Browser, OrchAction::SmartClick { query }) => {
+            OrchAction::SmartClick { query } => {
                 let page = browser_page(handle)?;
                 let query = self.interpolate(query);
                 let escaped = serde_json::to_string(&query).unwrap_or_default();
@@ -567,7 +604,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Browser, OrchAction::SmartFill { query, value }) => {
+            OrchAction::SmartFill { query, value } => {
                 let page = browser_page(handle)?;
                 let query = self.interpolate(query);
                 let value = self.interpolate(value);
@@ -599,7 +636,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Browser, OrchAction::Evaluate { script }) => {
+            OrchAction::Evaluate { script } => {
                 let page = browser_page(handle)?;
                 let script = self.interpolate(script);
                 let result = page
@@ -609,7 +646,7 @@ impl Orchestrator {
                 Ok(result.value().cloned())
             }
 
-            (DeviceType::Browser, OrchAction::Screenshot { path }) => {
+            OrchAction::Screenshot { path } => {
                 let page = browser_page(handle)?;
                 let params = chromiumoxide::page::ScreenshotParams::builder().build();
                 let bytes = page
@@ -626,7 +663,7 @@ impl Orchestrator {
                 }
             }
 
-            (DeviceType::Browser, OrchAction::Wait { selector, timeout_ms }) => {
+            OrchAction::Wait { selector, timeout_ms } => {
                 if let Some(sel) = selector {
                     let page = browser_page(handle)?;
                     let sel = self.interpolate(sel);
@@ -649,7 +686,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Browser, OrchAction::Back) => {
+            OrchAction::Back => {
                 let page = browser_page(handle)?;
                 page.evaluate("window.history.back()")
                     .await
@@ -657,7 +694,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Browser, OrchAction::Extract { selector, attribute }) => {
+            OrchAction::Extract { selector, attribute } => {
                 let page = browser_page(handle)?;
                 let sel = self.interpolate(selector);
                 let element = page
@@ -681,9 +718,22 @@ impl Orchestrator {
                 Ok(Some(serde_json::Value::String(value)))
             }
 
-            // ════════════════════════ Android ════════════════════════
+            _ => Err(format!(
+                "{} not supported on {:?}",
+                action_type_name(action),
+                DeviceType::Browser,
+            )),
+        }
+    }
 
-            (DeviceType::Android, OrchAction::Navigate { url }) => {
+    /// Android-specific action dispatch.
+    async fn run_android_action(
+        &self,
+        handle: &DeviceHandle,
+        action: &OrchAction,
+    ) -> std::result::Result<Option<serde_json::Value>, String> {
+        match action {
+            OrchAction::Navigate { url } => {
                 let client = android_client(handle)?;
                 let url = self.interpolate(url);
                 client
@@ -693,7 +743,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Android, OrchAction::Click { x, y, text, .. }) => {
+            OrchAction::Click { x, y, text, .. } => {
                 let client = android_client(handle)?;
                 if let (Some(cx), Some(cy)) = (x, y) {
                     client
@@ -716,7 +766,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Android, OrchAction::Type { text, .. }) => {
+            OrchAction::Type { text, .. } => {
                 let client = android_client(handle)?;
                 let text = self.interpolate(text);
                 client
@@ -726,7 +776,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Android, OrchAction::Screenshot { path }) => {
+            OrchAction::Screenshot { path } => {
                 let client = android_client(handle)?;
                 let base64_data = client
                     .screenshot()
@@ -747,13 +797,13 @@ impl Orchestrator {
                 }
             }
 
-            (DeviceType::Android, OrchAction::Swipe {
+            OrchAction::Swipe {
                 start_x,
                 start_y,
                 end_x,
                 end_y,
                 duration_ms,
-            }) => {
+            } => {
                 let client = android_client(handle)?;
                 let dur = duration_ms.unwrap_or(300);
                 client
@@ -763,7 +813,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Android, OrchAction::Back) => {
+            OrchAction::Back => {
                 let client = android_client(handle)?;
                 client
                     .back()
@@ -772,7 +822,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Android, OrchAction::LaunchApp { package, .. }) => {
+            OrchAction::LaunchApp { package, .. } => {
                 let client = android_client(handle)?;
                 let pkg = package
                     .as_ref()
@@ -785,15 +835,28 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Android, OrchAction::Wait { timeout_ms, .. }) => {
+            OrchAction::Wait { timeout_ms, .. } => {
                 let ms = timeout_ms.unwrap_or(1000);
                 tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
                 Ok(None)
             }
 
-            // ════════════════════════ iOS ════════════════════════
+            _ => Err(format!(
+                "{} not supported on {:?}",
+                action_type_name(action),
+                DeviceType::Android,
+            )),
+        }
+    }
 
-            (DeviceType::Ios, OrchAction::Navigate { url }) => {
+    /// iOS-specific action dispatch.
+    async fn run_ios_action(
+        &self,
+        handle: &DeviceHandle,
+        action: &OrchAction,
+    ) -> std::result::Result<Option<serde_json::Value>, String> {
+        match action {
+            OrchAction::Navigate { url } => {
                 let client = ios_client(handle)?;
                 let url = self.interpolate(url);
                 client
@@ -803,7 +866,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Ios, OrchAction::Click { x, y, text, .. }) => {
+            OrchAction::Click { x, y, text, .. } => {
                 let client = ios_client(handle)?;
                 if let (Some(cx), Some(cy)) = (x, y) {
                     client
@@ -826,7 +889,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Ios, OrchAction::Type { selector, text, .. }) => {
+            OrchAction::Type { selector, text, .. } => {
                 let client = ios_client(handle)?;
                 let text = self.interpolate(text);
                 if let Some(sel) = selector {
@@ -845,7 +908,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Ios, OrchAction::Screenshot { path }) => {
+            OrchAction::Screenshot { path } => {
                 let client = ios_client(handle)?;
                 let bytes = client
                     .screenshot()
@@ -863,13 +926,13 @@ impl Orchestrator {
                 }
             }
 
-            (DeviceType::Ios, OrchAction::Swipe {
+            OrchAction::Swipe {
                 start_x,
                 start_y,
                 end_x,
                 end_y,
                 duration_ms,
-            }) => {
+            } => {
                 let client = ios_client(handle)?;
                 let dur_secs = duration_ms.unwrap_or(300) as f64 / 1000.0;
                 client
@@ -879,7 +942,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Ios, OrchAction::Back) => {
+            OrchAction::Back => {
                 let client = ios_client(handle)?;
                 client
                     .execute_script(
@@ -891,7 +954,7 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Ios, OrchAction::LaunchApp { bundle_id, .. }) => {
+            OrchAction::LaunchApp { bundle_id, .. } => {
                 let client = ios_client(handle)?;
                 let bid = bundle_id
                     .as_ref()
@@ -904,45 +967,16 @@ impl Orchestrator {
                 Ok(None)
             }
 
-            (DeviceType::Ios, OrchAction::Wait { timeout_ms, .. }) => {
+            OrchAction::Wait { timeout_ms, .. } => {
                 let ms = timeout_ms.unwrap_or(1000);
                 tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
                 Ok(None)
             }
 
-            // ════════════════════════ Common (all device types) ════════════════════════
-
-            (_, OrchAction::Sleep { ms }) => {
-                tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
-                Ok(None)
-            }
-
-            (_, OrchAction::Log { message }) => {
-                let msg = self.interpolate(message);
-                tracing::info!("[{}] {}", handle.config.id, msg);
-                Ok(None)
-            }
-
-            (_, OrchAction::SetVariable { name: _, value }) => {
-                let val = self.interpolate(value);
-                Ok(Some(serde_json::Value::String(val)))
-            }
-
-            (_, OrchAction::Assert { condition, value }) => {
-                let cond = self.interpolate(condition);
-                let val = self.interpolate(value);
-                if cond == val {
-                    Ok(None)
-                } else {
-                    Err(format!("assertion failed: {cond} != {val}"))
-                }
-            }
-
-            // ── Unsupported combinations ──
-            (device_type, _) => Err(format!(
+            _ => Err(format!(
                 "{} not supported on {:?}",
                 action_type_name(action),
-                device_type,
+                DeviceType::Ios,
             )),
         }
     }

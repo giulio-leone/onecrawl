@@ -215,54 +215,21 @@ impl AgentAuto {
     pub async fn execute(&mut self, page: &Page) -> Result<AgentAutoResult> {
         self.start_time = Instant::now();
 
-        // Build safety policy
         let policy = SafetyPolicy {
             allowed_domains: self.config.allowed_domains.clone(),
             blocked_domains: self.config.blocked_domains.clone(),
             ..SafetyPolicy::default()
         };
         let mut safety = SafetyState::new(policy);
-
-        // Optionally load agent memory
-        let mut memory = if self.config.use_memory {
-            let mem_path = self.config
-                .memory_path
-                .clone()
-                .unwrap_or_else(|| "/tmp/onecrawl-agent-memory.json".into());
-            AgentMemory::load(std::path::PathBuf::from(&mem_path)).unwrap_or_else(|_| {
-                AgentMemory::new(&mem_path)
-            })
-        } else {
-            AgentMemory::new("/dev/null")
-        };
-
+        let mut memory = self.load_memory();
         let mut errors: Vec<String> = Vec::new();
         let total = self.steps.len();
 
         for idx in 0..total {
-            // Cost cap check
-            if let Some(cap) = self.config.max_cost_cents {
-                if self.cost_cents >= cap {
-                    if self.config.verbose {
-                        tracing::warn!("cost cap reached: {} cents", self.cost_cents);
-                    }
-                    self.maybe_save_state(page, idx).await;
-                    break;
-                }
+            if self.check_should_stop(page, idx).await {
+                break;
             }
 
-            // Timeout check
-            if let Some(timeout) = self.config.timeout_secs {
-                if self.start_time.elapsed().as_secs() >= timeout {
-                    if self.config.verbose {
-                        tracing::warn!("timeout reached: {} secs", timeout);
-                    }
-                    self.maybe_save_state(page, idx).await;
-                    break;
-                }
-            }
-
-            // Skip already completed/failed steps (resume)
             if self.steps[idx].status == StepStatus::Completed
                 || self.steps[idx].status == StepStatus::Skipped
             {
@@ -271,124 +238,161 @@ impl AgentAuto {
 
             self.steps[idx].status = StepStatus::Running;
 
-            // Check safety before navigation actions
-            if self.steps[idx].action_type == "navigate" {
-                if let Some(ref url) = self.steps[idx].target {
-                    match safety.check_url(url) {
-                        SafetyCheck::Denied(reason) => {
-                            self.steps[idx].status = StepStatus::Failed;
-                            self.steps[idx].error = Some(format!("safety: {reason}"));
-                            errors.push(format!("step {idx}: safety denied: {reason}"));
-                            continue;
-                        }
-                        SafetyCheck::RequiresConfirmation(msg) => {
-                            self.steps[idx].status = StepStatus::Skipped;
-                            self.steps[idx].error = Some(format!("requires confirmation: {msg}"));
-                            continue;
-                        }
-                        SafetyCheck::Allowed => {}
-                    }
-                }
+            if !self.check_safety(idx, &mut safety, &mut errors) {
+                continue;
             }
-
             safety.record_action();
 
             let step_start = Instant::now();
-            let max_retries: u32 = 3;
-            let mut attempt = 0u32;
-            let mut success = false;
+            let success = self.execute_step_with_retries(idx, page, &mut memory).await;
 
-            while attempt <= max_retries {
-                match self.execute_step(idx, page).await {
-                    Ok(()) => {
-                        success = true;
-                        break;
-                    }
-                    Err(e) => {
-                        attempt += 1;
-                        self.steps[idx].retries = attempt;
-                        if attempt <= max_retries {
-                            self.steps[idx].status = StepStatus::Retrying;
-                            if self.config.verbose {
-                                tracing::info!(
-                                    "step {} retry {}/{}: {}",
-                                    idx,
-                                    attempt,
-                                    max_retries,
-                                    e
-                                );
-                            }
-                            // Check memory for alternative strategies
-                            if self.config.use_memory {
-                                let alt = memory.search(
-                                    &self.steps[idx].description,
-                                    Some(MemoryCategory::RetryKnowledge),
-                                    None,
-                                );
-                                if !alt.is_empty() && self.config.verbose {
-                                    tracing::info!(
-                                        "found {} memory entries for retry",
-                                        alt.len()
-                                    );
-                                }
-                            }
-                            // Brief pause before retry
-                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                        } else {
-                            self.steps[idx].status = StepStatus::Failed;
-                            self.steps[idx].error =
-                                Some(format!("{e} (after {max_retries} retries)"));
-                            errors.push(format!("step {idx}: {e}"));
-                        }
-                    }
-                }
-            }
-
-            if success {
-                self.steps[idx].status = StepStatus::Completed;
+            if !success {
+                errors.push(format!("step {idx}: {}", self.steps[idx].error.as_deref().unwrap_or("failed")));
             }
             self.steps[idx].duration_ms = step_start.elapsed().as_millis() as u64;
-
-            // Track cost: 1 cent per step (rough estimate)
-            self.cost_cents += 1;
-
-            // Screenshot per step if requested
-            if self.config.screenshot_every_step {
-                if let Ok(path) = self.capture_step_screenshot(page, idx).await {
-                    self.steps[idx].screenshot_path = Some(path);
-                }
-            }
-
-            // Store to memory
-            if self.config.use_memory && success {
-                let key = format!("auto_step_{}_{}", idx, self.steps[idx].action_type);
-                let val = serde_json::json!({
-                    "step": idx,
-                    "action": self.steps[idx].action_type,
-                    "description": self.steps[idx].description,
-                    "success": true,
-                    "duration_ms": self.steps[idx].duration_ms,
-                });
-                if memory
-                    .store(key, val, MemoryCategory::PageVisit, None)
-                    .is_ok()
-                {
-                    self.memory_entries_added += 1;
-                }
-            }
-
-            // Periodic state save
-            if self.config.save_state.is_some() {
-                self.maybe_save_state(page, idx + 1).await;
-            }
+            self.post_step_bookkeeping(idx, success, page, &mut memory).await;
         }
 
-        // Save memory
         if self.config.use_memory {
             let _ = memory.save();
         }
 
-        // Write output file
+        self.build_result(errors)
+    }
+
+    /// Check cost cap and timeout; returns true if the agent should stop.
+    async fn check_should_stop(&self, page: &Page, idx: usize) -> bool {
+        if let Some(cap) = self.config.max_cost_cents {
+            if self.cost_cents >= cap {
+                if self.config.verbose {
+                    tracing::warn!("cost cap reached: {} cents", self.cost_cents);
+                }
+                self.maybe_save_state(page, idx).await;
+                return true;
+            }
+        }
+        if let Some(timeout) = self.config.timeout_secs {
+            if self.start_time.elapsed().as_secs() >= timeout {
+                if self.config.verbose {
+                    tracing::warn!("timeout reached: {} secs", timeout);
+                }
+                self.maybe_save_state(page, idx).await;
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Validate navigation safety; returns false if step should be skipped.
+    fn check_safety(&mut self, idx: usize, safety: &mut SafetyState, errors: &mut Vec<String>) -> bool {
+        if self.steps[idx].action_type != "navigate" {
+            return true;
+        }
+        let url = match self.steps[idx].target {
+            Some(ref u) => u.clone(),
+            None => return true,
+        };
+        match safety.check_url(&url) {
+            SafetyCheck::Denied(reason) => {
+                self.steps[idx].status = StepStatus::Failed;
+                self.steps[idx].error = Some(format!("safety: {reason}"));
+                errors.push(format!("step {idx}: safety denied: {reason}"));
+                false
+            }
+            SafetyCheck::RequiresConfirmation(msg) => {
+                self.steps[idx].status = StepStatus::Skipped;
+                self.steps[idx].error = Some(format!("requires confirmation: {msg}"));
+                false
+            }
+            SafetyCheck::Allowed => true,
+        }
+    }
+
+    /// Execute a step with retry logic.
+    async fn execute_step_with_retries(&mut self, idx: usize, page: &Page, memory: &mut AgentMemory) -> bool {
+        let max_retries: u32 = 3;
+        let mut attempt = 0u32;
+
+        while attempt <= max_retries {
+            match self.execute_step(idx, page).await {
+                Ok(()) => {
+                    self.steps[idx].status = StepStatus::Completed;
+                    return true;
+                }
+                Err(e) => {
+                    attempt += 1;
+                    self.steps[idx].retries = attempt;
+                    if attempt <= max_retries {
+                        self.steps[idx].status = StepStatus::Retrying;
+                        if self.config.verbose {
+                            tracing::info!("step {} retry {}/{}: {}", idx, attempt, max_retries, e);
+                        }
+                        if self.config.use_memory {
+                            let alt = memory.search(
+                                &self.steps[idx].description,
+                                Some(MemoryCategory::RetryKnowledge),
+                                None,
+                            );
+                            if !alt.is_empty() && self.config.verbose {
+                                tracing::info!("found {} memory entries for retry", alt.len());
+                            }
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    } else {
+                        self.steps[idx].status = StepStatus::Failed;
+                        self.steps[idx].error = Some(format!("{e} (after {max_retries} retries)"));
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Post-step bookkeeping: cost tracking, screenshots, memory storage, state saves.
+    async fn post_step_bookkeeping(&mut self, idx: usize, success: bool, page: &Page, memory: &mut AgentMemory) {
+        self.cost_cents += 1;
+
+        if self.config.screenshot_every_step {
+            if let Ok(path) = self.capture_step_screenshot(page, idx).await {
+                self.steps[idx].screenshot_path = Some(path);
+            }
+        }
+
+        if self.config.use_memory && success {
+            let key = format!("auto_step_{}_{}", idx, self.steps[idx].action_type);
+            let val = serde_json::json!({
+                "step": idx,
+                "action": self.steps[idx].action_type,
+                "description": self.steps[idx].description,
+                "success": true,
+                "duration_ms": self.steps[idx].duration_ms,
+            });
+            if memory.store(key, val, MemoryCategory::PageVisit, None).is_ok() {
+                self.memory_entries_added += 1;
+            }
+        }
+
+        if self.config.save_state.is_some() {
+            self.maybe_save_state(page, idx + 1).await;
+        }
+    }
+
+    /// Load or initialize agent memory based on config.
+    fn load_memory(&self) -> AgentMemory {
+        if self.config.use_memory {
+            let mem_path = self.config
+                .memory_path
+                .clone()
+                .unwrap_or_else(|| "/tmp/onecrawl-agent-memory.json".into());
+            AgentMemory::load(std::path::PathBuf::from(&mem_path))
+                .unwrap_or_else(|_| AgentMemory::new(&mem_path))
+        } else {
+            AgentMemory::new("/dev/null")
+        }
+    }
+
+    /// Build the final execution result.
+    fn build_result(&self, errors: Vec<String>) -> Result<AgentAutoResult> {
         let output_path = if self.config.output.is_some() {
             self.write_output().ok();
             self.config.output.clone()
@@ -396,15 +400,11 @@ impl AgentAuto {
             None
         };
 
-        let steps_completed = self
-            .steps
-            .iter()
+        let steps_completed = self.steps.iter()
             .filter(|s| s.status == StepStatus::Completed)
             .count();
         let all_success = errors.is_empty()
-            && self
-                .steps
-                .iter()
+            && self.steps.iter()
                 .all(|s| s.status == StepStatus::Completed || s.status == StepStatus::Skipped);
 
         Ok(AgentAutoResult {

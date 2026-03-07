@@ -208,7 +208,6 @@ impl Reactor {
             *running = true;
         }
 
-        // Reset stats
         {
             let mut stats = self.stats.write().await;
             *stats = ReactorStats::default();
@@ -227,7 +226,6 @@ impl Reactor {
         }
         drop(rules);
 
-        // Start event sources
         if needs_dom {
             start_dom_observer(page, None).await?;
         }
@@ -254,72 +252,11 @@ impl Reactor {
         let max_epm = self.config.max_events_per_minute.unwrap_or(60);
         let buffer_cap = self.config.buffer_size.unwrap_or(1000).min(10_000);
 
-        // Poll loop
         while *self.running.read().await {
-            let mut raw_events: Vec<(ReactorEventType, serde_json::Value)> = Vec::new();
-
-            // Drain DOM mutations
-            if needs_dom {
-                if let Ok(mutations) = drain_dom_mutations(page).await {
-                    for m in mutations {
-                        raw_events.push((
-                            ReactorEventType::DomMutation,
-                            serde_json::to_value(&m).unwrap_or_default(),
-                        ));
-                    }
-                }
-            }
-
-            // Drain console messages
-            if needs_console {
-                let tx = event_stream.sender();
-                if let Ok(_count) = drain_console(page, &tx).await {
-                    // Events already sent to broadcast; drain from subscriber
-                }
-                if let Ok(_count) = drain_errors(page, &tx).await {}
-
-                // Read from a temporary subscriber
-                let mut rx = event_stream.subscribe();
-                while let Ok(ev) = rx.try_recv() {
-                    let rtype = match ev.event_type {
-                        EventType::ConsoleMessage => ReactorEventType::Console,
-                        EventType::PageError => ReactorEventType::PageError,
-                        EventType::NetworkRequest => ReactorEventType::NetworkRequest,
-                        EventType::NetworkResponse => ReactorEventType::NetworkResponse,
-                        EventType::FrameNavigated => ReactorEventType::Navigation,
-                        _ => continue,
-                    };
-                    raw_events.push((rtype, ev.data));
-                }
-            }
-
-            // Drain navigation changes
-            if needs_navigation {
-                if let Ok(changes) = drain_page_changes(page).await {
-                    for c in changes {
-                        raw_events.push((
-                            ReactorEventType::Navigation,
-                            serde_json::to_value(&c).unwrap_or_default(),
-                        ));
-                    }
-                }
-            }
-
-            // Drain WebSocket frames
-            if needs_ws {
-                if let Ok(_count) = drain_ws_frames(page, &ws_recorder).await {
-                    let frames = ws_recorder.frames().await;
-                    for f in &frames {
-                        raw_events.push((
-                            ReactorEventType::WebSocket,
-                            serde_json::to_value(f).unwrap_or_default(),
-                        ));
-                    }
-                    if !frames.is_empty() {
-                        ws_recorder.clear().await;
-                    }
-                }
-            }
+            let raw_events = Self::drain_all_events(
+                page, needs_dom, needs_console, needs_navigation, needs_ws,
+                &event_stream, &ws_recorder,
+            ).await;
 
             // Rate limit check
             {
@@ -327,15 +264,12 @@ impl Reactor {
                 let now = std::time::Instant::now();
                 stats.events_in_last_minute.retain(|t| now.duration_since(*t).as_secs() < 60);
                 if stats.events_in_last_minute.len() as u32 >= max_epm {
-                    // Skip processing this batch
                     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
                     continue;
                 }
             }
 
-            // Match events against rules
             for (event_type, data) in &raw_events {
-                // Collect matching rule info while holding the read lock
                 let matched = {
                     let rules = self.rules.read().await;
                     let mut result: Option<(String, ReactorHandler, Option<EventFilter>)> = None;
@@ -348,8 +282,6 @@ impl Reactor {
                                 continue;
                             }
                         }
-
-                        // Check cooldown
                         if let Some(cooldown) = rule.cooldown_ms {
                             let times = self.last_trigger_times.read().await;
                             if let Some(last) = times.get(&rule.id) {
@@ -358,12 +290,9 @@ impl Reactor {
                                 }
                             }
                         }
-
-                        // Check filter
                         if !self.matches_filter(&rule.filter, event_type, data) {
                             continue;
                         }
-
                         result = Some((
                             rule.id.clone(),
                             rule.handler.clone(),
@@ -374,60 +303,13 @@ impl Reactor {
                     result
                 };
 
-                // Process matched rule outside the read lock
                 if let Some((rule_id, handler, _filter)) = matched {
-                    let reactor_event = ReactorEvent {
-                        event_type: event_type.clone(),
-                        timestamp: chrono_now(),
-                        data: data.clone(),
-                        matched_rule: rule_id.clone(),
-                    };
-
-                    // Dispatch handler (fire and forget errors for individual handlers)
-                    let _ = dispatch_handler_boxed(self, &handler, &reactor_event, page).await;
-
-                    // Update stats
-                    {
-                        let mut stats = self.stats.write().await;
-                        stats.total_triggers += 1;
-                        stats.events_in_last_minute.push(std::time::Instant::now());
-                    }
-
-                    // Update rule trigger count
-                    {
-                        let mut rules_w = self.rules.write().await;
-                        if let Some(r) = rules_w.iter_mut().find(|r| r.id == rule_id) {
-                            r.trigger_count += 1;
-                        }
-                    }
-
-                    // Update last trigger time
-                    {
-                        let mut times = self.last_trigger_times.write().await;
-                        times.insert(rule_id.clone(), std::time::Instant::now());
-                    }
-
-                    // Buffer the event
-                    {
-                        let mut events = self.events.write().await;
-                        events.push(reactor_event);
-                        let len = events.len();
-                        if len > buffer_cap {
-                            events.drain(0..len - buffer_cap);
-                        }
-                    }
-
-                    // Persist if configured
-                    if self.config.persist_events {
-                        if let Some(path) = &self.config.event_log_path {
-                            let line = serde_json::to_string(data).unwrap_or_default();
-                            let _ = append_line(path, &line);
-                        }
-                    }
+                    self.process_matched_event(
+                        &rule_id, &handler, event_type, data, page, buffer_cap,
+                    ).await;
                 }
             }
 
-            // Update total events
             if !raw_events.is_empty() {
                 let mut stats = self.stats.write().await;
                 stats.total_events += raw_events.len() as u64;
@@ -436,12 +318,136 @@ impl Reactor {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
 
-        // Cleanup
         if needs_dom {
             let _ = stop_dom_observer(page).await;
         }
 
         Ok(())
+    }
+
+    /// Drain events from all active sources into a flat list.
+    async fn drain_all_events(
+        page: &Page,
+        needs_dom: bool,
+        needs_console: bool,
+        needs_navigation: bool,
+        needs_ws: bool,
+        event_stream: &EventStream,
+        ws_recorder: &WsRecorder,
+    ) -> Vec<(ReactorEventType, serde_json::Value)> {
+        let mut raw_events: Vec<(ReactorEventType, serde_json::Value)> = Vec::new();
+
+        if needs_dom {
+            if let Ok(mutations) = drain_dom_mutations(page).await {
+                for m in mutations {
+                    raw_events.push((
+                        ReactorEventType::DomMutation,
+                        serde_json::to_value(&m).unwrap_or_default(),
+                    ));
+                }
+            }
+        }
+
+        if needs_console {
+            let tx = event_stream.sender();
+            let _ = drain_console(page, &tx).await;
+            let _ = drain_errors(page, &tx).await;
+
+            let mut rx = event_stream.subscribe();
+            while let Ok(ev) = rx.try_recv() {
+                let rtype = match ev.event_type {
+                    EventType::ConsoleMessage => ReactorEventType::Console,
+                    EventType::PageError => ReactorEventType::PageError,
+                    EventType::NetworkRequest => ReactorEventType::NetworkRequest,
+                    EventType::NetworkResponse => ReactorEventType::NetworkResponse,
+                    EventType::FrameNavigated => ReactorEventType::Navigation,
+                    _ => continue,
+                };
+                raw_events.push((rtype, ev.data));
+            }
+        }
+
+        if needs_navigation {
+            if let Ok(changes) = drain_page_changes(page).await {
+                for c in changes {
+                    raw_events.push((
+                        ReactorEventType::Navigation,
+                        serde_json::to_value(&c).unwrap_or_default(),
+                    ));
+                }
+            }
+        }
+
+        if needs_ws {
+            if let Ok(_count) = drain_ws_frames(page, ws_recorder).await {
+                let frames = ws_recorder.frames().await;
+                for f in &frames {
+                    raw_events.push((
+                        ReactorEventType::WebSocket,
+                        serde_json::to_value(f).unwrap_or_default(),
+                    ));
+                }
+                if !frames.is_empty() {
+                    ws_recorder.clear().await;
+                }
+            }
+        }
+
+        raw_events
+    }
+
+    /// Dispatch handler and update stats/state for a matched event.
+    async fn process_matched_event(
+        &self,
+        rule_id: &str,
+        handler: &ReactorHandler,
+        event_type: &ReactorEventType,
+        data: &serde_json::Value,
+        page: &Page,
+        buffer_cap: usize,
+    ) {
+        let reactor_event = ReactorEvent {
+            event_type: event_type.clone(),
+            timestamp: chrono_now(),
+            data: data.clone(),
+            matched_rule: rule_id.to_string(),
+        };
+
+        let _ = dispatch_handler_boxed(self, handler, &reactor_event, page).await;
+
+        {
+            let mut stats = self.stats.write().await;
+            stats.total_triggers += 1;
+            stats.events_in_last_minute.push(std::time::Instant::now());
+        }
+
+        {
+            let mut rules_w = self.rules.write().await;
+            if let Some(r) = rules_w.iter_mut().find(|r| r.id == rule_id) {
+                r.trigger_count += 1;
+            }
+        }
+
+        {
+            let mut times = self.last_trigger_times.write().await;
+            times.insert(rule_id.to_string(), std::time::Instant::now());
+        }
+
+        {
+            let mut events = self.events.write().await;
+            events.push(reactor_event);
+            let len = events.len();
+            if len > buffer_cap {
+                events.drain(0..len - buffer_cap);
+            }
+        }
+
+        if self.config.persist_events {
+            if let Some(path) = &self.config.event_log_path {
+                let line = serde_json::to_string(data).unwrap_or_default();
+                let _ = append_line(path, &line);
+            }
+        }
     }
 
     /// Stop the reactor.
