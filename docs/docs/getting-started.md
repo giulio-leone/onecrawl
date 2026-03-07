@@ -26,7 +26,7 @@ OneCrawl replaces an entire stack of browser automation tools with a single, lig
 | Feature | OneCrawl | Playwright | Puppeteer | Selenium |
 |---|---|---|---|---|
 | **Binary size** | ~5.8 MB | ~250 MB | ~170 MB | ~30 MB + drivers |
-| **Startup time** | <100 ms | ~2 s | ~1.5 s | ~3 s |
+| **Startup time** | &lt;100 ms | ~2 s | ~1.5 s | ~3 s |
 | **Memory (idle)** | ~15 MB | ~80 MB | ~60 MB | ~120 MB |
 | **Language** | Rust (native) | JS/TS | JS/TS | Java / polyglot |
 | **CLI commands** | 409+ | ~10 | N/A | N/A |

@@ -222,8 +222,8 @@ Capture visual output in multiple formats.
 | `--full` | Capture the full scrollable page |
 | `--element <selector>` | Capture a specific element |
 | `--format <png\|jpeg\|webp>` | Image format (default: `png`) |
-| `--quality <0-100>` | JPEG/WebP quality |
-| `--clip <x,y,w,h>` | Clip region |
+| `--quality 0-100` | JPEG/WebP quality |
+| `--clip x,y,w,h` | Clip region |
 
 ```bash
 # Full-page screenshot
