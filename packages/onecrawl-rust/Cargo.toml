@@ -44,6 +44,9 @@ scraper = "0.22"
 # Storage
 sled = "0.34"
 
+# URL parsing
+url = "2"
+
 # Browser (CDP)
 chromiumoxide = { version = "0.8", features = ["tokio-runtime"] }
 futures = "0.3"

@@ -36,6 +36,9 @@ impl ShellHistory {
     }
 
     pub fn add(&mut self, cmd: ShellCommand) {
+        if self.max_size == 0 {
+            return;
+        }
         if self.commands.len() >= self.max_size {
             self.commands.remove(0);
         }

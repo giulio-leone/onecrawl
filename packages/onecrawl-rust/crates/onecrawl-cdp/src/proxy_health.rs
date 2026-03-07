@@ -137,8 +137,14 @@ pub async fn check_proxy(
     };
 
     let is_anonymous = if config.check_anonymity {
-        // If the returned IP differs from proxy URL host we assume anonymous
-        fr.ip.is_some()
+        if let Some(returned_ip) = &fr.ip {
+            match url::Url::parse(proxy_url) {
+                Ok(u) => u.host_str().map_or(false, |host| host != returned_ip.as_str()),
+                Err(_) => false,
+            }
+        } else {
+            false
+        }
     } else {
         false
     };
