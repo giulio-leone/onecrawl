@@ -68,16 +68,31 @@ pub fn parse_opt_json_str<T: serde::de::DeserializeOwned>(
 // ── Browser helpers ──
 
 /// Ensure browser session + page are initialised, return a clone of the page handle.
+/// Stealth patches are automatically injected at session level via
+/// `addScriptToEvaluateOnNewDocument` unless `stealth_disabled` is set.
 pub async fn ensure_page(browser: &SharedBrowser) -> Result<chromiumoxide::Page, McpError> {
     let mut state = browser.lock().await;
     if state.session.is_none() {
-        let session = onecrawl_cdp::BrowserSession::launch_headless()
-            .await
-            .map_err(|e| mcp_err(format!("browser launch failed: {e}")))?;
+        let session = if state.headed {
+            onecrawl_cdp::BrowserSession::launch_headed()
+                .await
+                .map_err(|e| mcp_err(format!("browser launch failed: {e}")))?
+        } else {
+            onecrawl_cdp::BrowserSession::launch_headless()
+                .await
+                .map_err(|e| mcp_err(format!("browser launch failed: {e}")))?
+        };
         let page = session
             .new_page("about:blank")
             .await
             .map_err(|e| mcp_err(format!("new page failed: {e}")))?;
+
+        // Auto-inject session-level stealth (persists across all navigations)
+        if !state.stealth_disabled {
+            let _ = onecrawl_cdp::inject_persistent_stealth(&page, None).await;
+            state.stealth_applied = true;
+        }
+
         state.session = Some(session);
         state.tabs.push(page.clone());
         state.active_tab = 0;

@@ -57,6 +57,11 @@ pub struct BrowserState {
     pub auth_status: Option<String>,
     // Credential vault
     pub credentials: HashMap<String, serde_json::Value>,
+    // Stealth mode (ON by default, disable with stealth_disabled = true)
+    pub stealth_disabled: bool,
+    pub stealth_applied: bool,
+    // Browser mode
+    pub headed: bool,
 }
 
 pub type SharedBrowser = Arc<Mutex<BrowserState>>;
@@ -1614,6 +1619,66 @@ pub struct StealthMaxParams {
     pub enable_all: Option<bool>,
     #[schemars(description = "Include human behavior simulation")]
     pub human_simulation: Option<bool>,
+}
+
+// ── Session Configuration ──────────────────────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SetModeParams {
+    #[schemars(description = "Browser mode: 'headless' (default) or 'headed'")]
+    pub mode: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SetStealthParams {
+    #[schemars(description = "Enable or disable stealth patches (enabled by default)")]
+    pub enabled: bool,
+}
+
+// ── Enhanced Computer Use ──────────────────────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ComputerUseParams {
+    #[schemars(description = "High-level goal to accomplish (e.g. 'search for X on Google and extract results')")]
+    pub goal: String,
+    #[schemars(description = "Starting URL (optional, uses current page if omitted)")]
+    pub url: Option<String>,
+    #[schemars(description = "Maximum number of steps to attempt")]
+    pub max_steps: Option<u32>,
+    #[schemars(description = "Take screenshot at each step")]
+    pub screenshots: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct GoalExecuteParams {
+    #[schemars(description = "Plan ID from task_plan or computer_use to execute")]
+    pub plan_id: String,
+    #[schemars(description = "Step ID to start from (optional, starts from first pending)")]
+    pub from_step: Option<String>,
+    #[schemars(description = "Stop after this step ID")]
+    pub until_step: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct StepVerifyParams {
+    #[schemars(description = "Plan ID to verify")]
+    pub plan_id: String,
+    #[schemars(description = "Step ID to verify")]
+    pub step_id: String,
+    #[schemars(description = "Expected condition (CSS selector exists, text contains, URL matches)")]
+    pub expect: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AutoRecoverParams {
+    #[schemars(description = "Plan ID where the failure occurred")]
+    pub plan_id: String,
+    #[schemars(description = "Failed step ID")]
+    pub step_id: String,
+    #[schemars(description = "Error message from the failure")]
+    pub error: Option<String>,
+    #[schemars(description = "Maximum recovery attempts")]
+    pub max_retries: Option<u32>,
 }
 
 #[cfg(test)]

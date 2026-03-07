@@ -2342,4 +2342,70 @@ impl OneCrawlMcp {
         let _result = page.evaluate(js).await.mcp()?;
         json_ok(&serde_json::json!({ "action": "offline_mode", "enabled": p.enabled, "latency_ms": latency }))
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Session & Mode Control
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn set_mode(&self, p: SetModeParams) -> Result<CallToolResult, McpError> {
+        let mut state = self.browser.lock().await;
+        match p.mode.as_str() {
+            "headed" | "head" => {
+                state.headed = true;
+                if state.session.is_some() {
+                    json_ok(&serde_json::json!({
+                        "action": "set_mode",
+                        "mode": "headed",
+                        "note": "Mode will apply on next browser session. Close current session first."
+                    }))
+                } else {
+                    json_ok(&serde_json::json!({ "action": "set_mode", "mode": "headed", "applied": true }))
+                }
+            }
+            "headless" | "headless_new" => {
+                state.headed = false;
+                if state.session.is_some() {
+                    json_ok(&serde_json::json!({
+                        "action": "set_mode",
+                        "mode": "headless",
+                        "note": "Mode will apply on next browser session. Close current session first."
+                    }))
+                } else {
+                    json_ok(&serde_json::json!({ "action": "set_mode", "mode": "headless", "applied": true }))
+                }
+            }
+            _ => Err(mcp_err(format!("unknown mode '{}', use 'headed' or 'headless'", p.mode))),
+        }
+    }
+
+    pub(crate) async fn set_stealth(&self, p: SetStealthParams) -> Result<CallToolResult, McpError> {
+        let mut state = self.browser.lock().await;
+        state.stealth_disabled = !p.enabled;
+        json_ok(&serde_json::json!({
+            "action": "set_stealth",
+            "enabled": p.enabled,
+            "stealth_applied": state.stealth_applied,
+            "note": if !p.enabled { "Stealth patches disabled. New sessions will launch without stealth." } else { "Stealth patches enabled. New sessions will auto-inject stealth." }
+        }))
+    }
+
+    pub(crate) async fn session_info(&self) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        json_ok(&serde_json::json!({
+            "action": "session_info",
+            "has_session": state.session.is_some(),
+            "mode": if state.headed { "headed" } else { "headless" },
+            "stealth_enabled": !state.stealth_disabled,
+            "stealth_applied": state.stealth_applied,
+            "tabs": state.tabs.len(),
+            "active_tab": state.active_tab,
+            "fleet_instances": state.fleet_instances.len(),
+            "task_plans": state.task_plans.len(),
+            "intercepting": state.intercepting,
+            "capturing_console": state.capturing_console,
+            "observing_mutations": state.observing_mutations,
+            "auth_sessions": state.auth_sessions.len(),
+            "event_subscriptions": state.event_subscriptions.len()
+        }))
+    }
 }

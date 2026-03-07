@@ -130,6 +130,10 @@ action_enum!(BrowserAction, "browser", [
     CacheClear => "cache_clear",
     PushSimulate => "push_simulate",
     OfflineMode => "offline_mode",
+    // Session configuration
+    SetMode => "set_mode",
+    SetStealth => "set_stealth",
+    SessionInfo => "session_info",
 ]);
 
 action_enum!(CrawlAction, "crawl", [
@@ -271,6 +275,11 @@ action_enum!(ComputerAction, "computer", [
     FleetDestroy => "fleet_destroy",
     FleetStatus => "fleet_status",
     FleetBalance => "fleet_balance",
+    // Enhanced computer use
+    ComputerUse => "computer_use",
+    GoalExecute => "goal_execute",
+    StepVerify => "step_verify",
+    AutoRecover => "auto_recover",
 ]);
 
 action_enum!(MemoryAction, "memory", [
