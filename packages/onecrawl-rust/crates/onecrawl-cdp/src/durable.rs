@@ -130,6 +130,8 @@ pub struct DurableSession {
     pub config: DurableConfig,
     pub state: DurableState,
     started_at: Option<Instant>,
+    /// Uptime accumulated from previous runs (restored from disk).
+    accumulated_uptime_secs: u64,
 }
 
 impl DurableSession {
@@ -143,6 +145,7 @@ impl DurableSession {
             config,
             state,
             started_at: None,
+            accumulated_uptime_secs: 0,
         })
     }
 
@@ -237,9 +240,10 @@ impl DurableSession {
 
         self.state.viewport = Some(captured.viewport);
 
-        // Update uptime
+        // Update uptime (accumulate across restores)
         if let Some(started) = self.started_at {
-            self.state.total_uptime_secs = started.elapsed().as_secs();
+            self.state.total_uptime_secs =
+                self.accumulated_uptime_secs + started.elapsed().as_secs();
         }
 
         self.state.status = DurableStatus::Running;
@@ -302,6 +306,7 @@ impl DurableSession {
         }
 
         self.state.status = DurableStatus::Running;
+        self.accumulated_uptime_secs = self.state.total_uptime_secs;
         self.started_at = Some(Instant::now());
 
         Ok(())

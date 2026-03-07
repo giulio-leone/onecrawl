@@ -208,6 +208,11 @@ impl EventBus {
         if sub.id.is_empty() {
             sub.id = generate_id();
         }
+        // Cap retry_count to prevent DoS via excessive retries
+        const MAX_RETRIES: u32 = 10;
+        if sub.retry_count > MAX_RETRIES {
+            sub.retry_count = MAX_RETRIES;
+        }
         let id = sub.id.clone();
         webhooks.push(sub);
         Ok(id)
