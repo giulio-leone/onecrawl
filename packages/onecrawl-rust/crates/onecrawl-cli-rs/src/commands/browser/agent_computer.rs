@@ -304,7 +304,7 @@ pub async fn assert_checks_cli(checks: &[String]) {
                     t.contains(expected)
                 }
                 "element_exists" => {
-                    let js = format!("!!document.querySelector('{}')", expected.replace('\'', r"\'"));
+                    let js = format!("!!document.querySelector('{}')", expected.replace('\\', r"\\").replace('\'', r"\'"));
                     page.evaluate(js).await
                         .map(|r| r.into_value().unwrap_or(false))
                         .unwrap_or(false)

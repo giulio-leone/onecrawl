@@ -46,7 +46,7 @@ async fn get_from_page(
         "title" => onecrawl_cdp::navigation::get_title(page).await.map_err(|e| e.to_string()),
         "html" => {
             if let Some(sel) = selector {
-                let js = format!("document.querySelector('{}')?.outerHTML || ''", sel.replace('\'', "\\'"));
+                let js = format!("document.querySelector('{}')?.outerHTML || ''", sel.replace('\\', "\\\\").replace('\'', "\\'"));
                 let val = onecrawl_cdp::page::evaluate_js(page, &js).await.map_err(|e| e.to_string())?;
                 Ok(val.as_str().unwrap_or(&val.to_string()).to_string())
             } else {
@@ -78,17 +78,17 @@ async fn get_element_property(
     let js = match what {
         "value" => {
             let sel = selector.ok_or("get value requires a selector")?;
-            format!("document.querySelector('{}')?.value ?? ''", sel.replace('\'', "\\'"))
+            format!("document.querySelector('{}')?.value ?? ''", sel.replace('\\', "\\\\").replace('\'', "\\'"))
         }
         "attr" => {
             let sel = selector.ok_or("get attr requires a selector")?;
             let attr_name = arg.ok_or("get attr requires an attribute name (3rd argument)")?;
             format!("document.querySelector('{}')?.getAttribute('{}') ?? ''",
-                sel.replace('\'', "\\'"), attr_name.replace('\'', "\\'"))
+                sel.replace('\\', "\\\\").replace('\'', "\\'"), attr_name.replace('\\', "\\\\").replace('\'', "\\'"))
         }
         "count" => {
             let sel = selector.ok_or("get count requires a selector")?;
-            format!("document.querySelectorAll('{}').length", sel.replace('\'', "\\'"))
+            format!("document.querySelectorAll('{}').length", sel.replace('\\', "\\\\").replace('\'', "\\'"))
         }
         "styles" => {
             let sel = selector.ok_or("get styles requires a selector")?;
@@ -104,7 +104,7 @@ async fn get_element_property(
                     }}
                     return JSON.stringify(o);
                 }})()"#,
-                sel.replace('\'', "\\'")
+                sel.replace('\\', "\\\\").replace('\'', "\\'")
             )
         }
         "box" => {
@@ -116,7 +116,7 @@ async fn get_element_property(
                     const r = el.getBoundingClientRect();
                     return JSON.stringify({{ x: r.x, y: r.y, width: r.width, height: r.height }});
                 }})()"#,
-                sel.replace('\'', "\\'")
+                sel.replace('\\', "\\\\").replace('\'', "\\'")
             )
         }
         _ => unreachable!(),
