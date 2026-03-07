@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::actions::*;
 use crate::cdp_tools::*;
-use crate::helpers::{ensure_page, parse_params, McpResult};
+use crate::helpers::{ensure_page, json_ok, parse_params, McpResult};
 use crate::types::*;
 
 // ──────────────────────────── Server ────────────────────────────
@@ -176,7 +176,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "browser",
-        description = "Browser navigation, interaction, extraction, multi-tab, DOM events, session, network interception, console/dialog, device emulation, drag/drop, file upload, shadow DOM, Service Worker/PWA.\n\nActions:\n- goto {url} — Navigate to URL\n- click {selector} — Click element\n- type {selector, text} — Type into input\n- screenshot {selector?, full_page?} — Screenshot\n- pdf {landscape?} — Export PDF\n- back / forward / reload — Navigation\n- wait {selector, timeout_ms?} — Wait for element\n- evaluate {js} — Execute JavaScript\n- snapshot {interactive_only?, compact?, depth?} — A11y snapshot\n- css / xpath / find_text — Query elements\n- text / html / markdown / structured — Extract content\n- stream — Paginated extraction\n- detect_forms / fill_form — Forms\n- snapshot_diff — Diff snapshots\n- parse_a11y / parse_selector / parse_text / parse_links — Offline\n- new_tab / list_tabs / switch_tab / close_tab — Multi-tab\n- observe_mutations / get_mutations / stop_mutations / wait_for_event — DOM\n- cookies_get / cookies_set / cookies_clear — Cookies\n- storage_get / storage_set / export_session / import_session — Storage\n- intercept_enable / intercept_add_rule / intercept_remove_rule / intercept_list / intercept_disable / block_requests — Network\n- console_start / console_get / console_clear / dialog_handle / dialog_get / errors_get — Debug\n- emulate_device / emulate_geolocation / emulate_timezone / emulate_media / emulate_network — Emulation\n- drag {source, target} — Drag and drop\n- hover {selector} — Mouse hover\n- keyboard {keys, selector?} — Keyboard shortcuts\n- select {selector, value?, text?, index?} — Select dropdown option\n- upload {selector, file_path} — File upload\n- download_wait / download_list / download_set_dir — Downloads\n- shadow_query / shadow_text {host_selector, inner_selector} — Shadow DOM\n- deep_query {selector} — Pierce shadow DOM with >>>\n- context_set {key, value} / context_get {key} / context_list / context_clear / context_transfer {from_tab, to_tab, keys?} — Page context\n- form_infer {selector?} / form_auto_fill {data, selector?, confidence_threshold?} / form_validate — Smart form mapping\n- selector_heal {selector, context?} / selector_alternatives {selector, max_alternatives?} / selector_validate {selector, expected_role?, expected_text?} — Self-healing selectors\n- event_subscribe {event_type, filter?} / event_unsubscribe {event_type} / event_poll {event_type?, limit?, clear?} / event_clear — Event reactions\n- sw_register {script_url, scope?} / sw_unregister {scope?} / sw_list / sw_update {scope?} — Service Worker\n- cache_list / cache_clear — Cache Storage\n- push_simulate {title, body?, icon?, data?} — Push notifications\n- offline_mode {enabled, bypass_for?} — Offline simulation\n- set_mode {mode} — Set browser mode: 'headed' or 'headless'\n- set_stealth {enabled} — Enable/disable stealth (ON by default)\n- session_info — Get session status, mode, stealth, tabs"
+        description = "Browser navigation, interaction, extraction, multi-tab, DOM events, session, network interception, console/dialog, device emulation, drag/drop, file upload, shadow DOM, Service Worker/PWA.\n\nActions:\n- goto {url} — Navigate to URL\n- click {selector} — Click element\n- type {selector, text} — Type into input\n- screenshot {selector?, full_page?} — Screenshot\n- pdf {landscape?} — Export PDF\n- back / forward / reload — Navigation\n- wait {selector, timeout_ms?} — Wait for element\n- evaluate {js} — Execute JavaScript\n- snapshot {interactive_only?, compact?, depth?} — A11y snapshot\n- css / xpath / find_text — Query elements\n- text / html / markdown / structured — Extract content\n- stream — Paginated extraction\n- detect_forms / fill_form — Forms\n- snapshot_diff — Diff snapshots\n- parse_a11y / parse_selector / parse_text / parse_links — Offline\n- new_tab / list_tabs / switch_tab / close_tab — Multi-tab\n- observe_mutations / get_mutations / stop_mutations / wait_for_event — DOM\n- cookies_get / cookies_set / cookies_clear — Cookies\n- storage_get / storage_set / export_session / import_session — Storage\n- intercept_enable / intercept_add_rule / intercept_remove_rule / intercept_list / intercept_disable / block_requests — Network\n- console_start / console_get / console_clear / dialog_handle / dialog_get / errors_get — Debug\n- emulate_device / emulate_geolocation / emulate_timezone / emulate_media / emulate_network — Emulation\n- drag {source, target} — Drag and drop\n- hover {selector} — Mouse hover\n- keyboard {keys, selector?} — Keyboard shortcuts\n- select {selector, value?, text?, index?} — Select dropdown option\n- upload {selector, file_path} — File upload\n- download_wait / download_list / download_set_dir — Downloads\n- shadow_query / shadow_text {host_selector, inner_selector} — Shadow DOM\n- deep_query {selector} — Pierce shadow DOM with >>>\n- context_set {key, value} / context_get {key} / context_list / context_clear / context_transfer {from_tab, to_tab, keys?} — Page context\n- form_infer {selector?} / form_auto_fill {data, selector?, confidence_threshold?} / form_validate — Smart form mapping\n- selector_heal {selector, context?} / selector_alternatives {selector, max_alternatives?} / selector_validate {selector, expected_role?, expected_text?} — Self-healing selectors\n- event_subscribe {event_type, filter?} / event_unsubscribe {event_type} / event_poll {event_type?, limit?, clear?} / event_clear — Event reactions\n- sw_register {script_url, scope?} / sw_unregister {scope?} / sw_list / sw_update {scope?} — Service Worker\n- cache_list / cache_clear — Cache Storage\n- push_simulate {title, body?, icon?, data?} — Push notifications\n- offline_mode {enabled, bypass_for?} — Offline simulation\n- set_mode {mode} — Set browser mode: 'headed' or 'headless'\n- set_stealth {enabled} — Enable/disable stealth (ON by default)\n- session_info — Get session status, mode, stealth, tabs\n- virtual_scroll_detect — Detect virtual/infinite scroll containers\n- virtual_scroll_extract {container, item_selector, max_items?} — Extract items from virtual scroll\n- wait_hydration {timeout_ms?} — Wait for SPA framework hydration\n- wait_animation {selector, timeout_ms?} — Wait for CSS/JS animations to complete\n- wait_network_idle {idle_ms?, timeout_ms?} — Wait until network is idle\n- trigger_lazy_load {selector?} — Trigger lazy-loaded elements\n- health_check — Browser health diagnostics\n- circuit_breaker {command, error?, threshold?} — Circuit breaker state management"
     )]
     async fn tool_browser(
         &self,
@@ -513,6 +513,46 @@ impl OneCrawlMcp {
                 self.set_stealth(params).await
             }
             BrowserAction::SessionInfo => self.session_info().await,
+            BrowserAction::SpaNavWatch => {
+                let params: SpaNavWatchParams = parse_params(v, "spa_nav_watch")?;
+                self.spa_nav_watch(params).await
+            }
+            BrowserAction::FrameworkDetect => {
+                let params: FrameworkDetectParams = parse_params(v, "framework_detect")?;
+                self.framework_detect(params).await
+            }
+            BrowserAction::VirtualScrollDetect => {
+                let params: VirtualScrollDetectParams = parse_params(v, "virtual_scroll_detect")?;
+                self.virtual_scroll_detect(params).await
+            }
+            BrowserAction::VirtualScrollExtract => {
+                let params: VirtualScrollExtractParams = parse_params(v, "virtual_scroll_extract")?;
+                self.virtual_scroll_extract(params).await
+            }
+            BrowserAction::WaitHydration => {
+                let params: WaitHydrationParams = parse_params(v, "wait_hydration")?;
+                self.wait_hydration(params).await
+            }
+            BrowserAction::WaitAnimation => {
+                let params: WaitAnimationParams = parse_params(v, "wait_animation")?;
+                self.wait_animation(params).await
+            }
+            BrowserAction::WaitNetworkIdle => {
+                let params: WaitNetworkIdleParams = parse_params(v, "wait_network_idle")?;
+                self.wait_network_idle_smart(params).await
+            }
+            BrowserAction::TriggerLazyLoad => {
+                let params: TriggerLazyLoadParams = parse_params(v, "trigger_lazy_load")?;
+                self.trigger_lazy_load(params).await
+            }
+            BrowserAction::HealthCheck => {
+                let params: HealthCheckParams = parse_params(v, "health_check")?;
+                self.health_check(params).await
+            }
+            BrowserAction::CircuitBreaker => {
+                let params: CircuitBreakerParams = parse_params(v, "circuit_breaker")?;
+                self.circuit_breaker(params).await
+            }
         }
     }
 
@@ -711,7 +751,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "stealth",
-        description = "Anti-detection, bot evasion, stealth patches, fingerprinting, CAPTCHA detection/solving, and human behavior simulation.\n\nActions:\n- inject — Inject stealth patches into page\n- test — Test if current page detects bot\n- fingerprint {user_agent?} — Generate and apply browser fingerprint\n- block_domains {domains} — Block tracking domains\n- detect_captcha — Detect CAPTCHAs on page\n- solve_captcha {captcha_type?, timeout_ms?} — Solve CAPTCHA: 'recaptcha_checkbox' (CDP cross-origin frame click), 'recaptcha_audio' (Whisper STT), 'turnstile', 'auto'\n- human_delay {min_ms?, max_ms?, pattern?} — Random human-like delay\n- human_mouse {target, speed?, curve?} — Bézier curve mouse movement\n- human_type {selector, text, speed?, mistakes?} — Natural typing with typos\n- human_scroll {direction?, amount?, speed?} — Human-like scroll behavior\n- human_profile {profile?} — Set human behavior profile (casual/fast/careful)\n- stealth_max {features?} — Enable maximum stealth (all patches + human sim)\n- stealth_score — Score current page stealth level"
+        description = "Anti-detection, bot evasion, stealth patches, fingerprinting, CAPTCHA detection/solving, and human behavior simulation.\n\nActions:\n- inject — Inject stealth patches into page\n- test — Test if current page detects bot\n- fingerprint {user_agent?} — Generate and apply browser fingerprint\n- block_domains {domains} — Block tracking domains\n- detect_captcha — Detect CAPTCHAs on page\n- solve_captcha {captcha_type?, timeout_ms?} — Solve CAPTCHA: 'recaptcha_checkbox' (CDP cross-origin frame click), 'recaptcha_audio' (Whisper STT), 'turnstile', 'auto'\n- human_delay {min_ms?, max_ms?, pattern?} — Random human-like delay\n- human_mouse {target, speed?, curve?} — Bézier curve mouse movement\n- human_type {selector, text, speed?, mistakes?} — Natural typing with typos\n- human_scroll {direction?, amount?, speed?} — Human-like scroll behavior\n- human_profile {profile?} — Set human behavior profile (casual/fast/careful)\n- stealth_max {features?} — Enable maximum stealth (all patches + human sim)\n- stealth_score — Score current page stealth level\n- tls_apply {profile?} — Apply TLS fingerprint profile (chrome-win/mac, firefox-win, safari-mac, edge-win, random, detect)\n- webrtc_block {mode?} — Block WebRTC leaks ('block' or 'turn_only')\n- battery_spoof {charging?, level?} — Spoof Battery API (desktop disguise)\n- sensor_block {sensors?} — Block device sensor APIs (gyroscope, accelerometer, etc.)\n- canvas_advanced {intensity?} — Advanced canvas fingerprint noise (Gaussian, 0.0-10.0)\n- timezone_sync {timezone} — Spoof IANA timezone across all JS APIs\n- font_protect — Limit font enumeration to cross-platform subset\n- behavior_sim {interval_ms?, command?} — Start/stop continuous human behavior simulation\n- behavior_stop — Stop behavior simulation\n- stealth_rotate {per_page?} — Auto-rotate fingerprint + stealth profile (fresh identity)\n- detection_audit {detailed?} — Comprehensive bot detection test suite (12 tests, A+ to F grade)"
     )]
     async fn tool_stealth(
         &self,
@@ -770,6 +810,52 @@ impl OneCrawlMcp {
                 self.stealth_max(params).await
             }
             StealthAction::StealthScore => self.stealth_score().await,
+            StealthAction::TlsApply => {
+                let params: TlsApplyParams = parse_params(v, "tls_apply")?;
+                self.stealth_tls_apply(params).await
+            }
+            StealthAction::WebrtcBlock => {
+                let params: WebrtcBlockParams = parse_params(v, "webrtc_block")?;
+                self.stealth_webrtc_block(params).await
+            }
+            StealthAction::BatterySpoof => {
+                let params: BatterySpoofParams = parse_params(v, "battery_spoof")?;
+                self.stealth_battery_spoof(params).await
+            }
+            StealthAction::SensorBlock => {
+                let params: SensorBlockParams = parse_params(v, "sensor_block")?;
+                self.stealth_sensor_block(params).await
+            }
+            StealthAction::CanvasAdvanced => {
+                let params: CanvasAdvancedParams = parse_params(v, "canvas_advanced")?;
+                self.stealth_canvas_advanced(params).await
+            }
+            StealthAction::TimezoneSync => {
+                let params: TimezoneSyncParams = parse_params(v, "timezone_sync")?;
+                self.stealth_timezone_sync(params).await
+            }
+            StealthAction::FontProtect => {
+                let params: FontProtectParams = parse_params(v, "font_protect")?;
+                self.stealth_font_protect(params).await
+            }
+            StealthAction::BehaviorSim => {
+                let params: BehaviorSimParams = parse_params(v, "behavior_sim")?;
+                self.stealth_behavior_sim(params).await
+            }
+            StealthAction::BehaviorStop => {
+                drop(v);
+                let page = ensure_page(&self.browser).await?;
+                onecrawl_cdp::antibot::stop_behavior_simulation(&page).await.mcp()?;
+                json_ok(&serde_json::json!({ "action": "behavior_stop", "status": "stopped" }))
+            }
+            StealthAction::StealthRotate => {
+                let params: StealthRotateParams = parse_params(v, "stealth_rotate")?;
+                self.stealth_rotate(params).await
+            }
+            StealthAction::DetectionAudit => {
+                let params: DetectionAuditParams = parse_params(v, "detection_audit")?;
+                self.stealth_detection_audit(params).await
+            }
         }
     }
 

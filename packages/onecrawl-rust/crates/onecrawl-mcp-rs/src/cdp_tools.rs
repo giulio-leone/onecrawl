@@ -266,6 +266,32 @@ pub struct DetectCaptchaParams {
     // no additional params needed
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct TlsApplyParams {
+    /// TLS profile name: "chrome-win", "chrome-mac", "firefox-win", "safari-mac", "edge-win", "random", "detect"
+    pub profile: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct WebrtcBlockParams {
+    /// Mode: "block" (disable WebRTC entirely) or "turn_only" (allow only TURN relay)
+    pub mode: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct BatterySpoofParams {
+    /// Override charging status (default: true = plugged in)
+    pub charging: Option<bool>,
+    /// Override battery level 0.0-1.0 (default: 1.0)
+    pub level: Option<f64>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SensorBlockParams {
+    /// Block specific sensors only. Default: all
+    pub sensors: Option<Vec<String>>,
+}
+
 // ──────────────── Data Processing params ─────────────────
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -2189,4 +2215,116 @@ mod tests {
         assert!(state.event_subscriptions.is_empty());
         assert!(state.event_buffer.is_empty());
     }
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct SpaNavWatchParams {
+    /// "start" to begin watching, "poll" to get recorded navigations, "stop" to stop
+    pub command: String,
+    /// Clear buffer after polling (default: true)
+    pub clear: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct FrameworkDetectParams {
+    /// Include router info if detected (default: true)
+    pub include_router: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct CanvasAdvancedParams {
+    /// Noise intensity 0.0-10.0 (default: 2.0). Higher = more noise, harder to fingerprint but may affect canvas rendering.
+    pub intensity: Option<f64>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct TimezoneSyncParams {
+    /// IANA timezone to spoof, e.g. "America/New_York", "Europe/London", "Asia/Tokyo"
+    pub timezone: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct FontProtectParams {
+    /// Additional fonts to allow beyond the default cross-platform set
+    pub allow_extra: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct BehaviorSimParams {
+    /// Interval in ms between micro-movements (default: 2000)
+    pub interval_ms: Option<u64>,
+    /// "start" or "stop" (default: "start")
+    pub command: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct StealthRotateParams {
+    /// Rotate on every new page/navigation (default: false, rotate only on new domain)
+    pub per_page: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct DetectionAuditParams {
+    /// Include detailed per-test results (default: true)
+    pub detailed: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct VirtualScrollDetectParams {
+    /// Optional CSS selector to check specific container (default: auto-detect)
+    pub container: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct VirtualScrollExtractParams {
+    /// CSS selector of the scroll container
+    pub container: String,
+    /// CSS selector of individual items within the container
+    pub item_selector: String,
+    /// Maximum items to extract (default: 1000)
+    pub max_items: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct WaitHydrationParams {
+    /// Timeout in ms (default: 10000)
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct WaitAnimationParams {
+    /// CSS selector of the element to watch for animations
+    pub selector: String,
+    /// Timeout in ms (default: 5000)
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct WaitNetworkIdleParams {
+    /// How long network must be idle in ms (default: 500)
+    pub idle_ms: Option<u64>,
+    /// Overall timeout in ms (default: 30000)
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct TriggerLazyLoadParams {
+    /// CSS selector for lazy-loaded elements (default: "img[data-src], img[loading='lazy'], [data-lazy]")
+    pub selector: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct HealthCheckParams {
+    /// Include memory usage details (default: true)
+    pub include_memory: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct CircuitBreakerParams {
+    /// Command: "status", "record_success", "record_failure", "reset"
+    pub command: String,
+    /// Error message (only for record_failure)
+    pub error: Option<String>,
+    /// Failure threshold before circuit opens (default: 5)
+    pub threshold: Option<u32>,
 }

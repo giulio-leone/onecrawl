@@ -33,6 +33,7 @@ pub mod geofencing;
 pub mod http_client;
 
 pub mod har;
+pub mod harness;
 pub mod human;
 pub mod iframe;
 pub mod input;
@@ -62,6 +63,7 @@ pub mod scheduler;
 pub mod screenshot;
 pub mod screenshot_diff;
 pub mod snapshot_diff;
+pub mod spa;
 pub mod selectors;
 pub mod session_pool;
 pub mod shell;

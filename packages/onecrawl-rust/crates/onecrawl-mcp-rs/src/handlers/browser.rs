@@ -2408,4 +2408,305 @@ impl OneCrawlMcp {
             "event_subscriptions": state.event_subscriptions.len()
         }))
     }
+
+    pub(crate) async fn spa_nav_watch(
+        &self,
+        p: SpaNavWatchParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+
+        match p.command.as_str() {
+            "start" => {
+                let js = r#"
+                    if (!window.__onecrawl_nav) {
+                        window.__onecrawl_nav = { changes: [], active: true };
+                        const record = (type, url) => {
+                            if (window.__onecrawl_nav.active) {
+                                window.__onecrawl_nav.changes.push({
+                                    type, url, timestamp: Date.now()
+                                });
+                            }
+                        };
+                        const origPush = history.pushState.bind(history);
+                        const origReplace = history.replaceState.bind(history);
+                        history.pushState = function(...args) {
+                            origPush(...args);
+                            record('pushState', location.href);
+                        };
+                        history.replaceState = function(...args) {
+                            origReplace(...args);
+                            record('replaceState', location.href);
+                        };
+                        window.addEventListener('popstate', () => record('popstate', location.href));
+                        window.addEventListener('hashchange', (e) => record('hashchange', e.newURL || location.href));
+                    }
+                    'started'
+                "#;
+                page.evaluate(js.to_string()).await.map_err(|e| mcp_err(format!("spa_nav_watch start: {e}")))?;
+                json_ok(&serde_json::json!({ "action": "spa_nav_watch", "status": "watching" }))
+            }
+            "poll" => {
+                let clear = p.clear.unwrap_or(true);
+                let js = if clear {
+                    r#"
+                        const nav = window.__onecrawl_nav;
+                        if (!nav) return JSON.stringify([]);
+                        const changes = [...nav.changes];
+                        nav.changes = [];
+                        JSON.stringify(changes)
+                    "#
+                } else {
+                    r#"
+                        const nav = window.__onecrawl_nav;
+                        JSON.stringify(nav ? nav.changes : [])
+                    "#
+                };
+                let result = page.evaluate(js.to_string()).await.map_err(|e| mcp_err(format!("spa_nav_watch poll: {e}")))?;
+                let raw: String = result.into_value().unwrap_or_else(|_| "[]".to_string());
+                let changes: serde_json::Value = serde_json::from_str(&raw).unwrap_or(serde_json::json!([]));
+                json_ok(&serde_json::json!({
+                    "action": "spa_nav_watch",
+                    "command": "poll",
+                    "changes": changes,
+                    "count": changes.as_array().map(|a| a.len()).unwrap_or(0)
+                }))
+            }
+            "stop" => {
+                let js = r#"
+                    if (window.__onecrawl_nav) {
+                        window.__onecrawl_nav.active = false;
+                    }
+                    'stopped'
+                "#;
+                page.evaluate(js.to_string()).await.map_err(|e| mcp_err(format!("spa_nav_watch stop: {e}")))?;
+                json_ok(&serde_json::json!({ "action": "spa_nav_watch", "status": "stopped" }))
+            }
+            other => Err(mcp_err(format!("spa_nav_watch: unknown command '{other}'. Use 'start', 'poll', or 'stop'")))
+        }
+    }
+
+    pub(crate) async fn framework_detect(
+        &self,
+        _p: FrameworkDetectParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+
+        let js = r#"
+            const result = { frameworks: [], router: null, ssr: false };
+
+            // React
+            if (window.__REACT_DEVTOOLS_GLOBAL_HOOK__ || document.querySelector('[data-reactroot]') || document.querySelector('#__next')) {
+                const ver = window.React?.version || window.__REACT_DEVTOOLS_GLOBAL_HOOK__?.renderers?.values()?.next()?.value?.version || 'unknown';
+                result.frameworks.push({ name: 'React', version: ver });
+            }
+
+            // Next.js
+            if (window.__NEXT_DATA__ || document.querySelector('#__next')) {
+                const ver = window.__NEXT_DATA__?.buildId ? 'detected' : 'unknown';
+                result.frameworks.push({ name: 'Next.js', version: ver });
+                result.ssr = true;
+                if (window.__NEXT_DATA__?.page) result.router = { type: 'next-router', page: window.__NEXT_DATA__.page };
+            }
+
+            // Vue
+            if (window.__VUE__ || document.querySelector('[data-v-]') || window.__vue_app__) {
+                const app = window.__vue_app__ || document.querySelector('[id=app]')?.__vue_app__;
+                const ver = app?.version || window.Vue?.version || 'unknown';
+                result.frameworks.push({ name: 'Vue', version: ver });
+            }
+
+            // Nuxt
+            if (window.__NUXT__ || window.$nuxt) {
+                result.frameworks.push({ name: 'Nuxt', version: window.__NUXT__?.config?.public?.version || 'detected' });
+                result.ssr = true;
+            }
+
+            // Angular
+            if (window.ng || document.querySelector('[ng-version]') || window.getAllAngularRootElements) {
+                const el = document.querySelector('[ng-version]');
+                const ver = el?.getAttribute('ng-version') || 'unknown';
+                result.frameworks.push({ name: 'Angular', version: ver });
+            }
+
+            // Svelte
+            if (document.querySelector('[class*="svelte-"]') || window.__svelte) {
+                result.frameworks.push({ name: 'Svelte', version: 'detected' });
+            }
+
+            // Remix
+            if (window.__remixContext || window.__remixManifest) {
+                result.frameworks.push({ name: 'Remix', version: 'detected' });
+                result.ssr = true;
+            }
+
+            // Gatsby
+            if (window.___gatsby || document.querySelector('#___gatsby')) {
+                result.frameworks.push({ name: 'Gatsby', version: 'detected' });
+                result.ssr = true;
+            }
+
+            // Astro
+            if (document.querySelector('[data-astro-cid]') || document.querySelector('astro-island')) {
+                result.frameworks.push({ name: 'Astro', version: 'detected' });
+                result.ssr = true;
+            }
+
+            // SPA router detection
+            if (!result.router) {
+                if (window.__REACT_ROUTER_VERSION__ || document.querySelector('[data-rr-ui-view]')) {
+                    result.router = { type: 'react-router', version: window.__REACT_ROUTER_VERSION__ || 'detected' };
+                } else if (window.$nuxt?.$router || window.__vue_app__?.config?.globalProperties?.$router) {
+                    result.router = { type: 'vue-router' };
+                }
+            }
+
+            JSON.stringify(result)
+        "#;
+
+        let result = page.evaluate(js.to_string()).await.map_err(|e| mcp_err(format!("framework_detect: {e}")))?;
+        let raw: String = result.into_value().unwrap_or_else(|_| r#"{"frameworks":[]}"#.to_string());
+        let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap_or(serde_json::json!({"frameworks":[]}));
+        json_ok(&parsed)
+    }
+
+    pub(crate) async fn virtual_scroll_detect(
+        &self,
+        _p: VirtualScrollDetectParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let result = onecrawl_cdp::spa::detect_virtual_scroll(&page).await.mcp()?;
+        json_ok(&serde_json::json!({
+            "action": "virtual_scroll_detect",
+            "detected": result
+        }))
+    }
+
+    pub(crate) async fn virtual_scroll_extract(
+        &self,
+        p: VirtualScrollExtractParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let max = p.max_items.unwrap_or(1000);
+        let items = onecrawl_cdp::spa::extract_virtual_scroll(&page, &p.container, &p.item_selector, max).await.mcp()?;
+        json_ok(&serde_json::json!({
+            "action": "virtual_scroll_extract",
+            "items": items,
+            "count": items.len()
+        }))
+    }
+
+    pub(crate) async fn wait_hydration(
+        &self,
+        p: WaitHydrationParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let timeout = p.timeout_ms.unwrap_or(10000);
+        let framework = onecrawl_cdp::spa::wait_hydration(&page, timeout).await.mcp()?;
+        json_ok(&serde_json::json!({
+            "action": "wait_hydration",
+            "framework": framework,
+            "hydrated": framework != "timeout"
+        }))
+    }
+
+    pub(crate) async fn wait_animation(
+        &self,
+        p: WaitAnimationParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let timeout = p.timeout_ms.unwrap_or(5000);
+        let done = onecrawl_cdp::spa::wait_animations(&page, &p.selector, timeout).await.mcp()?;
+        json_ok(&serde_json::json!({
+            "action": "wait_animation",
+            "completed": done,
+            "selector": p.selector
+        }))
+    }
+
+    pub(crate) async fn wait_network_idle_smart(
+        &self,
+        p: WaitNetworkIdleParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let idle_ms = p.idle_ms.unwrap_or(500);
+        let timeout_ms = p.timeout_ms.unwrap_or(30000);
+        let idle = onecrawl_cdp::spa::wait_network_idle(&page, idle_ms, timeout_ms).await.mcp()?;
+        json_ok(&serde_json::json!({
+            "action": "wait_network_idle",
+            "idle": idle,
+            "idle_threshold_ms": idle_ms,
+            "timeout_ms": timeout_ms
+        }))
+    }
+
+    pub(crate) async fn trigger_lazy_load(
+        &self,
+        p: TriggerLazyLoadParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let selector = p.selector.as_deref().unwrap_or("img[data-src], img[loading='lazy'], [data-lazy]");
+        let count = onecrawl_cdp::spa::trigger_lazy_load(&page, selector).await.mcp()?;
+        json_ok(&serde_json::json!({
+            "action": "trigger_lazy_load",
+            "triggered": count,
+            "selector": selector
+        }))
+    }
+
+    pub(crate) async fn health_check(
+        &self,
+        _p: HealthCheckParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let health = onecrawl_cdp::harness::health_check(&page).await.mcp()?;
+        json_ok(&health)
+    }
+
+    pub(crate) async fn circuit_breaker(
+        &self,
+        p: CircuitBreakerParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let threshold = p.threshold.unwrap_or(5);
+
+        let js = match p.command.as_str() {
+            "record_success" => {
+                r#"
+                    if (window.__cb) { window.__cb.failures = 0; window.__cb.open = false; }
+                    JSON.stringify(window.__cb || {failures: 0, open: false})
+                "#.to_string()
+            }
+            "record_failure" => {
+                let err = p.error.as_deref().unwrap_or("unknown");
+                format!(r#"
+                    if (!window.__cb) window.__cb = {{ failures: 0, open: false, threshold: {threshold}, last_error: null }};
+                    window.__cb.failures++;
+                    window.__cb.last_error = '{err}';
+                    if (window.__cb.failures >= window.__cb.threshold) window.__cb.open = true;
+                    JSON.stringify(window.__cb)
+                "#)
+            }
+            "reset" => {
+                format!(r#"
+                    window.__cb = {{ failures: 0, open: false, threshold: {threshold}, last_error: null }};
+                    JSON.stringify(window.__cb)
+                "#)
+            }
+            _ => {
+                format!(r#"
+                    if (!window.__cb) window.__cb = {{ failures: 0, open: false, threshold: {threshold}, last_error: null }};
+                    JSON.stringify(window.__cb)
+                "#)
+            }
+        };
+
+        let result = page.evaluate(js).await.map_err(|e| mcp_err(format!("circuit_breaker: {e}")))?;
+        let raw: String = result.into_value().unwrap_or_else(|_| "{}".to_string());
+        let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap_or(serde_json::json!({}));
+        json_ok(&serde_json::json!({
+            "action": "circuit_breaker",
+            "command": p.command,
+            "state": parsed
+        }))
+    }
 }

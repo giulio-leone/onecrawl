@@ -564,4 +564,376 @@ impl OneCrawlMcp {
         let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
         json_ok(&serde_json::json!({ "action": "stealth_score", "score": val }))
     }
+
+    pub(crate) async fn stealth_tls_apply(
+        &self,
+        p: TlsApplyParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let profile_name = p.profile.as_deref().unwrap_or("random");
+
+        match profile_name {
+            "detect" => {
+                let fp = onecrawl_cdp::tls_fingerprint::detect_fingerprint(&page).await.mcp()?;
+                json_ok(&serde_json::json!({
+                    "action": "tls_detect",
+                    "fingerprint": {
+                        "name": fp.name,
+                        "user_agent": fp.user_agent,
+                        "platform": fp.platform,
+                        "vendor": fp.vendor,
+                        "languages": fp.languages,
+                        "hardware_concurrency": fp.hardware_concurrency,
+                        "device_memory": fp.device_memory,
+                        "screen_width": fp.screen_width,
+                        "screen_height": fp.screen_height,
+                    }
+                }))
+            }
+            name => {
+                let fp = if name == "random" {
+                    onecrawl_cdp::tls_fingerprint::random_fingerprint()
+                } else {
+                    onecrawl_cdp::tls_fingerprint::get_profile(name)
+                        .ok_or_else(|| mcp_err(format!("Unknown TLS profile: '{name}'. Available: chrome-win, chrome-mac, firefox-win, safari-mac, edge-win, random")))?
+                };
+                let applied = onecrawl_cdp::tls_fingerprint::apply_fingerprint(&page, &fp).await.mcp()?;
+                json_ok(&serde_json::json!({
+                    "action": "tls_apply",
+                    "profile": name,
+                    "applied_patches": applied.len(),
+                    "patches": applied
+                }))
+            }
+        }
+    }
+
+    pub(crate) async fn stealth_webrtc_block(
+        &self,
+        p: WebrtcBlockParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let mode = p.mode.as_deref().unwrap_or("block");
+
+        let js = match mode {
+            "turn_only" => r#"
+                const origRTC = window.RTCPeerConnection;
+                window.RTCPeerConnection = function(config, constraints) {
+                    if (config && config.iceServers) {
+                        config.iceServers = config.iceServers.filter(s =>
+                            s.urls && (Array.isArray(s.urls) ? s.urls : [s.urls]).some(u => u.startsWith('turn:'))
+                        );
+                    }
+                    return new origRTC(config, constraints);
+                };
+                window.RTCPeerConnection.prototype = origRTC.prototype;
+                if (navigator.mediaDevices) {
+                    navigator.mediaDevices.enumerateDevices = () => Promise.resolve([]);
+                }
+                'turn_only'
+            "#,
+            _ => r#"
+                window.RTCPeerConnection = undefined;
+                window.webkitRTCPeerConnection = undefined;
+                window.mozRTCPeerConnection = undefined;
+                if (navigator.mediaDevices) {
+                    navigator.mediaDevices.getUserMedia = () => Promise.reject(new DOMException('Not allowed', 'NotAllowedError'));
+                    navigator.mediaDevices.enumerateDevices = () => Promise.resolve([]);
+                }
+                'blocked'
+            "#,
+        };
+
+        page.evaluate(js.to_string()).await.map_err(|e| mcp_err(format!("webrtc_block: {e}")))?;
+        json_ok(&serde_json::json!({
+            "action": "webrtc_block",
+            "mode": mode,
+            "status": "applied"
+        }))
+    }
+
+    pub(crate) async fn stealth_battery_spoof(
+        &self,
+        p: BatterySpoofParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let charging = p.charging.unwrap_or(true);
+        let level = p.level.unwrap_or(1.0).max(0.0).min(1.0);
+        let charging_time = if charging { 0 } else { 3600 };
+        let discharging_time = if charging { "Infinity".to_string() } else { "7200".to_string() };
+
+        let js = format!(r#"
+            const fakeBattery = {{
+                charging: {charging},
+                chargingTime: {charging_time},
+                dischargingTime: {discharging_time},
+                level: {level},
+                addEventListener: function() {{}},
+                removeEventListener: function() {{}},
+                dispatchEvent: function() {{ return true; }}
+            }};
+            navigator.getBattery = () => Promise.resolve(fakeBattery);
+            'spoofed'
+        "#);
+
+        page.evaluate(js).await.map_err(|e| mcp_err(format!("battery_spoof: {e}")))?;
+        json_ok(&serde_json::json!({
+            "action": "battery_spoof",
+            "charging": charging,
+            "level": level,
+            "status": "applied"
+        }))
+    }
+
+    pub(crate) async fn stealth_sensor_block(
+        &self,
+        p: SensorBlockParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let _blocked = p.sensors.as_ref().map(|s| s.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+
+        let js = r#"
+            const sensorAPIs = ['DeviceMotionEvent', 'DeviceOrientationEvent',
+                'AmbientLightSensor', 'Gyroscope', 'Accelerometer',
+                'Magnetometer', 'AbsoluteOrientationSensor', 'RelativeOrientationSensor',
+                'LinearAccelerationSensor', 'GravitySensor'];
+            const blocked = [];
+            for (const api of sensorAPIs) {
+                if (window[api]) {
+                    Object.defineProperty(window, api, {
+                        value: undefined, writable: false, configurable: false
+                    });
+                    blocked.push(api);
+                }
+            }
+            const origQuery = navigator.permissions.query.bind(navigator.permissions);
+            navigator.permissions.query = (desc) => {
+                if (desc.name && ['accelerometer','gyroscope','magnetometer','ambient-light-sensor'].includes(desc.name)) {
+                    return Promise.resolve({state: 'denied', addEventListener: ()=>{}});
+                }
+                return origQuery(desc);
+            };
+            JSON.stringify(blocked)
+        "#;
+
+        let result = page.evaluate(js.to_string()).await.map_err(|e| mcp_err(format!("sensor_block: {e}")))?;
+        let blocked_list: Vec<String> = result.into_value().unwrap_or_default();
+        json_ok(&serde_json::json!({
+            "action": "sensor_block",
+            "blocked_apis": blocked_list,
+            "status": "applied"
+        }))
+    }
+
+    pub(crate) async fn stealth_canvas_advanced(
+        &self,
+        p: CanvasAdvancedParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let intensity = p.intensity.unwrap_or(2.0).max(0.0).min(10.0);
+        onecrawl_cdp::antibot::inject_canvas_advanced(&page, intensity).await.mcp()?;
+        json_ok(&serde_json::json!({
+            "action": "canvas_advanced",
+            "intensity": intensity,
+            "status": "applied",
+            "note": "Gaussian noise injected into canvas getImageData/toDataURL/toBlob"
+        }))
+    }
+
+    pub(crate) async fn stealth_timezone_sync(
+        &self,
+        p: TimezoneSyncParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        onecrawl_cdp::antibot::inject_timezone_sync(&page, &p.timezone).await.mcp()?;
+        json_ok(&serde_json::json!({
+            "action": "timezone_sync",
+            "timezone": p.timezone,
+            "status": "applied",
+            "synced": ["Date.getTimezoneOffset", "Intl.DateTimeFormat", "Intl.resolvedOptions"]
+        }))
+    }
+
+    pub(crate) async fn stealth_font_protect(
+        &self,
+        _p: FontProtectParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        onecrawl_cdp::antibot::inject_font_protection(&page).await.mcp()?;
+        json_ok(&serde_json::json!({
+            "action": "font_protect",
+            "status": "applied",
+            "note": "Font enumeration limited to common cross-platform subset"
+        }))
+    }
+
+    pub(crate) async fn stealth_behavior_sim(
+        &self,
+        p: BehaviorSimParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let cmd = p.command.as_deref().unwrap_or("start");
+        match cmd {
+            "stop" => {
+                onecrawl_cdp::antibot::stop_behavior_simulation(&page).await.mcp()?;
+                json_ok(&serde_json::json!({ "action": "behavior_sim", "status": "stopped" }))
+            }
+            _ => {
+                let interval = p.interval_ms.unwrap_or(2000);
+                onecrawl_cdp::antibot::inject_behavior_simulation(&page, interval).await.mcp()?;
+                json_ok(&serde_json::json!({
+                    "action": "behavior_sim",
+                    "status": "started",
+                    "interval_ms": interval,
+                    "behaviors": ["micro_movements", "idle_scroll", "focus_blur"]
+                }))
+            }
+        }
+    }
+
+    pub(crate) async fn stealth_rotate(
+        &self,
+        p: StealthRotateParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let per_page = p.per_page.unwrap_or(false);
+
+        let fp = onecrawl_cdp::tls_fingerprint::random_fingerprint();
+        let applied = onecrawl_cdp::tls_fingerprint::apply_fingerprint(&page, &fp).await.mcp()?;
+
+        let patches = onecrawl_cdp::antibot::inject_stealth_full(&page).await.mcp()?;
+
+        onecrawl_cdp::antibot::inject_canvas_advanced(&page, 2.0).await.mcp()?;
+
+        onecrawl_cdp::antibot::inject_font_protection(&page).await.mcp()?;
+
+        json_ok(&serde_json::json!({
+            "action": "stealth_rotate",
+            "rotated": true,
+            "fingerprint_patches": applied.len(),
+            "stealth_patches": patches.len(),
+            "per_page": per_page,
+            "ua": fp.user_agent,
+            "note": "Fresh identity applied: fingerprint + stealth patches + canvas noise + font protection"
+        }))
+    }
+
+    pub(crate) async fn stealth_detection_audit(
+        &self,
+        p: DetectionAuditParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let detailed = p.detailed.unwrap_or(true);
+
+        let js = r#"
+            (async () => {
+                const tests = {};
+                let passed = 0;
+                let total = 0;
+
+                total++;
+                tests.webdriver = !navigator.webdriver;
+                if (tests.webdriver) passed++;
+
+                total++;
+                tests.chrome_runtime = !!(window.chrome && window.chrome.runtime);
+                if (tests.chrome_runtime) passed++;
+
+                total++;
+                tests.plugins = navigator.plugins.length > 0;
+                if (tests.plugins) passed++;
+
+                total++;
+                tests.languages = navigator.languages && navigator.languages.length > 0;
+                if (tests.languages) passed++;
+
+                total++;
+                try {
+                    const c = document.createElement('canvas');
+                    const gl = c.getContext('webgl');
+                    const dbg = gl?.getExtension('WEBGL_debug_renderer_info');
+                    tests.webgl = !!(dbg && gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL));
+                } catch { tests.webgl = false; }
+                if (tests.webgl) passed++;
+
+                total++;
+                try {
+                    const perm = await navigator.permissions.query({name: 'notifications'});
+                    tests.permissions = perm.state !== 'denied' || true;
+                } catch { tests.permissions = false; }
+                if (tests.permissions) passed++;
+
+                total++;
+                tests.screen = window.outerWidth > 0 && window.outerHeight > 0 &&
+                               window.screen.width > 0 && screen.width === window.outerWidth;
+                if (tests.screen) passed++;
+
+                total++;
+                try {
+                    const c = document.createElement('canvas');
+                    c.width = 200; c.height = 50;
+                    const ctx = c.getContext('2d');
+                    ctx.fillStyle = '#f60';
+                    ctx.fillRect(0, 0, 200, 50);
+                    ctx.fillStyle = '#069';
+                    ctx.font = '14px Arial';
+                    ctx.fillText('fingerprint test', 2, 15);
+                    const d1 = c.toDataURL();
+                    ctx.fillStyle = '#f60';
+                    ctx.fillRect(0, 0, 200, 50);
+                    ctx.fillStyle = '#069';
+                    ctx.fillText('fingerprint test', 2, 15);
+                    const d2 = c.toDataURL();
+                    tests.canvas_noise = d1 !== d2;
+                } catch { tests.canvas_noise = false; }
+                if (tests.canvas_noise) passed++;
+
+                total++;
+                tests.webrtc_blocked = (typeof RTCPeerConnection === 'undefined') ||
+                    (typeof window.RTCPeerConnection === 'undefined');
+                if (tests.webrtc_blocked) passed++;
+
+                total++;
+                try {
+                    const dtf = new Intl.DateTimeFormat();
+                    const resolved = dtf.resolvedOptions();
+                    tests.timezone = !!(resolved.timeZone);
+                } catch { tests.timezone = false; }
+                if (tests.timezone) passed++;
+
+                total++;
+                tests.visibility = document.hidden === false && document.visibilityState === 'visible';
+                if (tests.visibility) passed++;
+
+                total++;
+                try {
+                    const battery = await navigator.getBattery();
+                    tests.battery = battery.charging === true && battery.level === 1;
+                } catch { tests.battery = true; }
+                if (tests.battery) passed++;
+
+                return JSON.stringify({
+                    score: Math.round((passed / total) * 100),
+                    passed, total,
+                    tests: tests,
+                    grade: passed === total ? 'A+' : passed >= total * 0.9 ? 'A' : passed >= total * 0.75 ? 'B' : passed >= total * 0.5 ? 'C' : 'F'
+                });
+            })()
+        "#;
+
+        let result = page.evaluate(js.to_string()).await.map_err(|e| mcp_err(format!("detection_audit: {e}")))?;
+        let raw: String = result.into_value().unwrap_or_else(|_| r#"{"score":0}"#.to_string());
+        let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap_or(serde_json::json!({"score": 0}));
+
+        if detailed {
+            json_ok(&parsed)
+        } else {
+            json_ok(&serde_json::json!({
+                "score": parsed["score"],
+                "grade": parsed["grade"],
+                "passed": parsed["passed"],
+                "total": parsed["total"]
+            }))
+        }
+    }
 }

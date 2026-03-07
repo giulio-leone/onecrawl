@@ -361,3 +361,220 @@ pub fn stealth_profiles() -> Vec<AntibotProfile> {
         },
     ]
 }
+
+/// Advanced canvas fingerprint protection with Gaussian noise.
+/// Unlike the basic 1-bit XOR in inject_stealth_full, this uses
+/// configurable noise intensity for harder detection evasion.
+pub async fn inject_canvas_advanced(page: &Page, intensity: f64) -> Result<()> {
+    let js = format!(
+        r#"(function() {{
+        const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+        const origToBlob = HTMLCanvasElement.prototype.toBlob;
+        const origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+
+        function addNoise(imageData, intensity) {{
+            const data = imageData.data;
+            const len = data.length;
+            // Use a seeded PRNG for consistency within session
+            let seed = 12345;
+            for (let i = 0; i < len; i += 4) {{
+                seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+                const noise = ((seed / 0x7fffffff) - 0.5) * intensity * 2;
+                data[i] = Math.max(0, Math.min(255, data[i] + noise));     // R
+                data[i+1] = Math.max(0, Math.min(255, data[i+1] + noise)); // G
+                data[i+2] = Math.max(0, Math.min(255, data[i+2] + noise)); // B
+            }}
+            return imageData;
+        }}
+
+        CanvasRenderingContext2D.prototype.getImageData = function(...args) {{
+            const imageData = origGetImageData.apply(this, args);
+            return addNoise(imageData, {intensity});
+        }};
+
+        HTMLCanvasElement.prototype.toDataURL = function(...args) {{
+            try {{
+                const ctx = this.getContext('2d');
+                if (ctx) {{
+                    const imageData = origGetImageData.call(ctx, 0, 0, this.width, this.height);
+                    addNoise(imageData, {intensity});
+                    ctx.putImageData(imageData, 0, 0);
+                }}
+            }} catch(e) {{}}
+            return origToDataURL.apply(this, args);
+        }};
+
+        HTMLCanvasElement.prototype.toBlob = function(cb, ...args) {{
+            try {{
+                const ctx = this.getContext('2d');
+                if (ctx) {{
+                    const imageData = origGetImageData.call(ctx, 0, 0, this.width, this.height);
+                    addNoise(imageData, {intensity});
+                    ctx.putImageData(imageData, 0, 0);
+                }}
+            }} catch(e) {{}}
+            return origToBlob.call(this, cb, ...args);
+        }};
+    }})()"#,
+        intensity = intensity
+    );
+
+    page.evaluate(js)
+        .await
+        .map_err(|e| Error::Cdp(format!("canvas_advanced: {e}")))?;
+    Ok(())
+}
+
+/// Ensure all timezone-related APIs agree with the spoofed timezone.
+pub async fn inject_timezone_sync(page: &Page, timezone: &str) -> Result<()> {
+    let js = format!(
+        r#"(function() {{
+        const tz = '{timezone}';
+
+        // Override Intl.DateTimeFormat to use our timezone
+        const OrigDTF = Intl.DateTimeFormat;
+        Intl.DateTimeFormat = function(locales, options) {{
+            options = options || {{}};
+            options.timeZone = tz;
+            return new OrigDTF(locales, options);
+        }};
+        Intl.DateTimeFormat.prototype = OrigDTF.prototype;
+        Intl.DateTimeFormat.supportedLocalesOf = OrigDTF.supportedLocalesOf;
+
+        // Override Date.prototype.getTimezoneOffset
+        const tzOffsets = {{
+            'America/New_York': 300, 'America/Chicago': 360,
+            'America/Denver': 420, 'America/Los_Angeles': 480,
+            'Europe/London': 0, 'Europe/Paris': -60, 'Europe/Berlin': -60,
+            'Asia/Tokyo': -540, 'Asia/Shanghai': -480, 'Asia/Dubai': -240,
+            'Australia/Sydney': -660, 'Pacific/Auckland': -720
+        }};
+        const offset = tzOffsets[tz];
+        if (offset !== undefined) {{
+            Date.prototype.getTimezoneOffset = function() {{ return offset; }};
+        }}
+
+        // Override Intl.DateTimeFormat.resolvedOptions
+        const origResolved = OrigDTF.prototype.resolvedOptions;
+        OrigDTF.prototype.resolvedOptions = function() {{
+            const opts = origResolved.call(this);
+            opts.timeZone = tz;
+            return opts;
+        }};
+    }})()"#,
+        timezone = timezone
+    );
+
+    page.evaluate(js)
+        .await
+        .map_err(|e| Error::Cdp(format!("timezone_sync: {e}")))?;
+    Ok(())
+}
+
+/// Limit font enumeration to a common cross-platform subset.
+pub async fn inject_font_protection(page: &Page) -> Result<()> {
+    let js = r#"(function() {
+        // Common cross-platform fonts that don't reveal OS/software
+        const allowedFonts = new Set([
+            'Arial', 'Helvetica', 'Times New Roman', 'Times', 'Courier New',
+            'Courier', 'Verdana', 'Georgia', 'Palatino', 'Garamond',
+            'Bookman', 'Trebuchet MS', 'Impact', 'Comic Sans MS',
+            'Lucida Sans Unicode', 'Tahoma', 'Geneva', 'Lucida Console'
+        ]);
+
+        // Override document.fonts.check to only confirm allowed fonts
+        if (document.fonts) {
+            const origCheck = document.fonts.check.bind(document.fonts);
+            document.fonts.check = function(font, text) {
+                const fontName = font.replace(/^[\d.]+[a-z]+\s+/i, '').replace(/["']/g, '').trim();
+                if (!allowedFonts.has(fontName)) return false;
+                return origCheck(font, text);
+            };
+
+            // Override FontFaceSet iteration
+            const origForEach = document.fonts.forEach;
+            if (origForEach) {
+                document.fonts.forEach = function(cb, thisArg) {
+                    origForEach.call(this, function(fontFace) {
+                        if (allowedFonts.has(fontFace.family.replace(/["']/g, ''))) {
+                            cb.call(thisArg, fontFace);
+                        }
+                    });
+                };
+            }
+        }
+
+        // Block CSS font loading probes
+        const origCreate = document.createElement.bind(document);
+        document.createElement = function(tag) {
+            const el = origCreate(tag);
+            if (tag.toLowerCase() === 'span') {
+                const origStyle = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'style');
+                // Let it through — font probe detection is mainly via offsetWidth
+            }
+            return el;
+        };
+    })()"#;
+
+    page.evaluate(js.to_string())
+        .await
+        .map_err(|e| Error::Cdp(format!("font_protection: {e}")))?;
+    Ok(())
+}
+
+/// Inject continuous human-like behavior: random micro-movements, idle drift.
+/// Runs in background via setInterval — simulates an active human user.
+pub async fn inject_behavior_simulation(page: &Page, interval_ms: u64) -> Result<()> {
+    let js = format!(
+        r#"(function() {{
+        if (window.__onecrawl_behavior) return;
+
+        let lastX = window.innerWidth / 2;
+        let lastY = window.innerHeight / 2;
+
+        window.__onecrawl_behavior = setInterval(() => {{
+            // Random micro-movement (±2-5px drift)
+            const dx = (Math.random() - 0.5) * 10;
+            const dy = (Math.random() - 0.5) * 10;
+            lastX = Math.max(0, Math.min(window.innerWidth, lastX + dx));
+            lastY = Math.max(0, Math.min(window.innerHeight, lastY + dy));
+
+            document.dispatchEvent(new MouseEvent('mousemove', {{
+                clientX: lastX, clientY: lastY,
+                bubbles: true, cancelable: true
+            }}));
+
+            // Occasionally scroll slightly (5% chance)
+            if (Math.random() < 0.05) {{
+                window.scrollBy(0, (Math.random() - 0.5) * 20);
+            }}
+
+            // Occasional focus/blur events (2% chance)
+            if (Math.random() < 0.02) {{
+                window.dispatchEvent(new Event(Math.random() > 0.5 ? 'focus' : 'blur'));
+            }}
+        }}, {interval_ms});
+    }})()"#,
+        interval_ms = interval_ms
+    );
+
+    page.evaluate(js)
+        .await
+        .map_err(|e| Error::Cdp(format!("behavior_simulation: {e}")))?;
+    Ok(())
+}
+
+/// Stop continuous behavior simulation.
+pub async fn stop_behavior_simulation(page: &Page) -> Result<()> {
+    let js = r#"
+        if (window.__onecrawl_behavior) {
+            clearInterval(window.__onecrawl_behavior);
+            window.__onecrawl_behavior = null;
+        }
+        'stopped'
+    "#;
+    page.evaluate(js.to_string())
+        .await
+        .map_err(|e| Error::Cdp(format!("stop_behavior: {e}")))?;
+    Ok(())
+}

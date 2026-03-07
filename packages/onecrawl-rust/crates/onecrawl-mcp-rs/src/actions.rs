@@ -134,6 +134,16 @@ action_enum!(BrowserAction, "browser", [
     SetMode => "set_mode",
     SetStealth => "set_stealth",
     SessionInfo => "session_info",
+    SpaNavWatch => "spa_nav_watch",
+    FrameworkDetect => "framework_detect",
+    VirtualScrollDetect => "virtual_scroll_detect",
+    VirtualScrollExtract => "virtual_scroll_extract",
+    WaitHydration => "wait_hydration",
+    WaitAnimation => "wait_animation",
+    WaitNetworkIdle => "wait_network_idle",
+    TriggerLazyLoad => "trigger_lazy_load",
+    HealthCheck => "health_check",
+    CircuitBreaker => "circuit_breaker",
 ]);
 
 action_enum!(CrawlAction, "crawl", [
@@ -205,6 +215,17 @@ action_enum!(StealthAction, "stealth", [
     HumanProfile => "human_profile",
     StealthMax => "stealth_max",
     StealthScore => "stealth_score",
+    TlsApply => "tls_apply",
+    WebrtcBlock => "webrtc_block",
+    BatterySpoof => "battery_spoof",
+    SensorBlock => "sensor_block",
+    CanvasAdvanced => "canvas_advanced",
+    TimezoneSync => "timezone_sync",
+    FontProtect => "font_protect",
+    BehaviorSim => "behavior_sim",
+    BehaviorStop => "behavior_stop",
+    StealthRotate => "stealth_rotate",
+    DetectionAudit => "detection_audit",
 ]);
 
 action_enum!(DataAction, "data", [
