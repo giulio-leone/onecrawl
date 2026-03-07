@@ -1086,6 +1086,9 @@ pub(crate) async fn dispatch(command: Commands) {
             }
             StreamAction::Stop => commands::browser::stream_stop().await,
             StreamAction::Frame { output } => commands::browser::stream_frame(&output).await,
+            StreamAction::Capture { output, count, interval } => {
+                commands::browser::stream_capture(&output, count, interval).await
+            }
         },
 
         // ── Video Recording ─────────────────────────────────────────
@@ -1095,6 +1098,12 @@ pub(crate) async fn dispatch(command: Commands) {
             }
             RecordAction::Stop => commands::browser::recording_stop().await,
             RecordAction::Status => commands::browser::recording_status().await,
+            RecordAction::Encode { frames_dir, output, fps, format } => {
+                commands::browser::video_encode(&frames_dir, &output, fps, &format).await
+            }
+            RecordAction::Video { duration, output, fps, format } => {
+                commands::browser::video_record(duration, &output, fps, &format).await
+            }
         },
 
         // ── Version ─────────────────────────────────────────────────
@@ -1209,5 +1218,7 @@ pub(crate) async fn dispatch(command: Commands) {
         Commands::PageInfo => commands::browser::page_info_cli().await,
         Commands::Assert { checks } => commands::browser::assert_checks_cli(&checks).await,
         Commands::ElementDetail { selector } => commands::browser::element_detail_cli(&selector).await,
+        Commands::WorkflowExec { file } => commands::browser::workflow_exec(&file).await,
+        Commands::WorkflowValidate { file } => commands::browser::workflow_validate_cli(&file).await,
         }
 }

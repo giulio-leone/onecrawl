@@ -290,6 +290,23 @@ impl OneCrawlMcp {
     }
 
 
+    pub(crate) async fn pixel_diff(
+        &self,
+        p: PixelDiffParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let result = onecrawl_cdp::pixel_diff::pixel_diff(
+            &page,
+            &p.image_a,
+            &p.image_b,
+            p.threshold.unwrap_or(5.0),
+            p.generate_diff.unwrap_or(true),
+        )
+        .await
+        .mcp()?;
+        json_ok(&serde_json::to_value(&result).mcp()?)
+    }
+
     pub(crate) async fn perf_trace(
         &self,
         p: PerfTraceParams,

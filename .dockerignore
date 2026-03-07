@@ -1,0 +1,9 @@
+target/
+node_modules/
+.git/
+*.md
+logs/
+reports/
+docs/
+.agents/
+pnpm-lock.yaml

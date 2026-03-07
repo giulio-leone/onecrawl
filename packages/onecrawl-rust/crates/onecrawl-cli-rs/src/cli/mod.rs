@@ -917,6 +917,18 @@ pub(crate) enum Commands {
         selector: String,
     },
 
+    // ── Workflow ────────────────────────────────────────────────────
+    /// Execute a workflow from a JSON file
+    WorkflowExec {
+        /// Path to workflow JSON file
+        file: String,
+    },
+    /// Validate a workflow JSON file
+    WorkflowValidate {
+        /// Path to workflow JSON file
+        file: String,
+    },
+
     // ── Version ─────────────────────────────────────────────────
     /// Show version and build information
     Version,

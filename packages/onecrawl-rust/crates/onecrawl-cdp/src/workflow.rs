@@ -6,6 +6,7 @@
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::pin::Pin;
 
 /// A complete workflow definition.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -295,6 +296,341 @@ fn validate_step(step: &Step, path: &str, errors: &mut Vec<String>) {
         }
         _ => {}
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+//  Standalone Workflow Execution Engine
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Execute a parsed workflow against a browser page.
+pub async fn execute_workflow(
+    page: &chromiumoxide::Page,
+    workflow: &Workflow,
+) -> Result<WorkflowResult> {
+    let start = std::time::Instant::now();
+    let mut variables = workflow.variables.clone();
+    let mut results: Vec<StepResult> = Vec::new();
+    let mut succeeded = 0usize;
+    let mut failed = 0usize;
+    let mut skipped = 0usize;
+    let mut overall_status = StepStatus::Success;
+
+    for (i, step) in workflow.steps.iter().enumerate() {
+        let step_id = if step.id.is_empty() { format!("step_{i}") } else { step.id.clone() };
+        let step_name = if step.name.is_empty() { format!("Step {i}") } else { step.name.clone() };
+
+        // Evaluate condition — skip if false
+        if let Some(ref cond) = step.condition {
+            let interpolated = interpolate(cond, &variables);
+            if !evaluate_condition(&interpolated, &variables) {
+                results.push(StepResult {
+                    step_id, step_name,
+                    status: StepStatus::Skipped,
+                    output: None, error: None, duration_ms: 0,
+                });
+                skipped += 1;
+                continue;
+            }
+        }
+
+        // Retry loop
+        let max_attempts = step.retries.max(1);
+        let mut last_err: Option<String>;
+        let mut step_ok = false;
+
+        for attempt in 0..max_attempts {
+            if attempt > 0 && step.retry_delay_ms > 0 {
+                tokio::time::sleep(tokio::time::Duration::from_millis(step.retry_delay_ms)).await;
+            }
+
+            let step_start = std::time::Instant::now();
+            let result = execute_step(page, &step.action, &mut variables).await;
+            let duration_ms = step_start.elapsed().as_millis() as u64;
+
+            match result {
+                Ok(output) => {
+                    if let Some(ref save_key) = step.save_as {
+                        if let Some(ref out) = output {
+                            variables.insert(save_key.clone(), out.clone());
+                        }
+                    }
+                    results.push(StepResult {
+                        step_id: step_id.clone(), step_name: step_name.clone(),
+                        status: StepStatus::Success,
+                        output, error: None, duration_ms,
+                    });
+                    succeeded += 1;
+                    step_ok = true;
+                    break;
+                }
+                Err(e) => {
+                    last_err = Some(e.to_string());
+                    // Only push result on final attempt
+                    if attempt + 1 >= max_attempts {
+                        results.push(StepResult {
+                            step_id: step_id.clone(), step_name: step_name.clone(),
+                            status: StepStatus::Failed,
+                            output: None, error: last_err.clone(), duration_ms,
+                        });
+                        failed += 1;
+                    }
+                }
+            }
+        }
+
+        if !step_ok {
+            let error_action = step.on_error.as_ref()
+                .unwrap_or(&workflow.on_error.action);
+            match error_action {
+                StepErrorAction::Stop => {
+                    overall_status = StepStatus::Failed;
+                    break;
+                }
+                StepErrorAction::Continue | StepErrorAction::Skip | StepErrorAction::Retry => {
+                    continue;
+                }
+            }
+        }
+    }
+
+    let total_duration_ms = start.elapsed().as_millis() as u64;
+    Ok(WorkflowResult {
+        name: workflow.name.clone(),
+        status: overall_status,
+        steps: results,
+        variables,
+        total_duration_ms,
+        steps_succeeded: succeeded,
+        steps_failed: failed,
+        steps_skipped: skipped,
+    })
+}
+
+/// Execute a single workflow action against a browser page.
+fn execute_step<'a>(
+    page: &'a chromiumoxide::Page,
+    action: &'a Action,
+    variables: &'a mut HashMap<String, serde_json::Value>,
+) -> Pin<Box<dyn std::future::Future<Output = Result<Option<serde_json::Value>>> + Send + 'a>> {
+    Box::pin(async move {
+        match action {
+            Action::Navigate { url } => {
+                let url = interpolate(url, variables);
+                crate::navigation::goto(page, &url).await?;
+                let title = crate::navigation::get_title(page).await.unwrap_or_default();
+                Ok(Some(serde_json::json!({ "url": url, "title": title })))
+            }
+            Action::Click { selector } => {
+                let sel = interpolate(selector, variables);
+                let resolved = crate::accessibility::resolve_ref(&sel);
+                crate::element::click(page, &resolved).await?;
+                Ok(Some(serde_json::json!({ "clicked": sel })))
+            }
+            Action::Type { selector, text } => {
+                let sel = interpolate(selector, variables);
+                let txt = interpolate(text, variables);
+                let resolved = crate::accessibility::resolve_ref(&sel);
+                crate::element::type_text(page, &resolved, &txt).await?;
+                Ok(Some(serde_json::json!({ "typed": txt.len() })))
+            }
+            Action::WaitForSelector { selector, timeout_ms } => {
+                let sel = interpolate(selector, variables);
+                let resolved = crate::accessibility::resolve_ref(&sel);
+                crate::navigation::wait_for_selector(page, &resolved, *timeout_ms).await?;
+                Ok(Some(serde_json::json!({ "found": sel })))
+            }
+            Action::Screenshot { path, full_page } => {
+                let bytes = if full_page.unwrap_or(false) {
+                    crate::screenshot::screenshot_full(page).await?
+                } else {
+                    crate::screenshot::screenshot_viewport(page).await?
+                };
+                if let Some(p) = path {
+                    let p = interpolate(p, variables);
+                    std::fs::write(&p, &bytes)
+                        .map_err(|e| Error::Cdp(format!("failed to write screenshot: {e}")))?;
+                    Ok(Some(serde_json::json!({ "saved": p, "bytes": bytes.len() })))
+                } else {
+                    Ok(Some(serde_json::json!({ "bytes": bytes.len() })))
+                }
+            }
+            Action::Evaluate { js } => {
+                let js = interpolate(js, variables);
+                let result = page.evaluate(js)
+                    .await
+                    .map_err(|e| Error::Cdp(e.to_string()))?;
+                let val = result.into_value::<serde_json::Value>().unwrap_or(serde_json::Value::Null);
+                Ok(Some(val))
+            }
+            Action::Extract { selector, attribute } => {
+                let sel = interpolate(selector, variables);
+                let sel_json = serde_json::to_string(&sel).unwrap_or_default();
+                let attr_js = if let Some(attr) = attribute {
+                    let attr_json = serde_json::to_string(attr).unwrap_or_default();
+                    format!(r#"Array.from(document.querySelectorAll({sel_json})).map(e => e.getAttribute({attr_json}))"#)
+                } else {
+                    format!(r#"Array.from(document.querySelectorAll({sel_json})).map(e => e.textContent.trim())"#)
+                };
+                let result = page.evaluate(attr_js)
+                    .await
+                    .map_err(|e| Error::Cdp(e.to_string()))?;
+                let val = result.into_value::<serde_json::Value>().unwrap_or(serde_json::Value::Null);
+                Ok(Some(val))
+            }
+            Action::SmartClick { query } => {
+                let q = interpolate(query, variables);
+                let matched = crate::smart_actions::smart_click(page, &q).await?;
+                Ok(Some(serde_json::json!({ "clicked": matched.selector, "confidence": matched.confidence })))
+            }
+            Action::SmartFill { query, value } => {
+                let q = interpolate(query, variables);
+                let v = interpolate(value, variables);
+                let matched = crate::smart_actions::smart_fill(page, &q, &v).await?;
+                Ok(Some(serde_json::json!({ "filled": matched.selector, "confidence": matched.confidence })))
+            }
+            Action::Sleep { ms } => {
+                tokio::time::sleep(tokio::time::Duration::from_millis(*ms)).await;
+                Ok(Some(serde_json::json!({ "slept_ms": ms })))
+            }
+            Action::SetVariable { name, value } => {
+                let interpolated = interpolate(&value.to_string(), variables);
+                let parsed = serde_json::from_str::<serde_json::Value>(&interpolated)
+                    .unwrap_or(serde_json::Value::String(interpolated));
+                variables.insert(name.clone(), parsed.clone());
+                Ok(Some(serde_json::json!({ "set": name, "value": parsed })))
+            }
+            Action::Log { message, level } => {
+                let msg = interpolate(message, variables);
+                let lvl = level.as_deref().unwrap_or("info");
+                match lvl {
+                    "error" => tracing::error!("[workflow] {}", msg),
+                    "warn" => tracing::warn!("[workflow] {}", msg),
+                    "debug" => tracing::debug!("[workflow] {}", msg),
+                    _ => tracing::info!("[workflow] {}", msg),
+                }
+                Ok(Some(serde_json::json!({ "logged": msg, "level": lvl })))
+            }
+            Action::Assert { condition, message } => {
+                let cond = interpolate(condition, variables);
+                if evaluate_condition(&cond, variables) {
+                    Ok(Some(serde_json::json!({ "assert": "passed" })))
+                } else {
+                    Err(Error::Cdp(format!(
+                        "assertion failed: {}",
+                        message.as_deref().unwrap_or(&cond)
+                    )))
+                }
+            }
+            Action::Loop { items, variable, steps } => {
+                let values: Vec<serde_json::Value> = match items {
+                    LoopSource::Array(arr) => arr.clone(),
+                    LoopSource::Variable(var_name) => {
+                        let interpolated = interpolate(var_name, variables);
+                        match variables.get(&interpolated) {
+                            Some(serde_json::Value::Array(arr)) => arr.clone(),
+                            _ => vec![],
+                        }
+                    }
+                    LoopSource::Range { start, end } => {
+                        (*start..*end).map(|i| serde_json::json!(i)).collect()
+                    }
+                };
+                let mut last_output = None;
+                for item in &values {
+                    variables.insert(variable.clone(), item.clone());
+                    for step in steps {
+                        if let Some(ref cond) = step.condition {
+                            let interpolated = interpolate(cond, variables);
+                            if !evaluate_condition(&interpolated, variables) {
+                                continue;
+                            }
+                        }
+                        last_output = execute_step(page, &step.action, variables).await?;
+                        if let Some(ref save_key) = step.save_as {
+                            if let Some(ref out) = last_output {
+                                variables.insert(save_key.clone(), out.clone());
+                            }
+                        }
+                    }
+                }
+                Ok(last_output)
+            }
+            Action::Conditional { condition, then_steps, else_steps } => {
+                let cond = interpolate(condition, variables);
+                let empty = vec![];
+                let branch = if evaluate_condition(&cond, variables) {
+                    then_steps
+                } else {
+                    else_steps.as_ref().unwrap_or(&empty)
+                };
+                let mut last_output = None;
+                for step in branch {
+                    if let Some(ref cond) = step.condition {
+                        let interpolated = interpolate(cond, variables);
+                        if !evaluate_condition(&interpolated, variables) {
+                            continue;
+                        }
+                    }
+                    last_output = execute_step(page, &step.action, variables).await?;
+                    if let Some(ref save_key) = step.save_as {
+                        if let Some(ref out) = last_output {
+                            variables.insert(save_key.clone(), out.clone());
+                        }
+                    }
+                }
+                Ok(last_output)
+            }
+            Action::SubWorkflow { path } => {
+                let p = interpolate(path, variables);
+                let sub = load_from_file(&p)?;
+                let sub_result = Box::pin(execute_workflow(page, &sub)).await?;
+                // Merge sub-workflow variables back
+                for (k, v) in &sub_result.variables {
+                    variables.insert(k.clone(), v.clone());
+                }
+                Ok(Some(serde_json::to_value(&sub_result)
+                    .unwrap_or(serde_json::Value::Null)))
+            }
+            Action::HttpRequest { url, method, headers, body } => {
+                let url = interpolate(url, variables);
+                let method_str = method.as_deref().unwrap_or("GET");
+                let client = reqwest::Client::new();
+                let mut req = match method_str.to_uppercase().as_str() {
+                    "POST" => client.post(&url),
+                    "PUT" => client.put(&url),
+                    "DELETE" => client.delete(&url),
+                    "PATCH" => client.patch(&url),
+                    _ => client.get(&url),
+                };
+                if let Some(hdrs) = headers {
+                    for (k, v) in hdrs {
+                        let v = interpolate(v, variables);
+                        req = req.header(k.as_str(), v);
+                    }
+                }
+                if let Some(b) = body {
+                    let b = interpolate(b, variables);
+                    req = req.body(b);
+                }
+                let resp = req.send().await
+                    .map_err(|e| Error::Cdp(format!("HTTP request failed: {e}")))?;
+                let status = resp.status().as_u16();
+                let body_text = resp.text().await.unwrap_or_default();
+                let body_val = serde_json::from_str::<serde_json::Value>(&body_text)
+                    .unwrap_or(serde_json::Value::String(body_text));
+                Ok(Some(serde_json::json!({ "status": status, "body": body_val })))
+            }
+            Action::Snapshot { compact, interactive_only } => {
+                let opts = crate::accessibility::AgentSnapshotOptions {
+                    interactive_only: *interactive_only,
+                    compact: *compact,
+                    ..Default::default()
+                };
+                let result = crate::accessibility::agent_snapshot(page, &opts).await?;
+                Ok(Some(serde_json::json!(result)))
+            }
+        }
+    })
 }
 
 #[cfg(test)]

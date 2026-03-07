@@ -182,6 +182,10 @@ action_enum!(AgentAction, "agent", [
     RecordingStart => "recording_start",
     RecordingStop => "recording_stop",
     RecordingStatus => "recording_status",
+    StreamCapture => "stream_capture",
+    StreamToDisk => "stream_to_disk",
+    RecordingEncode => "recording_encode",
+    RecordingCapture => "recording_capture",
     IosDevices => "ios_devices",
     IosConnect => "ios_connect",
     IosNavigate => "ios_navigate",
@@ -378,6 +382,9 @@ action_enum!(AutomateAction, "automate", [
     Watchdog => "watchdog",
     // Enhanced agentic: batch execute
     BatchExecute => "batch_execute",
+    // Standalone workflow execution engine
+    WorkflowExecute => "workflow_execute",
+    WorkflowStatus => "workflow_status",
 ]);
 
 action_enum!(PerfAction, "perf", [
@@ -388,6 +395,7 @@ action_enum!(PerfAction, "perf", [
     VrtRun => "vrt_run",
     VrtCompare => "vrt_compare",
     VrtUpdate => "vrt_update",
+    PixelDiff => "pixel_diff",
 ]);
 
 // ──────────────── Tests ─────────────────

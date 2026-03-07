@@ -18,6 +18,7 @@ mod shell;
 mod spa_harness;
 mod tabs;
 mod web_storage;
+mod workflow_cli;
 
 // Re-export all public functions so callers can use commands::browser::function_name
 pub use agent_computer::{
@@ -271,9 +272,12 @@ pub use media::{
     stream_start,
     stream_stop,
     stream_frame,
+    stream_capture,
     recording_start,
     recording_stop,
     recording_status,
+    video_encode,
+    video_record,
 };
 pub use monitoring::{
     coverage_js_start,
@@ -385,4 +389,8 @@ pub use spa_harness::{
     reconnect_cdp,
     gc_tabs,
     watchdog,
+};
+pub use workflow_cli::{
+    workflow_exec,
+    workflow_validate_cli,
 };

@@ -89,6 +89,7 @@ pub mod webauthn;
 pub mod websocket;
 pub mod workers;
 pub mod vrt;
+pub mod pixel_diff;
 pub mod workflow;
 
 pub use browser_pool::{BrowserInstance, BrowserPool, BrowserStatus, SharedPool, new_shared_pool};
@@ -118,8 +119,8 @@ pub use network_log::{NetworkEntry, NetworkSummary};
 pub use print::DetailedPdfOptions;
 pub use proxy::{ProxyConfig, ProxyPool, RotationStrategy};
 pub use screenshot::{ImageFormat, PdfOptions, ScreenshotOptions};
-pub use screencast::ScreencastOptions;
-pub use recording::{RecordingState, SharedRecording, new_shared_recording};
+pub use screencast::{ScreencastOptions, StreamResult};
+pub use recording::{RecordingState, SharedRecording, new_shared_recording, VideoResult};
 pub use stealth::{Fingerprint, generate_fingerprint, generate_fingerprint_with_real_ua, get_stealth_init_script, inject_persistent_stealth};
 pub use throttle::NetworkProfile;
 pub use tracing_cdp::PerformanceMetric;

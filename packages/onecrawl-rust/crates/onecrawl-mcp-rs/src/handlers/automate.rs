@@ -321,6 +321,52 @@ impl OneCrawlMcp {
     }
 
     // ════════════════════════════════════════════════════════════════
+    //  Standalone Workflow Execution Engine
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn workflow_execute(
+        &self,
+        p: WorkflowExecuteParams,
+    ) -> Result<CallToolResult, McpError> {
+        let mut workflow = if p.workflow.trim().starts_with('{') {
+            onecrawl_cdp::workflow::parse_json(&p.workflow).mcp()?
+        } else {
+            onecrawl_cdp::workflow::load_from_file(&p.workflow).mcp()?
+        };
+        if let Some(overrides) = p.variables {
+            for (k, v) in overrides {
+                workflow.variables.insert(k, v);
+            }
+        }
+        let errors = onecrawl_cdp::workflow::validate(&workflow);
+        if !errors.is_empty() {
+            return json_ok(&serde_json::json!({
+                "status": "validation_failed",
+                "errors": errors,
+            }));
+        }
+        let page = ensure_page(&self.browser).await?;
+        let result = onecrawl_cdp::workflow::execute_workflow(&page, &workflow).await.mcp()?;
+        json_ok(&serde_json::to_value(&result).mcp()?)
+    }
+
+    pub(crate) async fn workflow_status(
+        &self,
+        _p: WorkflowStatusParams,
+    ) -> Result<CallToolResult, McpError> {
+        json_ok(&serde_json::json!({
+            "engine": "workflow_executor",
+            "version": "1.0",
+            "supported_actions": [
+                "navigate", "click", "type", "wait_for_selector", "screenshot",
+                "evaluate", "extract", "smart_click", "smart_fill", "sleep",
+                "set_variable", "log", "assert", "loop", "conditional",
+                "sub_workflow", "http_request", "snapshot"
+            ],
+        }))
+    }
+
+    // ════════════════════════════════════════════════════════════════
     //  Network Intelligence tools
     // ════════════════════════════════════════════════════════════════
 

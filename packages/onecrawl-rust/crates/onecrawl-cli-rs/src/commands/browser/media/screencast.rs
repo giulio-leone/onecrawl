@@ -53,3 +53,17 @@ pub async fn stream_frame(output: &str) {
     })
     .await;
 }
+
+pub async fn stream_capture(output_dir: &str, count: usize, interval_ms: u64) {
+    with_page(|page| async move {
+        let opts = onecrawl_cdp::screencast::ScreencastOptions::default();
+        let result = onecrawl_cdp::screencast::stream_to_disk(
+            &page, &opts, output_dir, count, interval_ms,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+        Ok(())
+    })
+    .await;
+}

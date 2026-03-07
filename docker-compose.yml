@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  onecrawl:
+    build: .
+    ports:
+      - "3100:3100"
+    environment:
+      - CHROME_PATH=/usr/bin/chromium
+      - ONECRAWL_HEADLESS=true
+    volumes:
+      - onecrawl-data:/data
+      - ./policy.json:/root/.onecrawl/policy.json:ro
+    restart: unless-stopped
+    shm_size: '2gb'
+
+  onecrawl-cli:
+    build: .
+    entrypoint: ["onecrawl"]
+    environment:
+      - CHROME_PATH=/usr/bin/chromium
+      - ONECRAWL_HEADLESS=true
+    volumes:
+      - onecrawl-data:/data
+    profiles:
+      - cli
+
+volumes:
+  onecrawl-data:

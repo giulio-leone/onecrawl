@@ -620,6 +620,104 @@ impl OneCrawlMcp {
         }
     }
 
+
+    pub(crate) async fn agent_stream_capture(
+        &self,
+        p: StreamCaptureParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let opts = onecrawl_cdp::screencast::ScreencastOptions::default();
+        let frames = onecrawl_cdp::screencast::capture_frames_burst(
+            &page,
+            &opts,
+            p.count.unwrap_or(10),
+            p.interval_ms.unwrap_or(200),
+        )
+        .await
+        .mcp()?;
+        let b64_frames: Vec<String> = frames.iter().map(|f| B64.encode(f)).collect();
+        json_ok(&serde_json::json!({
+            "frames": b64_frames.len(),
+            "data": b64_frames
+        }))
+    }
+
+
+    pub(crate) async fn agent_stream_to_disk(
+        &self,
+        p: StreamToDiskParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let fmt = p.format.as_deref().unwrap_or("jpeg");
+        let opts = onecrawl_cdp::screencast::ScreencastOptions {
+            format: fmt.to_string(),
+            ..Default::default()
+        };
+        let result = onecrawl_cdp::screencast::stream_to_disk(
+            &page,
+            &opts,
+            p.output_dir.as_deref().unwrap_or("/tmp/onecrawl-stream"),
+            p.count.unwrap_or(30),
+            p.interval_ms.unwrap_or(200),
+        )
+        .await
+        .mcp()?;
+        json_ok(&serde_json::to_value(&result).mcp()?)
+    }
+
+
+    pub(crate) async fn agent_recording_encode(
+        &self,
+        p: RecordingEncodeParams,
+    ) -> Result<CallToolResult, McpError> {
+        let frames_dir = p.frames_dir.as_deref().unwrap_or("/tmp/onecrawl-recording");
+        let output = p.output.as_deref().unwrap_or("/tmp/onecrawl-recording.mp4");
+        let result = onecrawl_cdp::recording::encode_video(
+            frames_dir,
+            output,
+            p.fps.unwrap_or(5),
+            p.format.as_deref().unwrap_or("mp4"),
+        )
+        .map_err(|e| mcp_err(&e))?;
+        json_ok(&serde_json::to_value(&result).mcp()?)
+    }
+
+
+    pub(crate) async fn agent_recording_capture(
+        &self,
+        p: RecordingCaptureParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let fps = p.fps.unwrap_or(5);
+        let duration = p.duration_secs.unwrap_or(5);
+        let total_frames = (fps as u64 * duration) as usize;
+        let interval_ms = 1000 / fps as u64;
+
+        let output_dir = "/tmp/onecrawl-capture";
+        let opts = onecrawl_cdp::screencast::ScreencastOptions::default();
+        let stream_result = onecrawl_cdp::screencast::stream_to_disk(
+            &page,
+            &opts,
+            output_dir,
+            total_frames,
+            interval_ms,
+        )
+        .await
+        .mcp()?;
+
+        let output = p.output.as_deref().unwrap_or("/tmp/onecrawl-capture.mp4");
+        let format = p.format.as_deref().unwrap_or("mp4");
+        let video_result = onecrawl_cdp::recording::encode_video(
+            output_dir, output, fps, format,
+        )
+        .map_err(|e| mcp_err(&e))?;
+
+        json_ok(&serde_json::json!({
+            "stream": serde_json::to_value(&stream_result).unwrap_or_default(),
+            "video": serde_json::to_value(&video_result).unwrap_or_default()
+        }))
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  iOS / Mobile Safari tools
     // ════════════════════════════════════════════════════════════════

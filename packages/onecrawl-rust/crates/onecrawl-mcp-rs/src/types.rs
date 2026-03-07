@@ -112,6 +112,50 @@ pub struct RecordingStopParams {}
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct RecordingStatusParams {}
 
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct StreamCaptureParams {
+    #[schemars(description = "Number of frames to capture (default: 10)")]
+    pub count: Option<usize>,
+    #[schemars(description = "Interval between frames in milliseconds (default: 200)")]
+    pub interval_ms: Option<u64>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct StreamToDiskParams {
+    #[schemars(description = "Output directory for saved frames")]
+    pub output_dir: Option<String>,
+    #[schemars(description = "Number of frames to capture (default: 30)")]
+    pub count: Option<usize>,
+    #[schemars(description = "Interval between frames in milliseconds (default: 200)")]
+    pub interval_ms: Option<u64>,
+    #[schemars(description = "Image format: jpeg or png (default: jpeg)")]
+    pub format: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct RecordingEncodeParams {
+    #[schemars(description = "Directory containing frame_NNNN.jpg files")]
+    pub frames_dir: Option<String>,
+    #[schemars(description = "Output video file path")]
+    pub output: Option<String>,
+    #[schemars(description = "Frames per second (default: 5)")]
+    pub fps: Option<u32>,
+    #[schemars(description = "Video format: mp4, webm, or gif (default: mp4)")]
+    pub format: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct RecordingCaptureParams {
+    #[schemars(description = "Recording duration in seconds (default: 5)")]
+    pub duration_secs: Option<u64>,
+    #[schemars(description = "Frames per second (default: 5)")]
+    pub fps: Option<u32>,
+    #[schemars(description = "Output video file path")]
+    pub output: Option<String>,
+    #[schemars(description = "Video format: mp4, webm, or gif (default: mp4)")]
+    pub format: Option<String>,
+}
+
 // ──────────────────────────── Response Types ────────────────────────────
 
 #[derive(serde::Serialize)]
@@ -236,6 +280,17 @@ pub struct WorkflowRunParams {
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
 pub struct WorkflowListParams {}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct WorkflowExecuteParams {
+    #[schemars(description = "Workflow definition as JSON string, or file path to workflow JSON")]
+    pub workflow: String,
+    #[schemars(description = "Override variables as key-value pairs")]
+    pub variables: Option<std::collections::HashMap<String, serde_json::Value>>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct WorkflowStatusParams {}
 
 // ──────────────────── Network Intelligence params ─────────────────────
 
@@ -364,4 +419,18 @@ pub struct PerfTraceParams {
     pub url: String,
     #[schemars(description = "Wait time in ms after load for late metrics (default: 3000)")]
     pub settle_ms: Option<u64>,
+}
+
+// ──────────────────── Pixel Diff params ─────────────────────
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct PixelDiffParams {
+    #[schemars(description = "First image as base64-encoded PNG")]
+    pub image_a: String,
+    #[schemars(description = "Second image as base64-encoded PNG")]
+    pub image_b: String,
+    #[schemars(description = "Mismatch percentage threshold (default: 5.0)")]
+    pub threshold: Option<f64>,
+    #[schemars(description = "Generate a diff visualization image (default: true)")]
+    pub generate_diff: Option<bool>,
 }

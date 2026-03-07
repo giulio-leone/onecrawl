@@ -779,6 +779,22 @@ impl OneCrawlMcp {
                 let params: RecordingStatusParams = parse_params(v, "recording_status")?;
                 self.agent_recording_status(params).await
             }
+            AgentAction::StreamCapture => {
+                let params: StreamCaptureParams = parse_params(v, "stream_capture")?;
+                self.agent_stream_capture(params).await
+            }
+            AgentAction::StreamToDisk => {
+                let params: StreamToDiskParams = parse_params(v, "stream_to_disk")?;
+                self.agent_stream_to_disk(params).await
+            }
+            AgentAction::RecordingEncode => {
+                let params: RecordingEncodeParams = parse_params(v, "recording_encode")?;
+                self.agent_recording_encode(params).await
+            }
+            AgentAction::RecordingCapture => {
+                let params: RecordingCaptureParams = parse_params(v, "recording_capture")?;
+                self.agent_recording_capture(params).await
+            }
             AgentAction::IosDevices => {
                 let params: IosDevicesParams = parse_params(v, "ios_devices")?;
                 self.agent_ios_devices(params).await
@@ -1367,7 +1383,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "automate",
-        description = "Workflow automation, AI task planning, and execution control.\n\nActions:\n- workflow_validate {workflow} — Validate a workflow definition\n- workflow_run {workflow} — Execute a workflow\n- plan {goal, context?} — Generate automation plan from goal\n- execute {plan, max_retries?} — Execute a generated plan\n- patterns — List available automation patterns\n- rate_limit {action?, max_per_minute?} — Check/configure rate limiter\n- retry {url?, operation?, reason?} — Enqueue retry with backoff\n- retry_adapt {action, params, max_retries?, strategy?} — Smart retry with adaptive strategy\n- error_classify {error_message} — Classify error into categories\n- recovery_suggest {error_type, context?} — Suggest recovery steps\n- error_history — List recent error history\n- checkpoint_save {name, include_cookies?, include_storage?, include_context?} — Save browser state checkpoint\n- checkpoint_restore {name, restore_url?, restore_cookies?} — Restore from checkpoint\n- checkpoint_list — List all checkpoints\n- checkpoint_delete {name} — Delete a checkpoint\n- workflow_while {condition, actions, max_iterations?} — Loop while condition is true\n- workflow_for_each {collection, variable_name?, actions} — Iterate over collection\n- workflow_if {condition, then_actions, else_actions?} — Conditional execution\n- workflow_variable {name, value?} — Get or set workflow variable\n- reconnect_cdp {max_retries?} — Auto-reconnect CDP with exponential backoff\n- gc_tabs {max_count?} — Garbage collect tabs / report tab info\n- batch_execute {commands, stop_on_error?} — Execute multiple JS commands in sequence"
+        description = "Workflow automation, AI task planning, and execution control.\n\nActions:\n- workflow_validate {workflow} — Validate a workflow definition\n- workflow_run {workflow} — Execute a workflow\n- plan {goal, context?} — Generate automation plan from goal\n- execute {plan, max_retries?} — Execute a generated plan\n- patterns — List available automation patterns\n- rate_limit {action?, max_per_minute?} — Check/configure rate limiter\n- retry {url?, operation?, reason?} — Enqueue retry with backoff\n- retry_adapt {action, params, max_retries?, strategy?} — Smart retry with adaptive strategy\n- error_classify {error_message} — Classify error into categories\n- recovery_suggest {error_type, context?} — Suggest recovery steps\n- error_history — List recent error history\n- checkpoint_save {name, include_cookies?, include_storage?, include_context?} — Save browser state checkpoint\n- checkpoint_restore {name, restore_url?, restore_cookies?} — Restore from checkpoint\n- checkpoint_list — List all checkpoints\n- checkpoint_delete {name} — Delete a checkpoint\n- workflow_while {condition, actions, max_iterations?} — Loop while condition is true\n- workflow_for_each {collection, variable_name?, actions} — Iterate over collection\n- workflow_if {condition, then_actions, else_actions?} — Conditional execution\n- workflow_variable {name, value?} — Get or set workflow variable\n- reconnect_cdp {max_retries?} — Auto-reconnect CDP with exponential backoff\n- gc_tabs {max_count?} — Garbage collect tabs / report tab info\n- batch_execute {commands, stop_on_error?} — Execute multiple JS commands in sequence\n- workflow_execute {workflow, variables?} — Execute a workflow using the standalone engine\n- workflow_status — Get workflow engine status and supported actions"
     )]
     async fn tool_automate(
         &self,
@@ -1468,12 +1484,20 @@ impl OneCrawlMcp {
                 let params: BatchExecuteParams = parse_params(v, "batch_execute")?;
                 self.batch_execute(params).await
             }
+            AutomateAction::WorkflowExecute => {
+                let params: WorkflowExecuteParams = parse_params(v, "workflow_execute")?;
+                self.workflow_execute(params).await
+            }
+            AutomateAction::WorkflowStatus => {
+                let params: WorkflowStatusParams = parse_params(v, "workflow_status")?;
+                self.workflow_status(params).await
+            }
         }
     }
 
     #[tool(
         name = "perf",
-        description = "Performance monitoring, budgets, and visual regression testing.\n\nActions:\n- audit {url?} — Collect Core Web Vitals and performance metrics\n- budget {budget, url?} — Check performance against budget\n- compare {baseline, current, threshold_pct?} — Detect performance regressions\n- trace {url, settle_ms?} — Full performance trace with navigation\n- vrt_run {suite, baseline_dir} — Run visual regression test suite\n- vrt_compare {baseline, current, threshold?} — Compare two screenshots\n- vrt_update {suite_name, baseline_dir, tests} — Update VRT baselines"
+        description = "Performance monitoring, budgets, and visual regression testing.\n\nActions:\n- audit {url?} — Collect Core Web Vitals and performance metrics\n- budget {budget, url?} — Check performance against budget\n- compare {baseline, current, threshold_pct?} — Detect performance regressions\n- trace {url, settle_ms?} — Full performance trace with navigation\n- vrt_run {suite, baseline_dir} — Run visual regression test suite\n- vrt_compare {baseline, current, threshold?} — Compare two screenshots\n- vrt_update {suite_name, baseline_dir, tests} — Update VRT baselines\n- pixel_diff {image_a, image_b, threshold?} — In-browser pixel-level screenshot comparison"
     )]
     async fn tool_perf(
         &self,
@@ -1511,6 +1535,10 @@ impl OneCrawlMcp {
             PerfAction::VrtUpdate => {
                 let params: VrtUpdateBaselineParams = parse_params(v, "vrt_update")?;
                 self.vrt_update_baseline(params).await
+            }
+            PerfAction::PixelDiff => {
+                let params: PixelDiffParams = parse_params(v, "pixel_diff")?;
+                self.pixel_diff(params).await
             }
         }
     }

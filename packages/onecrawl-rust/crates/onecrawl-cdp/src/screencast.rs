@@ -91,3 +91,64 @@ pub async fn capture_frame(page: &Page, opts: &ScreencastOptions) -> Result<Vec<
         .map_err(|e| Error::Cdp(format!("base64 decode failed: {e}")))?;
     Ok(bytes)
 }
+
+/// Capture N frames at a specified interval, returning all as raw bytes.
+pub async fn capture_frames_burst(
+    page: &Page,
+    opts: &ScreencastOptions,
+    count: usize,
+    interval_ms: u64,
+) -> Result<Vec<Vec<u8>>> {
+    let mut frames = Vec::with_capacity(count);
+    for i in 0..count {
+        let frame = capture_frame(page, opts).await?;
+        frames.push(frame);
+        if interval_ms > 0 && i < count - 1 {
+            tokio::time::sleep(std::time::Duration::from_millis(interval_ms)).await;
+        }
+    }
+    Ok(frames)
+}
+
+/// Stream frames to a directory, returning metadata about saved frames.
+pub async fn stream_to_disk(
+    page: &Page,
+    opts: &ScreencastOptions,
+    output_dir: &str,
+    count: usize,
+    interval_ms: u64,
+) -> Result<StreamResult> {
+    std::fs::create_dir_all(output_dir)
+        .map_err(|e| Error::Cdp(format!("mkdir: {e}")))?;
+    let mut saved = Vec::new();
+    let start = std::time::Instant::now();
+    let ext = if opts.format == "png" { "png" } else { "jpg" };
+
+    for i in 0..count {
+        let bytes = capture_frame(page, opts).await?;
+        let filename = format!("frame_{:04}.{ext}", i + 1);
+        let path = format!("{output_dir}/{filename}");
+        std::fs::write(&path, &bytes)
+            .map_err(|e| Error::Cdp(format!("write: {e}")))?;
+        saved.push(filename);
+
+        if interval_ms > 0 && i < count - 1 {
+            tokio::time::sleep(std::time::Duration::from_millis(interval_ms)).await;
+        }
+    }
+
+    Ok(StreamResult {
+        frames_captured: saved.len(),
+        output_dir: output_dir.to_string(),
+        files: saved,
+        duration_ms: start.elapsed().as_millis() as u64,
+    })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamResult {
+    pub frames_captured: usize,
+    pub output_dir: String,
+    pub files: Vec<String>,
+    pub duration_ms: u64,
+}

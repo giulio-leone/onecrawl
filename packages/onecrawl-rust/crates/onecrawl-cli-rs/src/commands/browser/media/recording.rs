@@ -104,3 +104,38 @@ pub async fn recording_status() {
         }
     }
 }
+
+pub async fn video_encode(frames_dir: &str, output: &str, fps: u32, format: &str) {
+    match onecrawl_cdp::recording::encode_video(frames_dir, output, fps, format) {
+        Ok(result) => println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default()),
+        Err(e) => {
+            eprintln!("{} {e}", "✗".red());
+            std::process::exit(1);
+        }
+    }
+}
+
+pub async fn video_record(duration: u64, output: &str, fps: u32, format: &str) {
+    with_page(|page| async move {
+        let total_frames = (fps as u64 * duration) as usize;
+        let interval_ms = 1000 / fps as u64;
+        let dir = "/tmp/onecrawl-recording";
+        let opts = onecrawl_cdp::screencast::ScreencastOptions::default();
+        let stream = onecrawl_cdp::screencast::stream_to_disk(
+            &page, &opts, dir, total_frames, interval_ms,
+        )
+        .await
+        .map_err(|e| e.to_string())?;
+        println!(
+            "{} Captured {} frames",
+            "✓".green(),
+            stream.frames_captured
+        );
+        match onecrawl_cdp::recording::encode_video(dir, output, fps, format) {
+            Ok(video) => println!("{}", serde_json::to_string_pretty(&video).unwrap_or_default()),
+            Err(e) => println!("Encoding failed (ffmpeg required): {e}"),
+        }
+        Ok(())
+    })
+    .await;
+}
