@@ -21,6 +21,7 @@ pub(crate) async fn dispatch(command: Commands) {
         Commands::Crypto { action } => commands::crypto::handle(action),
         Commands::Parse { action } => commands::parse::handle(action),
         Commands::Storage { action } => commands::storage::handle(action).await,
+        Commands::Vault { action } => commands::vault::handle(action),
 
         // ── Session ─────────────────────────────────────────────────
         Commands::Session { action } => commands::session::handle(action).await,

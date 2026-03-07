@@ -9,3 +9,4 @@ pub mod proxy;
 pub mod session;
 pub mod skills;
 pub mod storage;
+pub mod vault;

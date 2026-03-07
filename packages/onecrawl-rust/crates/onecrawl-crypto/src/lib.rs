@@ -6,6 +6,7 @@ pub mod aes_gcm;
 pub mod pbkdf2;
 pub mod pkce;
 pub mod totp;
+pub mod vault;
 
 pub use aes_gcm::{decrypt, encrypt};
 pub use pbkdf2::derive_key;

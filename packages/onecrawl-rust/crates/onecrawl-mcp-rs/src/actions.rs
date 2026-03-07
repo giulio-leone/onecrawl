@@ -483,6 +483,18 @@ action_enum!(OrchestratorAction, "orchestrator", [
     Devices => "devices",
 ]);
 
+action_enum!(VaultAction, "vault", [
+    Create => "create",
+    Open => "open",
+    Set => "set",
+    Get => "get",
+    Delete => "delete",
+    List => "list",
+    Use => "use",
+    ChangePassword => "change_password",
+    ImportEnv => "import_env",
+]);
+
 // ──────────────── Tests ─────────────────
 
 #[cfg(test)]

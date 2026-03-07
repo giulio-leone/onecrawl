@@ -3132,3 +3132,95 @@ pub struct OrchestratorStopParams {}
 
 #[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
 pub struct OrchestratorDevicesParams {}
+
+// ──────────────── Vault params ─────────────────
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct VaultCreateParams {
+    #[schemars(description = "Path to the vault file (default ~/.onecrawl/vault.enc)")]
+    pub path: Option<String>,
+    #[schemars(description = "Master password for the vault")]
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct VaultOpenParams {
+    #[schemars(description = "Path to the vault file (default ~/.onecrawl/vault.enc)")]
+    pub path: Option<String>,
+    #[schemars(description = "Master password for the vault")]
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct VaultSetParams {
+    #[schemars(description = "Path to the vault file (default ~/.onecrawl/vault.enc)")]
+    pub path: Option<String>,
+    #[schemars(description = "Master password for the vault")]
+    pub password: String,
+    #[schemars(description = "Secret key (e.g. 'linkedin.email')")]
+    pub key: String,
+    #[schemars(description = "Secret value")]
+    pub value: String,
+    #[schemars(description = "Optional category/service (e.g. 'linkedin')")]
+    pub category: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct VaultGetParams {
+    #[schemars(description = "Path to the vault file (default ~/.onecrawl/vault.enc)")]
+    pub path: Option<String>,
+    #[schemars(description = "Master password for the vault")]
+    pub password: String,
+    #[schemars(description = "Secret key to retrieve")]
+    pub key: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct VaultDeleteParams {
+    #[schemars(description = "Path to the vault file (default ~/.onecrawl/vault.enc)")]
+    pub path: Option<String>,
+    #[schemars(description = "Master password for the vault")]
+    pub password: String,
+    #[schemars(description = "Secret key to delete")]
+    pub key: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct VaultListParams {
+    #[schemars(description = "Path to the vault file (default ~/.onecrawl/vault.enc)")]
+    pub path: Option<String>,
+    #[schemars(description = "Master password for the vault")]
+    pub password: String,
+    #[schemars(description = "Optional category filter")]
+    pub category: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct VaultUseParams {
+    #[schemars(description = "Path to the vault file (default ~/.onecrawl/vault.enc)")]
+    pub path: Option<String>,
+    #[schemars(description = "Master password for the vault")]
+    pub password: String,
+    #[schemars(description = "Service name to export (e.g. 'linkedin')")]
+    pub service: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct VaultChangePasswordParams {
+    #[schemars(description = "Path to the vault file (default ~/.onecrawl/vault.enc)")]
+    pub path: Option<String>,
+    #[schemars(description = "Current master password")]
+    pub password: String,
+    #[schemars(description = "New master password")]
+    pub new_password: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct VaultImportEnvParams {
+    #[schemars(description = "Path to the vault file (default ~/.onecrawl/vault.enc)")]
+    pub path: Option<String>,
+    #[schemars(description = "Master password for the vault")]
+    pub password: String,
+    #[schemars(description = "Environment variable prefix (default 'ONECRAWL_VAULT_')")]
+    pub prefix: Option<String>,
+}

@@ -13,3 +13,4 @@ mod perf;
 mod durable;
 mod orchestrator;
 mod reactor;
+mod vault;

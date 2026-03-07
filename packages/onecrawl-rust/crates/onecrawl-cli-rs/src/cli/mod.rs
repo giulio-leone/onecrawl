@@ -28,6 +28,7 @@ mod storage;
 mod streaming_video;
 mod tabs;
 mod utility;
+mod vault;
 
 pub(crate) use agent::AgentCliAction;
 pub(crate) use android::AndroidAction;
@@ -51,6 +52,7 @@ pub(crate) use storage::{CookieJarAction, CookieAction, WebStorageAction};
 pub(crate) use streaming_video::{StreamAction, RecordAction};
 pub(crate) use tabs::{TabAction, DownloadAction};
 pub(crate) use utility::{RateLimitAction, RetryAction, ScheduleAction, PoolAction, BenchAction, GeoAction, RequestAction};
+pub(crate) use vault::VaultAction;
 
 
 #[derive(Subcommand)]
@@ -665,6 +667,11 @@ pub(crate) enum Commands {
     Storage {
         #[command(subcommand)]
         action: crate::commands::storage::StorageAction,
+    },
+    /// Encrypted credential vault
+    Vault {
+        #[command(subcommand)]
+        action: VaultAction,
     },
 
     // ── System ──────────────────────────────────────────────────────

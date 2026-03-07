@@ -1891,6 +1891,58 @@ impl OneCrawlMcp {
         }
     }
 
+    #[tool(
+        name = "vault",
+        description = "Encrypted credential vault — AES-256-GCM encrypted secrets for browser automation.\n\nActions:\n- create {password, path?} — Create a new encrypted vault\n- open {password, path?} — Open and verify an existing vault\n- set {password, key, value, category?, path?} — Store a secret\n- get {password, key, path?} — Retrieve a secret value\n- delete {password, key, path?} — Delete a secret\n- list {password, category?, path?} — List entries (no values shown)\n- use {password, service, path?} — Export service credentials as workflow variables\n- change_password {password, new_password, path?} — Change master password\n- import_env {password, prefix?, path?} — Import secrets from environment variables"
+    )]
+    async fn tool_vault(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        self.enforce_safety("vault", &action).await?;
+        let action = VaultAction::parse(&action)?;
+        match action {
+            VaultAction::Create => {
+                let params: VaultCreateParams = parse_params(v, "vault_create")?;
+                self.vault_create(params)
+            }
+            VaultAction::Open => {
+                let params: VaultOpenParams = parse_params(v, "vault_open")?;
+                self.vault_open(params)
+            }
+            VaultAction::Set => {
+                let params: VaultSetParams = parse_params(v, "vault_set")?;
+                self.vault_set(params)
+            }
+            VaultAction::Get => {
+                let params: VaultGetParams = parse_params(v, "vault_get")?;
+                self.vault_get(params)
+            }
+            VaultAction::Delete => {
+                let params: VaultDeleteParams = parse_params(v, "vault_delete")?;
+                self.vault_delete(params)
+            }
+            VaultAction::List => {
+                let params: VaultListParams = parse_params(v, "vault_list")?;
+                self.vault_list(params)
+            }
+            VaultAction::Use => {
+                let params: VaultUseParams = parse_params(v, "vault_use")?;
+                self.vault_use(params)
+            }
+            VaultAction::ChangePassword => {
+                let params: VaultChangePasswordParams = parse_params(v, "vault_change_password")?;
+                self.vault_change_password(params)
+            }
+            VaultAction::ImportEnv => {
+                let params: VaultImportEnvParams = parse_params(v, "vault_import_env")?;
+                self.vault_import_env(params)
+            }
+        }
+    }
+
     /// Create an `OneCrawlMcp` reusing an existing browser session.
     /// Used by the CLI `run` command to delegate to MCP handlers directly.
     pub fn from_browser(
@@ -1932,8 +1984,9 @@ impl OneCrawlMcp {
             "perf" => self.tool_perf(ta).await,
             "reactor" => self.tool_reactor(ta).await,
             "orchestrator" => self.tool_orchestrator(ta).await,
+            "vault" => self.tool_vault(ta).await,
             _ => return Err(format!(
-                "unknown tool: '{tool}'. Available: browser, crawl, agent, stealth, data, secure, computer, memory, automate, perf, reactor, orchestrator"
+                "unknown tool: '{tool}'. Available: browser, crawl, agent, stealth, data, secure, computer, memory, automate, perf, reactor, orchestrator, vault"
             )),
         };
 
