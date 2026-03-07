@@ -76,7 +76,7 @@ pub use crate::fetcher::{BrowserFetcher, BrowserFetcherOptions};
 pub use crate::handler::Handler;
 pub use crate::page::Page;
 pub use crate::factory::{create_browser, connect_browser};
-pub use crate::ports::{BrowserPort, PagePort, ElementPort, NetworkPort, EmulationPort, InputPort};
+pub use crate::ports::{BrowserPort, PagePort, ElementPort, NetworkPort, EmulationPort, InputPort, ElementRect, CookieInfo};
 
 pub mod auth;
 pub mod browser;
