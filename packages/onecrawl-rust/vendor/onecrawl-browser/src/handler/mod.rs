@@ -524,14 +524,24 @@ impl Handler {
 impl Stream for Handler {
     type Item = Result<()>;
 
+    /// Central dispatch loop for the Handler stream.
+    ///
+    /// Each iteration performs three phases:
+    /// 1. **Command dispatch** — drain messages from the browser channel.
+    /// 2. **Target polling** — poll each attached target for events/commands.
+    /// 3. **WebSocket read** — read responses/events from the CDP connection.
+    ///
+    /// The loop repeats as long as the WebSocket yields new data; when idle
+    /// it returns `Poll::Pending` until the next wakeup.
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let pin = self.get_mut();
 
         loop {
             let now = Instant::now();
-            // temporary pinning of the browser receiver should be safe as we are pinning
-            // through the already pinned self. with the receivers we can also
-            // safely ignore exhaustion as those are fused.
+
+            // ── Command dispatch ──
+            // Temporary pinning of the browser receiver should be safe as we
+            // are pinning through the already pinned self.
             while let Poll::Ready(Some(msg)) = Pin::new(&mut pin.from_browser).poll_next(cx) {
                 match msg {
                     HandlerMessage::Command(cmd) => {
@@ -576,6 +586,7 @@ impl Stream for Handler {
                 }
             }
 
+            // ── Target polling ──
             for n in (0..pin.target_ids.len()).rev() {
                 let target_id = pin.target_ids.swap_remove(n);
                 if let Some((id, mut target)) = pin.targets.remove_entry(&target_id) {
@@ -610,6 +621,7 @@ impl Stream for Handler {
                 }
             }
 
+            // ── WebSocket read ──
             let mut done = true;
 
             while let Poll::Ready(Some(ev)) = Pin::new(&mut pin.conn).poll_next(cx) {

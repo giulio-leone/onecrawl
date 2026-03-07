@@ -1,3 +1,5 @@
+//! Chrome process lifecycle — launch, connect, and configuration.
+
 use std::future::Future;
 use std::time::Duration;
 use std::{
@@ -6,78 +8,23 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use futures::channel::mpsc::{channel, unbounded, Sender};
-use futures::channel::oneshot::channel as oneshot_channel;
+use futures::channel::mpsc::channel;
 use futures::select;
-use futures::SinkExt;
 
-use onecrawl_protocol::cdp::browser_protocol::network::{Cookie, CookieParam};
-use onecrawl_protocol::cdp::browser_protocol::storage::{
-    ClearCookiesParams, GetCookiesParams, SetCookiesParams,
-};
-use onecrawl_protocol::cdp::browser_protocol::target::{
-    CreateBrowserContextParams, CreateTargetParams, DisposeBrowserContextParams, TargetId,
-    TargetInfo,
-};
-use onecrawl_protocol::cdp::{CdpEventMessage, IntoEventKind};
-use onecrawl_browser_types::*;
+use onecrawl_protocol::cdp::CdpEventMessage;
 
-use crate::async_process::{self, Child, ExitStatus, Stdio};
-use crate::cmd::{to_command_response, CommandMessage};
+use crate::async_process::{self, Child, Stdio};
 use crate::conn::Connection;
 use crate::detection::{self, DetectionOptions};
 use crate::error::{BrowserStderr, CdpError, Result};
-use crate::handler::browser::BrowserContext;
 use crate::handler::viewport::Viewport;
-use crate::handler::{Handler, HandlerConfig, HandlerMessage, REQUEST_TIMEOUT};
-use crate::listeners::{EventListenerRequest, EventStream};
-use crate::page::Page;
+use crate::handler::{Handler, HandlerConfig, REQUEST_TIMEOUT};
 use crate::utils;
-use onecrawl_protocol::cdp::browser_protocol::browser::{
-    BrowserContextId, CloseReturns, GetVersionParams, GetVersionReturns,
-};
+
+use super::Browser;
 
 /// Default `Browser::launch` timeout in MS
 pub const LAUNCH_TIMEOUT: u64 = 20_000;
-
-/// A [`Browser`] is created when onecrawl_browser connects to a Chromium instance.
-#[derive(Debug)]
-pub struct Browser {
-    /// The `Sender` to send messages to the connection handler that drives the
-    /// websocket
-    sender: Sender<HandlerMessage>,
-    /// How the spawned chromium instance was configured, if any
-    config: Option<BrowserConfig>,
-    /// The spawned chromium instance
-    child: Option<Child>,
-    /// The debug web socket url of the chromium instance
-    debug_ws_url: String,
-    /// The context of the browser
-    browser_context: BrowserContext,
-}
-
-/// Browser connection information.
-#[derive(serde::Deserialize, Debug, Default)]
-pub struct BrowserConnection {
-    #[serde(rename = "Browser")]
-    /// The browser name
-    pub browser: String,
-    #[serde(rename = "Protocol-Version")]
-    /// Browser version
-    pub protocol_version: String,
-    #[serde(rename = "User-Agent")]
-    /// User Agent used by default.
-    pub user_agent: String,
-    #[serde(rename = "V8-Version")]
-    /// The v8 engine version
-    pub v8_version: String,
-    #[serde(rename = "WebKit-Version")]
-    /// Webkit version
-    pub webkit_version: String,
-    #[serde(rename = "webSocketDebuggerUrl")]
-    /// Remote debugging address
-    pub web_socket_debugger_url: String,
-}
 
 impl Browser {
     /// Connect to an already running chromium instance via the given URL.
@@ -231,306 +178,6 @@ impl Browser {
 
         Ok((browser, fut))
     }
-
-    /// Request to fetch all existing browser targets.
-    ///
-    /// By default, only targets launched after the browser connection are tracked
-    /// when connecting to a existing browser instance with the devtools websocket url
-    /// This function fetches existing targets on the browser and adds them as pages internally
-    ///
-    /// The pages are not guaranteed to be ready as soon as the function returns
-    /// You should wait a few millis if you need to use a page
-    /// Returns [TargetInfo]
-    pub async fn fetch_targets(&mut self) -> Result<Vec<TargetInfo>> {
-        let (tx, rx) = oneshot_channel();
-
-        self.sender
-            .clone()
-            .send(HandlerMessage::FetchTargets(tx))
-            .await?;
-
-        rx.await?
-    }
-
-    /// Request for the browser to close completely.
-    ///
-    /// If the browser was spawned by [`Browser::launch`], it is recommended to wait for the
-    /// spawned instance exit, to avoid "zombie" processes ([`Browser::wait`],
-    /// [`Browser::wait_sync`], [`Browser::try_wait`]).
-    /// [`Browser::drop`] waits automatically if needed.
-    pub async fn close(&mut self) -> Result<CloseReturns> {
-        let (tx, rx) = oneshot_channel();
-
-        self.sender
-            .clone()
-            .send(HandlerMessage::CloseBrowser(tx))
-            .await?;
-
-        rx.await?
-    }
-
-    /// Asynchronously wait for the spawned chromium instance to exit completely.
-    ///
-    /// The instance is spawned by [`Browser::launch`]. `wait` is usually called after
-    /// [`Browser::close`]. You can call this explicitly to collect the process and avoid
-    /// "zombie" processes.
-    ///
-    /// This call has no effect if this [`Browser`] did not spawn any chromium instance (e.g.
-    /// connected to an existing browser through [`Browser::connect`])
-    pub async fn wait(&mut self) -> io::Result<Option<ExitStatus>> {
-        if let Some(child) = self.child.as_mut() {
-            Ok(Some(child.wait().await?))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// If the spawned chromium instance has completely exited, wait for it.
-    ///
-    /// The instance is spawned by [`Browser::launch`]. `try_wait` is usually called after
-    /// [`Browser::close`]. You can call this explicitly to collect the process and avoid
-    /// "zombie" processes.
-    ///
-    /// This call has no effect if this [`Browser`] did not spawn any chromium instance (e.g.
-    /// connected to an existing browser through [`Browser::connect`])
-    pub fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
-        if let Some(child) = self.child.as_mut() {
-            child.try_wait()
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Get the spawned chromium instance
-    ///
-    /// The instance is spawned by [`Browser::launch`]. The result is a [`async_process::Child`]
-    /// value. It acts as a compat wrapper for an `async-std` or `tokio` child process.
-    ///
-    /// You may use [`async_process::Child::as_mut_inner`] to retrieve the concrete implementation
-    /// for the selected runtime.
-    ///
-    /// This call has no effect if this [`Browser`] did not spawn any chromium instance (e.g.
-    /// connected to an existing browser through [`Browser::connect`])
-    pub fn get_mut_child(&mut self) -> Option<&mut Child> {
-        self.child.as_mut()
-    }
-
-    /// Forcibly kill the spawned chromium instance
-    ///
-    /// The instance is spawned by [`Browser::launch`]. `kill` will automatically wait for the child
-    /// process to exit to avoid "zombie" processes.
-    ///
-    /// This method is provided to help if the browser does not close by itself. You should prefer
-    /// to use [`Browser::close`].
-    ///
-    /// This call has no effect if this [`Browser`] did not spawn any chromium instance (e.g.
-    /// connected to an existing browser through [`Browser::connect`])
-    pub async fn kill(&mut self) -> Option<io::Result<()>> {
-        match self.child.as_mut() {
-            Some(child) => Some(child.kill().await),
-            None => None,
-        }
-    }
-
-    /// If not launched as incognito this creates a new incognito browser
-    /// context. After that this browser exists within the incognito session.
-    /// New pages created while being in incognito mode will also run in the
-    /// incognito context. Incognito contexts won't share cookies/cache with
-    /// other browser contexts.
-    pub async fn start_incognito_context(&mut self) -> Result<&mut Self> {
-        if !self.is_incognito_configured() {
-            let browser_context_id = self
-                .create_browser_context(CreateBrowserContextParams::default())
-                .await?;
-            self.browser_context = BrowserContext::from(browser_context_id);
-            self.sender
-                .clone()
-                .send(HandlerMessage::InsertContext(self.browser_context.clone()))
-                .await?;
-        }
-
-        Ok(self)
-    }
-
-    /// If a incognito session was created with
-    /// `Browser::start_incognito_context` this disposes this context.
-    ///
-    /// # Note This will also dispose all pages that were running within the
-    /// incognito context.
-    pub async fn quit_incognito_context(&mut self) -> Result<&mut Self> {
-        if let Some(id) = self.browser_context.take() {
-            self.dispose_browser_context(id.clone()).await?;
-            self.sender
-                .clone()
-                .send(HandlerMessage::DisposeContext(BrowserContext::from(id)))
-                .await?;
-        }
-        Ok(self)
-    }
-
-    /// Whether incognito mode was configured from the start
-    fn is_incognito_configured(&self) -> bool {
-        self.config
-            .as_ref()
-            .map(|c| c.incognito)
-            .unwrap_or_default()
-    }
-
-    /// Returns the address of the websocket this browser is attached to
-    pub fn websocket_address(&self) -> &String {
-        &self.debug_ws_url
-    }
-
-    /// Whether the BrowserContext is incognito.
-    pub fn is_incognito(&self) -> bool {
-        self.is_incognito_configured() || self.browser_context.is_incognito()
-    }
-
-    /// The config of the spawned chromium instance if any.
-    pub fn config(&self) -> Option<&BrowserConfig> {
-        self.config.as_ref()
-    }
-
-    /// Create a new browser page
-    pub async fn new_page(&self, params: impl Into<CreateTargetParams>) -> Result<Page> {
-        let (tx, rx) = oneshot_channel();
-        let mut params = params.into();
-        if let Some(id) = self.browser_context.id() {
-            if params.browser_context_id.is_none() {
-                params.browser_context_id = Some(id.clone());
-            }
-        }
-
-        self.sender
-            .clone()
-            .send(HandlerMessage::CreatePage(params, tx))
-            .await?;
-
-        rx.await?
-    }
-
-    /// Version information about the browser
-    pub async fn version(&self) -> Result<GetVersionReturns> {
-        Ok(self.execute(GetVersionParams::default()).await?.result)
-    }
-
-    /// Returns the user agent of the browser
-    pub async fn user_agent(&self) -> Result<String> {
-        Ok(self.version().await?.user_agent)
-    }
-
-    /// Call a browser method.
-    pub async fn execute<T: Command>(&self, cmd: T) -> Result<CommandResponse<T::Response>> {
-        let (tx, rx) = oneshot_channel();
-        let method = cmd.identifier();
-        let msg = CommandMessage::new(cmd, tx)?;
-
-        self.sender
-            .clone()
-            .send(HandlerMessage::Command(msg))
-            .await?;
-        let resp = rx.await??;
-        to_command_response::<T>(resp, method)
-    }
-
-    /// Return all of the pages of the browser
-    pub async fn pages(&self) -> Result<Vec<Page>> {
-        let (tx, rx) = oneshot_channel();
-        self.sender
-            .clone()
-            .send(HandlerMessage::GetPages(tx))
-            .await?;
-        Ok(rx.await?)
-    }
-
-    /// Return page of given target_id
-    pub async fn get_page(&self, target_id: TargetId) -> Result<Page> {
-        let (tx, rx) = oneshot_channel();
-        self.sender
-            .clone()
-            .send(HandlerMessage::GetPage(target_id, tx))
-            .await?;
-        rx.await?.ok_or(CdpError::NotFound)
-    }
-
-    /// Set listener for browser event
-    pub async fn event_listener<T: IntoEventKind>(&self) -> Result<EventStream<T>> {
-        let (tx, rx) = unbounded();
-        self.sender
-            .clone()
-            .send(HandlerMessage::AddEventListener(
-                EventListenerRequest::new::<T>(tx),
-            ))
-            .await?;
-
-        Ok(EventStream::new(rx))
-    }
-
-    /// Creates a new empty browser context.
-    pub async fn create_browser_context(
-        &self,
-        params: CreateBrowserContextParams,
-    ) -> Result<BrowserContextId> {
-        let response = self.execute(params).await?;
-        Ok(response.result.browser_context_id)
-    }
-
-    /// Deletes a browser context.
-    pub async fn dispose_browser_context(
-        &self,
-        browser_context_id: impl Into<BrowserContextId>,
-    ) -> Result<()> {
-        self.execute(DisposeBrowserContextParams::new(browser_context_id))
-            .await?;
-
-        Ok(())
-    }
-
-    /// Clears cookies.
-    pub async fn clear_cookies(&self) -> Result<()> {
-        self.execute(ClearCookiesParams::default()).await?;
-        Ok(())
-    }
-
-    /// Returns all browser cookies.
-    pub async fn get_cookies(&self) -> Result<Vec<Cookie>> {
-        Ok(self
-            .execute(GetCookiesParams::default())
-            .await?
-            .result
-            .cookies)
-    }
-
-    /// Sets given cookies.
-    pub async fn set_cookies(&self, mut cookies: Vec<CookieParam>) -> Result<&Self> {
-        for cookie in &mut cookies {
-            if let Some(url) = cookie.url.as_ref() {
-                crate::page::validate_cookie_url(url)?;
-            }
-        }
-
-        self.execute(SetCookiesParams::new(cookies)).await?;
-        Ok(self)
-    }
-}
-
-impl Drop for Browser {
-    fn drop(&mut self) {
-        if let Some(child) = self.child.as_mut() {
-            if let Ok(Some(_)) = child.try_wait() {
-                // Already exited, do nothing. Usually occurs after using the method close or kill.
-            } else {
-                // We set the `kill_on_drop` property for the child process, so no need to explicitely
-                // kill it here. It can't really be done anyway since the method is async.
-                //
-                // On Unix, the process will be reaped in the background by the runtime automatically
-                // so it won't leave any resources locked. It is, however, a better practice for the user to
-                // do it himself since the runtime doesn't provide garantees as to when the reap occurs, so we
-                // warn him here.
-                tracing::warn!("Browser was not closed manually, it will be killed automatically in the background");
-            }
-        }
-    }
 }
 
 /// Resolve devtools WebSocket URL from the provided browser process
@@ -591,6 +238,8 @@ async fn ws_url_from_output(
     }
 }
 
+// ── Configuration types ──
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum HeadlessMode {
     /// The "headful" mode.
@@ -606,18 +255,18 @@ pub enum HeadlessMode {
 pub struct BrowserConfig {
     /// Determines whether to run headless version of the browser. Defaults to
     /// true.
-    headless: HeadlessMode,
+    pub(super) headless: HeadlessMode,
     /// Determines whether to run the browser with a sandbox.
-    sandbox: bool,
+    pub(super) sandbox: bool,
     /// Launch the browser with a specific window width and height.
-    window_size: Option<(u32, u32)>,
+    pub(super) window_size: Option<(u32, u32)>,
     /// Launch the browser with a specific debugging port.
-    port: u16,
+    pub(super) port: u16,
     /// Path for Chrome or Chromium.
     ///
     /// If unspecified, the create will try to automatically detect a suitable
     /// binary.
-    executable: std::path::PathBuf,
+    pub(super) executable: std::path::PathBuf,
 
     /// A list of Chrome extensions to load.
     ///
@@ -626,7 +275,7 @@ pub struct BrowserConfig {
     ///
     /// Note that Chrome does not support loading extensions in headless-mode.
     /// See https://bugs.chromium.org/p/chromium/issues/detail?id=706008#c5
-    extensions: Vec<String>,
+    pub(super) extensions: Vec<String>,
 
     /// Environment variables to set for the Chromium process.
     /// Passes value through to std::process::Command::envs.
@@ -636,24 +285,24 @@ pub struct BrowserConfig {
     pub user_data_dir: Option<PathBuf>,
 
     /// Whether to launch the `Browser` in incognito mode
-    incognito: bool,
+    pub(super) incognito: bool,
 
     /// Timeout duration for `Browser::launch`.
-    launch_timeout: Duration,
+    pub(super) launch_timeout: Duration,
 
     /// Ignore https errors, default is true
-    ignore_https_errors: bool,
+    pub(super) ignore_https_errors: bool,
     /// Ignore invalid messages, default is true
-    ignore_invalid_messages: bool,
-    viewport: Option<Viewport>,
+    pub(super) ignore_invalid_messages: bool,
+    pub(super) viewport: Option<Viewport>,
     /// The duration after a request with no response should time out
-    request_timeout: Duration,
+    pub(super) request_timeout: Duration,
 
     /// Additional command line arguments to pass to the browser instance.
-    args: Vec<String>,
+    pub(super) args: Vec<String>,
 
     /// Whether to disable DEFAULT_ARGS or not, default is false
-    disable_default_args: bool,
+    pub(super) disable_default_args: bool,
 
     /// Whether to enable request interception
     pub request_intercept: bool,
@@ -662,7 +311,30 @@ pub struct BrowserConfig {
     pub cache_enabled: bool,
 
     /// Avoid easy bot detection by setting `navigator.webdriver` to false
-    hidden: bool,
+    pub(super) hidden: bool,
+}
+
+/// Browser connection information.
+#[derive(serde::Deserialize, Debug, Default)]
+pub struct BrowserConnection {
+    #[serde(rename = "Browser")]
+    /// The browser name
+    pub browser: String,
+    #[serde(rename = "Protocol-Version")]
+    /// Browser version
+    pub protocol_version: String,
+    #[serde(rename = "User-Agent")]
+    /// User Agent used by default.
+    pub user_agent: String,
+    #[serde(rename = "V8-Version")]
+    /// The v8 engine version
+    pub v8_version: String,
+    #[serde(rename = "WebKit-Version")]
+    /// Webkit version
+    pub webkit_version: String,
+    #[serde(rename = "webSocketDebuggerUrl")]
+    /// Remote debugging address
+    pub web_socket_debugger_url: String,
 }
 
 #[derive(Debug, Clone)]

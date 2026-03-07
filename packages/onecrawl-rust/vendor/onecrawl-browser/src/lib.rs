@@ -75,6 +75,8 @@ pub use crate::error::Result;
 pub use crate::fetcher::{BrowserFetcher, BrowserFetcherOptions};
 pub use crate::handler::Handler;
 pub use crate::page::Page;
+pub use crate::factory::{create_browser, connect_browser};
+pub use crate::ports::{BrowserPort, PagePort, ElementPort, NetworkPort, EmulationPort, InputPort};
 
 pub mod auth;
 pub mod browser;
@@ -96,5 +98,7 @@ pub mod listeners;
 pub mod page;
 pub mod ports;
 pub(crate) mod utils;
+pub mod factory;
+mod helpers;
 
 pub type ArcHttpRequest = Option<Arc<HttpRequest>>;

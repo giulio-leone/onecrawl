@@ -22,6 +22,18 @@ cfg_if::cfg_if! {
         use async_tungstenite::tokio::ConnectStream;
     }
 }
+
+/// Tracks the state of the current outbound message on the WebSocket sink.
+#[derive(Debug)]
+enum FlushState {
+    /// No message is in flight.
+    Idle,
+    /// A message has been enqueued via `start_send` and awaits `poll_ready`.
+    Pending(MethodCall),
+    /// `poll_ready` succeeded; the sink needs a `poll_flush`.
+    NeedsFlush,
+}
+
 /// Exchanges the messages with the websocket
 #[must_use = "streams do nothing unless polled"]
 #[derive(Debug)]
@@ -32,9 +44,8 @@ pub struct Connection<T: EventMessage> {
     ws: WebSocketStream<ConnectStream>,
     /// The identifier for a specific command
     next_id: usize,
-    needs_flush: bool,
-    /// The message that is currently being proceessed
-    pending_flush: Option<MethodCall>,
+    /// Outbound message state machine.
+    flush_state: FlushState,
     _marker: PhantomData<T>,
 }
 
@@ -56,8 +67,7 @@ impl<T: EventMessage + Unpin> Connection<T> {
             pending_commands: Default::default(),
             ws,
             next_id: 0,
-            needs_flush: false,
-            pending_flush: None,
+            flush_state: FlushState::Idle,
             _marker: Default::default(),
         })
     }
@@ -89,20 +99,20 @@ impl<T: EventMessage> Connection<T> {
         Ok(id)
     }
 
-    /// flush any processed message and start sending the next over the conn
-    /// sink
+    /// Flush any processed message and start sending the next over the conn
+    /// sink.
     fn start_send_next(&mut self, cx: &mut Context<'_>) -> Result<()> {
-        if self.needs_flush {
+        if matches!(self.flush_state, FlushState::NeedsFlush) {
             if let Poll::Ready(Ok(())) = self.ws.poll_flush_unpin(cx) {
-                self.needs_flush = false;
+                self.flush_state = FlushState::Idle;
             }
         }
-        if self.pending_flush.is_none() && !self.needs_flush {
+        if matches!(self.flush_state, FlushState::Idle) {
             if let Some(cmd) = self.pending_commands.pop_front() {
                 tracing::trace!("Sending {:?}", cmd);
                 let msg = serde_json::to_string(&cmd)?;
                 self.ws.start_send_unpin(msg.into())?;
-                self.pending_flush = Some(cmd);
+                self.flush_state = FlushState::Pending(cmd);
             }
         }
         Ok(())
@@ -112,30 +122,31 @@ impl<T: EventMessage> Connection<T> {
 impl<T: EventMessage + Unpin> Stream for Connection<T> {
     type Item = Result<Message<T>>;
 
+    /// Drives the send/flush state machine, then reads inbound messages.
+    ///
+    /// Flow: queue next command → wait for sink readiness → flush → read WS.
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let pin = self.get_mut();
 
+        // ── Outbound: send queued commands ──
         loop {
-            // queue in the next message if not currently flushing
             if let Err(err) = pin.start_send_next(cx) {
                 return Poll::Ready(Some(Err(err)));
             }
 
-            // send the message
-            if let Some(call) = pin.pending_flush.take() {
+            if let FlushState::Pending(call) = std::mem::replace(&mut pin.flush_state, FlushState::Idle) {
                 if pin.ws.poll_ready_unpin(cx).is_ready() {
-                    pin.needs_flush = true;
-                    // try another flush
+                    pin.flush_state = FlushState::NeedsFlush;
                     continue;
                 } else {
-                    pin.pending_flush = Some(call);
+                    pin.flush_state = FlushState::Pending(call);
                 }
             }
 
             break;
         }
 
-        // read from the ws
+        // ── Inbound: read from the WebSocket ──
         match ready!(pin.ws.poll_next_unpin(cx)) {
             Some(Ok(WsMessage::Text(text))) => {
                 let ready = match serde_json::from_str::<Message<T>>(&text) {
