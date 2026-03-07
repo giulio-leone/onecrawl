@@ -1,0 +1,262 @@
+================================================================================
+EVENT REACTOR FEATURE IMPLEMENTATION — COMPLETE REFERENCE DELIVERED
+================================================================================
+
+PROJECT: OneCrawl Rust CDP
+LOCATION: /Users/giulioleone/Sviluppo/onecrawl-dev/packages/onecrawl-rust/crates/onecrawl-cdp/
+
+================================================================================
+DELIVERABLES
+================================================================================
+
+✓ EVENT_REACTOR_REFERENCE.md (1,071 lines)
+  → Full technical documentation of all 9 files
+  → Complete function signatures with parameter types
+  → Struct/enum definitions with all fields
+  → Use/import statements for each module
+  → Integration patterns and checklist
+  → Location: /Users/giulioleone/Sviluppo/onecrawl-dev/
+
+✓ EVENT_REACTOR_QUICK_REFERENCE.md 
+  → Quick-lookup guide for common patterns
+  → Copy-paste ready code examples
+  → Function signatures organized by topic
+  → Essential integration pattern (complete example)
+  → Location: /Users/giulioleone/Sviluppo/onecrawl-dev/
+
+✓ EVENT_REACTOR_FILES_INDEX.md
+  → Index of all 9 files with descriptions
+  → Data flow diagrams
+  → Implementation checklist
+  → Location: /Users/giulioleone/Sviluppo/onecrawl-dev/
+
+================================================================================
+FILES COVERED (All 9 Requested)
+================================================================================
+
+1. lib.rs (187 lines)
+   - 48 module declarations (pub mod)
+   - 130+ public re-exports
+   - Export: BrowserEvent, EventStream, EventType, DomMutation, PageChange, etc.
+
+2. events.rs (226 lines)
+   - EventStream struct: broadcast::Sender<BrowserEvent>
+   - BrowserEvent struct: event_type, timestamp, data
+   - EventType enum: ConsoleMessage, NetworkRequest, PageLoad, Custom, etc.
+   - Functions:
+     * observe_console() → installs JS console hook
+     * drain_console() → retrieves messages
+     * observe_errors() → installs error listener
+     * drain_errors() → retrieves errors
+     * emit_custom() → push custom event
+     * format_sse() → SSE formatting
+
+3. dom_observer.rs (128 lines)
+   - DomMutation struct: mutation_type, target, added_nodes, removed_nodes, timestamp
+   - start_dom_observer(page, target_selector) → Result<()>
+   - drain_dom_mutations(page) → Result<Vec<DomMutation>>
+   - stop_dom_observer(page) → Result<()>
+   - get_dom_snapshot(page, selector) → Result<String>
+
+4. page_watcher.rs (221 lines)
+   - PageChange struct: change_type, old_value, new_value, timestamp
+   - Watches: navigation (pushState/popstate), title, scroll (150ms debounce), resize
+   - start_page_watcher(page) → Result<()>
+   - drain_page_changes(page) → Result<Vec<PageChange>>
+   - stop_page_watcher(page) → Result<()>
+   - get_page_state(page) → Result<Value> (URL, viewport, timing, etc.)
+
+5. websocket.rs (173 lines)
+   - WsFrame struct: url, direction (Sent|Received), opcode, payload, timestamp
+   - WsRecorder struct: Arc<Mutex<Vec<WsFrame>>> with methods (frames, clear, len, is_empty)
+   - start_ws_recording(page, recorder) → Result<()>
+   - drain_ws_frames(page, recorder) → Result<usize>
+   - active_ws_connections(page) → Result<usize>
+   - export_ws_frames(recorder) → Result<Value>
+
+6. intercept.rs (163 lines)
+   - InterceptRule struct: url_pattern (glob), resource_type, action
+   - InterceptAction enum: Block, Modify { headers }, MockResponse { status, body, headers }
+   - set_intercept_rules(page, rules) → Result<()>
+   - get_intercepted_requests(page) → Result<Vec<Value>>
+   - clear_intercept_rules(page) → Result<()>
+
+7. screencast.rs (155 lines)
+   - ScreencastOptions: format, quality, max_width, max_height, every_nth_frame
+   - StreamResult: frames_captured, output_dir, files, duration_ms
+   - start_screencast(page, opts) → Result<()>
+   - stop_screencast(page) → Result<()>
+   - capture_frame(page, opts) → Result<Vec<u8>>
+   - capture_frames_burst(page, opts, count, interval) → Result<Vec<Vec<u8>>>
+   - stream_to_disk(page, opts, output_dir, count, interval) → Result<StreamResult>
+
+8. agent.rs (600+ lines) [Partial shown in quick reference]
+   - agent_loop(page, goal, max_steps, verify_js) → Result<Value>
+   - annotated_observe(page) → Result<Value> (with element refs @e1, @e2, etc.)
+   - goal_assert(page, assertions) → Result<Value>
+   - session_context(page, command, key, value) → Result<Value>
+   - auto_chain(page, actions, on_error, max_retries) → Result<Value>
+   - think(page) → Result<Value>
+   - click_at_coords(page, x, y) → Result<Value>
+   - input_replay(page, ...) → Result<Value>
+
+9. Cargo.toml (34 lines)
+   - Dependencies: chromiumoxide 0.5, tokio, serde, base64, tracing, futures
+   - Features: default = [], playwright = optional
+   - Dev dependencies: pretty_assertions, tempfile
+
+================================================================================
+KEY TYPES & STRUCTURES
+================================================================================
+
+CORE EVENT SYSTEM:
+  - EventStream { tx: broadcast::Sender, _rx: broadcast::Receiver }
+  - BrowserEvent { event_type: EventType, timestamp: f64, data: Value }
+  - EventType enum (9 variants + Custom)
+
+DOM TRACKING:
+  - DomMutation { mutation_type, target, added_nodes, removed_nodes, attribute_name, old_value, new_value, timestamp }
+
+PAGE CHANGES:
+  - PageChange { change_type, old_value, new_value, timestamp }
+
+WEBSOCKET:
+  - WsFrame { url, direction: WsDirection, opcode, payload, timestamp }
+  - WsRecorder { frames: Arc<Mutex<Vec<WsFrame>>> }
+  - WsDirection enum (Sent | Received)
+
+REQUEST INTERCEPTION:
+  - InterceptRule { url_pattern, resource_type, action: InterceptAction }
+  - InterceptAction enum (Block | Modify { headers } | MockResponse { status, body, headers })
+
+SCREENCAST:
+  - ScreencastOptions { format, quality, max_width, max_height, every_nth_frame }
+  - StreamResult { frames_captured, output_dir, files, duration_ms }
+
+================================================================================
+COMMON USAGE PATTERNS
+================================================================================
+
+1. BASIC EVENT STREAMING:
+   let stream = EventStream::new(128);
+   let mut rx = stream.subscribe();
+   tokio::spawn(async move {
+       while let Ok(event) = rx.recv().await {
+           println!("{}", format_sse(&event));
+       }
+   });
+
+2. DOM OBSERVATION:
+   start_dom_observer(&page, Some("body")).await?;
+   // ... perform actions ...
+   let mutations = drain_dom_mutations(&page).await?;
+   stop_dom_observer(&page).await?;
+
+3. PAGE WATCHING:
+   start_page_watcher(&page).await?;
+   // ... user interaction ...
+   let changes = drain_page_changes(&page).await?;
+   stop_page_watcher(&page).await?;
+
+4. WEBSOCKET RECORDING:
+   let recorder = WsRecorder::new();
+   start_ws_recording(&page, &recorder).await?;
+   // ... WS interactions ...
+   drain_ws_frames(&page, &recorder).await?;
+   let frames = recorder.frames().await;
+
+5. REQUEST INTERCEPTION:
+   let rules = vec![
+       InterceptRule {
+           url_pattern: "*api/v1/*".to_string(),
+           resource_type: None,
+           action: InterceptAction::MockResponse {
+               status: 200,
+               body: "{}".to_string(),
+               headers: None,
+           },
+       },
+   ];
+   set_intercept_rules(&page, rules).await?;
+
+6. AGENT LOOP:
+   let result = agent_loop(&page, "Find login button", 5, Some("document.title.includes('Dashboard')")).await?;
+
+================================================================================
+STORAGE LOCATIONS (In Page JS)
+================================================================================
+
+window.__onecrawl_dom_mutations          → DOM changes (array)
+window.__onecrawl_page_changes           → Page state changes (array)
+window.__onecrawl_console_log            → Console messages (array)
+window.__onecrawl_page_errors            → Page errors (array)
+window.__onecrawl_ws_frames              → WebSocket frames (array)
+window.__onecrawl_ws_connections         → WebSocket connection map
+window.__onecrawl_intercept_rules        → Interception rules (array)
+window.__onecrawl_intercepted_log        → Interception log (array)
+window.__onecrawl_ctx                    → Session context (object)
+window.__onecrawl_dom_observer           → MutationObserver instance
+window.__onecrawl_page_watcher_active    → Watcher active flag (bool)
+
+================================================================================
+DEPENDENCIES SUMMARY
+================================================================================
+
+Core Async:
+  - tokio (1.x, features: full)
+  - futures (0.3)
+
+CDP Browser Control:
+  - chromiumoxide (0.5)
+
+Serialization:
+  - serde (1.x, features: derive)
+  - serde_json (1.x)
+
+Utilities:
+  - base64 (0.22)
+  - rand (0.8)
+  - url (2.5)
+  - reqwest (0.11)
+  - tracing (0.1)
+
+Optional:
+  - playwright (0.20, feature: "playwright")
+
+Dev:
+  - pretty_assertions (1.4)
+  - tempfile (3.x)
+
+================================================================================
+NEXT STEPS FOR IMPLEMENTATION
+================================================================================
+
+1. Review EVENT_REACTOR_QUICK_REFERENCE.md for integration pattern
+2. Copy the "Essential Integration Pattern" code from quick reference
+3. Adapt the pattern to your specific needs (WebSocket, SSE, file output, etc.)
+4. For each observer:
+   - Call start_* function after page creation
+   - Spawn periodic drain task (500ms)
+   - Convert drained data to BrowserEvent
+   - Broadcast via event_stream.sender()
+   - Call stop_* function on cleanup
+5. Test with chromiumoxide Page instance
+6. Deploy with tokio async runtime
+
+================================================================================
+DOCUMENT LOCATIONS
+================================================================================
+
+/Users/giulioleone/Sviluppo/onecrawl-dev/EVENT_REACTOR_REFERENCE.md
+  → Full technical details (1,071 lines)
+
+/Users/giulioleone/Sviluppo/onecrawl-dev/EVENT_REACTOR_QUICK_REFERENCE.md
+  → Quick patterns and signatures
+
+/Users/giulioleone/Sviluppo/onecrawl-dev/EVENT_REACTOR_FILES_INDEX.md
+  → File structure and summary
+
+/Users/giulioleone/Sviluppo/onecrawl-dev/IMPLEMENTATION_SUMMARY.txt
+  → This file
+
+================================================================================

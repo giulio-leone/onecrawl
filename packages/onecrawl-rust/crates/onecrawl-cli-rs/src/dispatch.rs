@@ -1104,6 +1104,63 @@ pub(crate) async fn dispatch(command: Commands) {
             DurableAction::Delete { name } => commands::browser::durable_delete(&name).await,
         },
 
+        // ── Event Reactor ────────────────────────────────────────────
+        Commands::React { action } => match action {
+            ReactAction::Start {
+                on,
+                selector,
+                url,
+                handler,
+                script,
+                prompt,
+                model,
+                output,
+                name,
+                max_epm,
+            } => {
+                commands::browser::react_start(
+                    &on,
+                    selector.as_deref(),
+                    url.as_deref(),
+                    &handler,
+                    script.as_deref(),
+                    prompt.as_deref(),
+                    model.as_deref(),
+                    output.as_deref(),
+                    &name,
+                    max_epm,
+                )
+                .await
+            }
+            ReactAction::Stop { name } => commands::browser::react_stop(&name).await,
+            ReactAction::Status { name } => commands::browser::react_status(&name).await,
+            ReactAction::AddRule {
+                id,
+                on,
+                handler,
+                selector,
+                url,
+                message,
+                script,
+                output,
+            } => {
+                commands::browser::react_add_rule(
+                    &id,
+                    &on,
+                    &handler,
+                    selector.as_deref(),
+                    url.as_deref(),
+                    message.as_deref(),
+                    script.as_deref(),
+                    output.as_deref(),
+                )
+                .await
+            }
+            ReactAction::RemoveRule { id } => commands::browser::react_remove_rule(&id).await,
+            ReactAction::ListRules { name } => commands::browser::react_list_rules(&name).await,
+            ReactAction::Events { limit } => commands::browser::react_events(limit).await,
+        },
+
         // ── Skills ────────────────────────────────────────────────
         Commands::Skills { action } => match action {
             SkillsAction::List => commands::skills::skills_list(),

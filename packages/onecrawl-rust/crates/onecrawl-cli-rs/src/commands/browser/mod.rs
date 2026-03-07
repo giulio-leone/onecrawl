@@ -15,6 +15,7 @@ mod media;
 mod monitoring;
 mod nav;
 mod network;
+mod reactor_cli;
 pub mod run;
 mod shell;
 mod spa_harness;
@@ -406,4 +407,13 @@ pub use durable_cli::{
     durable_status,
     durable_list,
     durable_delete,
+};
+pub use reactor_cli::{
+    react_start,
+    react_stop,
+    react_status,
+    react_add_rule,
+    react_remove_rule,
+    react_list_rules,
+    react_events,
 };

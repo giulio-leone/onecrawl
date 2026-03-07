@@ -11,3 +11,4 @@ mod memory;
 mod automate;
 mod perf;
 mod durable;
+mod reactor;

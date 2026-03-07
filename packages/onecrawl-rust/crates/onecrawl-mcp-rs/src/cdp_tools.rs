@@ -2934,3 +2934,104 @@ pub struct DurableConfigParams {
     #[schemars(description = "New max uptime in seconds (null for unlimited)")]
     pub max_uptime_secs: Option<u64>,
 }
+
+// ──────────────── Event Reactor params ─────────────────
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ReactorRuleParam {
+    #[schemars(description = "Unique rule ID")]
+    pub id: String,
+    #[schemars(description = "Event type: dom_mutation, network_request, network_response, console, page_error, navigation, notification, websocket, timer, or custom name")]
+    pub event_type: String,
+    #[schemars(description = "Optional filter to narrow events")]
+    pub filter: Option<ReactorFilterParam>,
+    #[schemars(description = "Handler configuration (JSON with 'type' field: log, evaluate, webhook, screenshot, ai_respond, chain, store, command)")]
+    pub handler: serde_json::Value,
+    #[schemars(description = "Whether this rule is enabled (default true)")]
+    pub enabled: Option<bool>,
+    #[schemars(description = "Maximum number of triggers (null for unlimited)")]
+    pub max_triggers: Option<u64>,
+    #[schemars(description = "Cooldown between triggers in ms")]
+    pub cooldown_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ReactorFilterParam {
+    #[schemars(description = "CSS selector for DOM mutations")]
+    pub selector: Option<String>,
+    #[schemars(description = "Glob pattern for network events")]
+    pub url_pattern: Option<String>,
+    #[schemars(description = "Substring for console/notification content")]
+    pub message_pattern: Option<String>,
+    #[schemars(description = "Event subtype filter (e.g. 'error' for console errors)")]
+    pub event_subtype: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ReactorStartParams {
+    #[schemars(description = "Reactor name (default 'default')")]
+    pub name: Option<String>,
+    #[schemars(description = "Array of reactor rules")]
+    pub rules: Vec<ReactorRuleParam>,
+    #[schemars(description = "Max events per minute rate limit (default 60)")]
+    pub max_events_per_minute: Option<u32>,
+    #[schemars(description = "Event buffer size (default 1000, max 10000)")]
+    pub buffer_size: Option<usize>,
+    #[schemars(description = "Persist events to disk")]
+    pub persist_events: Option<bool>,
+    #[schemars(description = "Path for event log file")]
+    pub event_log_path: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ReactorStopParams {
+    #[schemars(description = "Reactor name (default 'default')")]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ReactorStatusParams {
+    #[schemars(description = "Reactor name (default 'default')")]
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ReactorAddRuleParams {
+    #[schemars(description = "Unique rule ID")]
+    pub id: String,
+    #[schemars(description = "Event type to react to")]
+    pub event_type: String,
+    #[schemars(description = "Optional filter")]
+    pub filter: Option<ReactorFilterParam>,
+    #[schemars(description = "Handler configuration (JSON)")]
+    pub handler: serde_json::Value,
+    #[schemars(description = "Whether this rule is enabled")]
+    pub enabled: Option<bool>,
+    #[schemars(description = "Maximum triggers")]
+    pub max_triggers: Option<u64>,
+    #[schemars(description = "Cooldown in ms")]
+    pub cooldown_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ReactorRemoveRuleParams {
+    #[schemars(description = "Rule ID to remove")]
+    pub id: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ReactorToggleRuleParams {
+    #[schemars(description = "Rule ID to toggle")]
+    pub id: String,
+    #[schemars(description = "Enable or disable")]
+    pub enabled: bool,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ReactorEventsParams {
+    #[schemars(description = "Max events to return (default 50)")]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ReactorClearParams {}

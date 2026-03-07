@@ -26,6 +26,7 @@ pub mod dialog;
 pub mod dom_nav;
 pub mod dom_observer;
 pub mod durable;
+pub mod reactor;
 pub mod domain_blocker;
 pub mod downloads;
 pub mod element;
@@ -181,6 +182,7 @@ pub use tabs::TabInfo;
 pub use tls_fingerprint::BrowserFingerprint;
 
 pub use durable::{CrashPolicy, DurableConfig, DurableSession, DurableState, DurableStatus, parse_duration};
+pub use reactor::{EventFilter, Reactor, ReactorConfig, ReactorEvent, ReactorEventType, ReactorHandler, ReactorRule, ReactorStatus, RuleStatus};
 
 // Re-export chromiumoxide::Page for downstream consumers
 pub use chromiumoxide::Page;

@@ -20,6 +20,7 @@ mod ios;
 mod media;
 mod monitoring;
 mod network;
+mod react;
 mod skills;
 mod spa;
 mod storage;
@@ -35,6 +36,7 @@ pub(crate) use crawl::{PipelineAction, StructuredAction, AdaptiveAction, SpiderA
 pub(crate) use daemon::DaemonAction;
 pub(crate) use dom::{FingerprintAction, EmulateAction, DomAction, IframeAction, AdvancedEmulationAction, WindowAction, SetAction};
 pub(crate) use durable::DurableAction;
+pub(crate) use react::ReactAction;
 pub(crate) use harness::HarnessAction;
 pub(crate) use interaction::{SelectAction, NavAction, KeyboardAction, MouseAction, FindAction};
 pub(crate) use ios::IosAction;
@@ -852,6 +854,13 @@ pub(crate) enum Commands {
     Durable {
         #[command(subcommand)]
         action: DurableAction,
+    },
+
+    // ── Event Reactor ────────────────────────────────────────
+    /// Real-time event reactor with configurable handlers
+    React {
+        #[command(subcommand)]
+        action: ReactAction,
     },
 
     // ── Skills ──────────────────────────────────────────────────

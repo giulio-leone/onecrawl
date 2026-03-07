@@ -1783,7 +1783,53 @@ impl OneCrawlMcp {
         }
     }
 
-    // ── Public CLI bridge ────────────────────────────────────────────
+    #[tool(
+        name = "reactor",
+        description = "Event Reactor — persistent observer pattern for browser events with configurable handlers.\n\nActions:\n- start {name?, rules, max_events_per_minute?, buffer_size?, persist_events?, event_log_path?} — Start a reactor with rules\n- stop {name?} — Stop a running reactor\n- status {name?} — Get reactor status and rule stats\n- add_rule {id, event_type, filter?, handler, enabled?, max_triggers?, cooldown_ms?} — Add a rule at runtime\n- remove_rule {id} — Remove a rule by ID\n- toggle_rule {id, enabled} — Enable/disable a rule\n- events {limit?} — Get recent matched events\n- clear — Clear event history"
+    )]
+    async fn tool_reactor(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        self.enforce_safety("reactor", &action).await?;
+        let action = ReactorAction::parse(&action)?;
+        match action {
+            ReactorAction::Start => {
+                let params: ReactorStartParams = parse_params(v, "reactor_start")?;
+                self.reactor_start(params).await
+            }
+            ReactorAction::Stop => {
+                let params: ReactorStopParams = parse_params(v, "reactor_stop")?;
+                self.reactor_stop(params).await
+            }
+            ReactorAction::Status => {
+                let params: ReactorStatusParams = parse_params(v, "reactor_status")?;
+                self.reactor_status(params).await
+            }
+            ReactorAction::AddRule => {
+                let params: ReactorAddRuleParams = parse_params(v, "reactor_add_rule")?;
+                self.reactor_add_rule(params).await
+            }
+            ReactorAction::RemoveRule => {
+                let params: ReactorRemoveRuleParams = parse_params(v, "reactor_remove_rule")?;
+                self.reactor_remove_rule(params).await
+            }
+            ReactorAction::ToggleRule => {
+                let params: ReactorToggleRuleParams = parse_params(v, "reactor_toggle_rule")?;
+                self.reactor_toggle_rule(params).await
+            }
+            ReactorAction::Events => {
+                let params: ReactorEventsParams = parse_params(v, "reactor_events")?;
+                self.reactor_events(params).await
+            }
+            ReactorAction::Clear => {
+                let params: ReactorClearParams = parse_params(v, "reactor_clear")?;
+                self.reactor_clear(params).await
+            }
+        }
+    }
 
     /// Create an `OneCrawlMcp` reusing an existing browser session.
     /// Used by the CLI `run` command to delegate to MCP handlers directly.
@@ -1824,8 +1870,9 @@ impl OneCrawlMcp {
             "memory" => self.tool_memory(ta).await,
             "automate" => self.tool_automate(ta).await,
             "perf" => self.tool_perf(ta).await,
+            "reactor" => self.tool_reactor(ta).await,
             _ => return Err(format!(
-                "unknown tool: '{tool}'. Available: browser, crawl, agent, stealth, data, secure, computer, memory, automate, perf"
+                "unknown tool: '{tool}'. Available: browser, crawl, agent, stealth, data, secure, computer, memory, automate, perf, reactor"
             )),
         };
 

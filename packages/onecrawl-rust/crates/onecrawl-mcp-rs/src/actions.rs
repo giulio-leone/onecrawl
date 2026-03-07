@@ -457,6 +457,17 @@ action_enum!(DurableAction, "durable", [
     Config => "config",
 ]);
 
+action_enum!(ReactorAction, "reactor", [
+    Start => "start",
+    Stop => "stop",
+    Status => "status",
+    AddRule => "add_rule",
+    RemoveRule => "remove_rule",
+    ToggleRule => "toggle_rule",
+    Events => "events",
+    Clear => "clear",
+]);
+
 // ──────────────── Tests ─────────────────
 
 #[cfg(test)]
