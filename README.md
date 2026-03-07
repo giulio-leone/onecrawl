@@ -14,7 +14,7 @@ packages/onecrawl-rust/
 │   ├── onecrawl-cdp/        # Chrome DevTools Protocol — 63 modules (chromiumoxide)
 │   ├── onecrawl-server/     # HTTP REST API with multi-instance management (axum)
 │   ├── onecrawl-cli-rs/     # Native CLI — 200+ commands (clap v4)
-│   └── onecrawl-mcp-rs/     # MCP server — 10 super-tools, 239 actions (rmcp)
+│   └── onecrawl-mcp-rs/     # MCP server — 10 super-tools, 246 actions (rmcp)
 ├── bindings/
 │   ├── napi/                # Node.js via NAPI-RS → @onecrawl/native (307 methods)
 │   └── python/              # Python via PyO3 → onecrawl
@@ -25,7 +25,7 @@ packages/onecrawl-rust/
 
 | Category | Highlights |
 |----------|-----------|
-| **Browser** | Launch, connect, stealth mode, proxy rotation, fingerprint evasion |
+| **Browser** | Launch, connect, stealth-by-default, proxy rotation, fingerprint evasion, session config |
 | **CDP** | 63 modules: DOM, Network, CSS, Performance, Accessibility, Profiler, Tracing, WebAuthn… |
 | **Navigation** | goto, back, forward, reload, wait, screenshot, PDF, multi-tab |
 | **Interaction** | click, type, drag & drop, hover, keyboard shortcuts, select, file upload |
@@ -35,13 +35,13 @@ packages/onecrawl-rust/
 | **Emulation** | Device emulation, geolocation, timezone, media features, network throttling |
 | **Auth** | WebAuthn/Passkey virtual authenticator, cookie/session management, import/export |
 | **Crypto** | AES-256-GCM encryption, PKCE, TOTP, PBKDF2 key derivation |
-| **AI Agent** | Agent memory, workflow DSL, task planner, visual regression testing, performance monitor |
+| **AI Agent** | Agent memory, workflow DSL, task planner, autonomous computer_use, visual regression testing, performance monitor |
 | **Accessibility** | WCAG compliance auditing, ARIA tree, contrast checks, heading structure, keyboard traps, screen reader simulation |
 | **Real-Time** | WebSocket connect/intercept/send, Server-Sent Events, GraphQL subscriptions |
 | **Human Simulation** | Bézier mouse curves, natural typing with typos, human-like scrolling, behavior profiles |
 | **Service Workers** | SW register/unregister/update, Cache Storage management, push simulation, offline mode |
 | **Server** | Multi-instance Chrome, profiles, tabs, accessibility snapshots, action API |
-| **MCP** | 10 super-tools with 239 actions for AI agent orchestration |
+| **MCP** | 10 super-tools with 246 actions for AI agent orchestration |
 
 ## Installation
 
@@ -158,7 +158,7 @@ curl http://localhost:9867/instances/{id}/tabs/{tab}/text
 
 ## MCP Integration
 
-10 super-tools with 239 total actions, using action-based dispatch:
+10 super-tools with 246 total actions, using action-based dispatch:
 
 ```json
 {"action": "goto", "params": {"url": "https://example.com"}}
@@ -166,13 +166,13 @@ curl http://localhost:9867/instances/{id}/tabs/{tab}/text
 
 | Super-Tool | Actions | Highlights |
 |------------|---------|------------|
-| **browser** | 92 | Navigation, interaction, extraction, multi-tab, DOM events, session, network interception, console/dialog, device emulation, drag/drop, file upload, shadow DOM, session context, smart forms, self-healing selectors, event reactions, service worker/PWA, offline mode |
+| **browser** | 95 | Navigation, interaction, extraction, multi-tab, DOM events, session, network interception, console/dialog, device emulation, drag/drop, file upload, shadow DOM, session context, smart forms, self-healing selectors, event reactions, service worker/PWA, offline mode, session config |
 | **crawl** | 5 | Spider, robots.txt, sitemap, DOM snapshot/diff |
 | **agent** | 37 | Stealth, fingerprint, anti-bot detection, proxy health, CAPTCHA, task decomposition, vision observation, WCAG auditing, accessibility tree, screen reader simulation |
 | **stealth** | 12 | Enable/disable stealth, rotate fingerprint, proxy health, human behavior simulation |
 | **data** | 26 | Cookies, storage, structured data extraction, entity extraction, feeds, WebSocket, SSE, GraphQL subscriptions |
 | **secure** | 21 | WebAuthn/Passkey, vault, OAuth2, session/form auth, MFA, credentials |
-| **computer** | 14 | AI computer-use, smart element resolution, multi-browser fleet |
+| **computer** | 18 | AI computer-use, autonomous goal execution, smart element resolution, multi-browser fleet |
 | **memory** | 6 | Agent memory: store, recall, search, forget, list, export |
 | **automate** | 19 | Workflow DSL: run, validate, list, templates, error recovery, session checkpoints, workflow control flow |
 | **perf** | 7 | Performance: audit, metrics, budget, trace, VRT comparison |
@@ -200,7 +200,7 @@ cd packages/onecrawl-rust
 # Build all crates
 cargo build --workspace
 
-# Run tests (406 tests)
+# Run tests (427 tests)
 cargo test --workspace --exclude onecrawl-e2e
 
 # Build release binary
@@ -211,14 +211,14 @@ cargo build --release -p onecrawl-cli-rs
 
 | Metric | Value |
 |--------|-------|
-| Rust test suite | 406 tests |
+| Rust test suite | 427 tests |
 | Node.js test suite | 33 files, 3,995 lines |
 | CDP modules | 63 |
 | CLI commands | 200+ |
-| MCP super-tools | 10 (239 actions) |
+| MCP super-tools | 10 (246 actions) |
 | NAPI methods | 307 |
 | Handler modules | 10 (split architecture) |
-| Enum-dispatched actions | 239 (compile-time exhaustive) |
+| Enum-dispatched actions | 246 (compile-time exhaustive) |
 
 ## License
 

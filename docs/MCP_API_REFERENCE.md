@@ -1,6 +1,6 @@
 # OneCrawl MCP API Reference
 
-> **10 consolidated tools • 239 actions • Action-based dispatch**
+> **10 consolidated tools • 246 actions • Action-based dispatch**
 
 All browser automation, crawling, scraping, security, and AI orchestration capabilities are accessed through 10 super-tools. Each tool accepts a uniform `{ action, params }` interface.
 
@@ -10,13 +10,13 @@ All browser automation, crawling, scraping, security, and AI orchestration capab
 
 | Tool | Actions | Description |
 |------|:-------:|-------------|
-| [`browser`](#1-browser) | 92 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage, network interception, console & errors, device emulation, file operations, shadow DOM, session context, smart forms, self-healing selectors, event reactions, service worker/PWA, offline mode |
+| [`browser`](#1-browser) | 95 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage, network interception, console & errors, device emulation, file operations, shadow DOM, session context, smart forms, self-healing selectors, event reactions, service worker/PWA, offline mode, session config |
 | [`crawl`](#2-crawl) | 5 | Web crawling, robots.txt, sitemaps, DOM snapshots |
 | [`agent`](#3-agent) | 37 | Command chains, API capture, iframes, remote CDP, safety, screencast, recording, iOS, task decomposition, vision observation, WCAG auditing, accessibility tree, screen reader simulation |
 | [`stealth`](#4-stealth) | 12 | Anti-detection patches, fingerprinting, CAPTCHA detection, human behavior simulation |
 | [`data`](#5-data) | 26 | Data pipelines, HTTP client, link graphs, network intelligence, structured extraction, WebSocket, SSE, GraphQL subscriptions |
 | [`secure`](#6-secure) | 21 | Encryption, PKCE, TOTP, KV store, WebAuthn, OAuth2, session/form auth, MFA |
-| [`computer`](#7-computer) | 14 | AI computer-use, smart element resolution, browser pool, multi-browser fleet |
+| [`computer`](#7-computer) | 18 | AI computer-use, autonomous goal execution, smart element resolution, browser pool, multi-browser fleet |
 | [`memory`](#8-memory) | 6 | Persistent agent memory across sessions |
 | [`automate`](#9-automate) | 19 | Workflow DSL, AI task planning, rate limiting, retry queues, error recovery, session checkpoints, workflow control flow |
 | [`perf`](#10-perf) | 7 | Performance audits, budgets, regression detection, visual regression testing |
@@ -159,6 +159,10 @@ A headless Chromium browser is launched automatically on the first call that req
 | `cache_clear` | — | Clear all cache storage |
 | `push_simulate` | `{title, body?, icon?, data?}` | Simulate push notification |
 | `offline_mode` | `{enabled, bypass_for?}` | Enable/disable offline mode |
+| | | **Session Config** |
+| `set_mode` | `{mode}` | Set browser mode: `headed` or `headless` (default). Applies on next browser session |
+| `set_stealth` | `{enabled}` | Enable/disable stealth patches. Stealth is ON by default (session-level, persists across navigations). Disable with `{enabled: false}` for debugging |
+| `session_info` | — | Get full session status: mode, stealth state, tabs, fleet, intercepting, etc. |
 
 #### Action Details
 
@@ -1650,6 +1654,54 @@ Enable or disable offline mode, optionally allowing specific URL patterns to byp
 | `bypass_for` | string[] | | URL patterns that bypass offline mode (glob syntax) |
 
 **Response:** `"offline mode enabled"` or `"offline mode disabled"`
+</details>
+
+<details>
+<summary><strong><code>set_mode</code></strong> — Set browser mode</summary>
+
+Set the browser mode to `headed` (visible window) or `headless` (no UI). The mode change applies on the next browser session launch.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `mode` | string | ✅ | `"headed"` or `"headless"` |
+
+**Response:** `"browser mode set to headed"` or `"browser mode set to headless"`
+</details>
+
+<details>
+<summary><strong><code>set_stealth</code></strong> — Enable/disable stealth patches</summary>
+
+Control stealth patch injection. Stealth is **ON by default** — patches are automatically injected at session level using CDP `addScriptToEvaluateOnNewDocument`, so they persist across all page navigations within a session. Disable with `{enabled: false}` for debugging or when stealth interferes with target site behavior.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `enabled` | boolean | ✅ | `true` to enable stealth (default), `false` to disable |
+
+**Response:** `"stealth enabled"` or `"stealth disabled"`
+</details>
+
+<details>
+<summary><strong><code>session_info</code></strong> — Get session status</summary>
+
+Get comprehensive session information including browser mode, stealth state, open tabs, fleet status, interception state, and more.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "mode": "headless",
+  "stealth": true,
+  "tabs": 2,
+  "fleet": { "active": 0 },
+  "intercepting": false,
+  "console_capturing": true
+}
+```
 </details>
 
 ---
@@ -3519,9 +3571,9 @@ Retrieve stored credentials from the encrypted vault by label.
 
 ### 7. `computer`
 
-AI computer-use protocol, smart element resolution, and browser pool management.
+AI computer-use protocol, autonomous goal execution, smart element resolution, and browser pool management.
 
-This tool implements the Anthropic Computer Use protocol for AI agent interactions, plus smart fuzzy element finding and a browser pool for multi-instance management.
+This tool implements the Anthropic Computer Use protocol for AI agent interactions, autonomous goal decomposition and execution, plus smart fuzzy element finding and a browser pool for multi-instance management.
 
 #### Actions
 
@@ -3541,6 +3593,11 @@ This tool implements the Anthropic Computer Use protocol for AI agent interactio
 | `fleet_destroy` | `{fleet_name}` | Terminate fleet |
 | `fleet_status` | — | Get all fleet statuses |
 | `fleet_balance` | `{fleet_name, urls}` | Distribute URLs across fleet |
+| | | **Autonomous Execution** |
+| `computer_use` | `{goal, url?, max_steps?, screenshots?}` | Autonomous goal execution — analyzes page, decomposes goal into steps, returns execution plan |
+| `goal_execute` | `{plan_id, from_step?, until_step?}` | Execute steps from a plan with per-step completion tracking |
+| `step_verify` | `{plan_id, step_id, expect?}` | Verify step completion with optional expect conditions |
+| `auto_recover` | `{plan_id, step_id, error?, max_retries?}` | Auto-recover from failed steps with strategy analysis |
 
 #### Action Details
 
@@ -3740,6 +3797,108 @@ Load-balance a list of URLs across fleet instances for parallel processing.
 | `urls` | string[] | ✅ | URLs to distribute |
 
 **Response:** JSON with URL-to-instance assignment mapping.
+</details>
+
+<details>
+<summary><strong><code>computer_use</code></strong> — Autonomous goal execution</summary>
+
+Analyze the current page (or navigate to a URL first), decompose a high-level goal into discrete steps (search, login, fill, extract, etc.), and return an execution plan with interactive element context.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `goal` | string | ✅ | High-level goal description (e.g., "search for flights from NYC to LA") |
+| `url` | string | | URL to navigate to before planning (optional if already on target page) |
+| `max_steps` | number | | Maximum steps in the plan (default 20) |
+| `screenshots` | boolean | | Include screenshots in plan context (default `false`) |
+
+**Response:**
+```json
+{
+  "plan_id": "plan_abc123",
+  "goal": "search for flights from NYC to LA",
+  "steps": [
+    { "id": "s1", "action": "click", "target": "input#origin", "description": "Click origin field" },
+    { "id": "s2", "action": "type", "target": "input#origin", "text": "NYC", "description": "Type origin city" }
+  ],
+  "total_steps": 6,
+  "interactive_elements": 12
+}
+```
+</details>
+
+<details>
+<summary><strong><code>goal_execute</code></strong> — Execute plan steps</summary>
+
+Execute steps from a previously created plan. Tracks per-step completion with page state snapshots.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `plan_id` | string | ✅ | Plan ID from `computer_use` response |
+| `from_step` | string | | Step ID to start from (default: first pending step) |
+| `until_step` | string | | Step ID to stop after (default: execute all remaining) |
+
+**Response:**
+```json
+{
+  "plan_id": "plan_abc123",
+  "executed": 4,
+  "completed": ["s1", "s2", "s3", "s4"],
+  "remaining": 2,
+  "status": "in_progress"
+}
+```
+</details>
+
+<details>
+<summary><strong><code>step_verify</code></strong> — Verify step completion</summary>
+
+Verify that a specific step completed successfully. Supports expect conditions for assertions.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `plan_id` | string | ✅ | Plan ID |
+| `step_id` | string | ✅ | Step ID to verify |
+| `expect` | string | | Assertion condition: `selector:CSS` (element exists), `text:content` (text visible), `url:pattern` (URL matches) |
+
+**Response:**
+```json
+{ "plan_id": "plan_abc123", "step_id": "s2", "verified": true, "expect": "text:NYC", "matched": true }
+```
+</details>
+
+<details>
+<summary><strong><code>auto_recover</code></strong> — Auto-recover from failed steps</summary>
+
+Analyze a failed step, determine the error type, and suggest or execute recovery strategies.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `plan_id` | string | ✅ | Plan ID |
+| `step_id` | string | ✅ | Failed step ID |
+| `error` | string | | Error message or description (auto-detected if omitted) |
+| `max_retries` | number | | Maximum retry attempts (default 3) |
+
+**Recovery strategies:** `wait_and_retry`, `alternative_selector`, `reload_and_retry`, `dismiss_overlay`, `scroll_and_retry`
+
+**Response:**
+```json
+{
+  "plan_id": "plan_abc123",
+  "step_id": "s3",
+  "strategy": "dismiss_overlay",
+  "recovered": true,
+  "retries": 1,
+  "description": "Dismissed cookie banner overlay, retried click"
+}
+```
 </details>
 
 ---
@@ -4709,9 +4868,9 @@ All tools return errors in a consistent format:
 - **Browser lazy init**: The browser is started on the first action that needs CDP (e.g., `goto`, `click`). Offline actions like `parse_a11y` never start a browser.
 - **Accessibility refs**: After calling `snapshot`, elements are assigned refs like `@e1`, `@e2`. Use these in `click`, `type`, `screenshot` (via `element` param) instead of CSS selectors for more reliable targeting.
 - **Memory persistence**: Agent memory is stored at `~/.onecrawl/agent_memory.json` and survives across sessions.
-- **Stealth patches**: Must call `stealth` → `inject` before navigating to the target site for maximum effectiveness.
+- **Stealth-by-Default**: Stealth patches are automatically injected at session level using CDP `addScriptToEvaluateOnNewDocument`, so they persist across all page navigations within a session. No opt-in needed. Use `browser` → `set_stealth {enabled: false}` to disable for debugging.
 - **Rate limiting**: The `automate` → `rate_limit` action configures per-domain request throttling that applies to all subsequent navigation and network actions.
 
 ---
 
-*Auto-generated from OneCrawl MCP server source (`onecrawl-mcp-rs`). Total: 10 tools, 239 actions.*
+*Auto-generated from OneCrawl MCP server source (`onecrawl-mcp-rs`). Total: 10 tools, 246 actions.*
