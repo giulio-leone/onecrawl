@@ -483,6 +483,17 @@ action_enum!(OrchestratorAction, "orchestrator", [
     Devices => "devices",
 ]);
 
+action_enum!(EventsAction, "events", [
+    Emit => "emit",
+    Subscribe => "subscribe",
+    Unsubscribe => "unsubscribe",
+    ListSubscriptions => "list_subscriptions",
+    Recent => "recent",
+    Replay => "replay",
+    Stats => "stats",
+    Clear => "clear",
+]);
+
 action_enum!(VaultAction, "vault", [
     Create => "create",
     Open => "open",

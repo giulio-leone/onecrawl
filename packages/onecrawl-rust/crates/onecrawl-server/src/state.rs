@@ -41,6 +41,8 @@ pub struct ServerState {
     pub tab_index: RwLock<HashMap<String, String>>,
     /// Per-tab locks for multi-agent safety.
     pub tab_locks: RwLock<HashMap<String, TabLock>>,
+    /// Global event bus for pub/sub webhook integration.
+    pub event_bus: onecrawl_cdp::EventBus,
 }
 
 impl ServerState {
@@ -53,6 +55,7 @@ impl ServerState {
             snapshots: RwLock::new(HashMap::with_capacity(MAX_SNAPSHOTS)),
             tab_index: RwLock::new(HashMap::new()),
             tab_locks: RwLock::new(HashMap::new()),
+            event_bus: onecrawl_cdp::EventBus::new(onecrawl_cdp::EventBusConfig::default()),
         }
     }
 

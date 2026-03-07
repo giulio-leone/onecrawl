@@ -32,6 +32,7 @@ pub mod domain_blocker;
 pub mod downloads;
 pub mod element;
 pub mod emulation;
+pub mod event_bus;
 pub mod events;
 pub mod extract;
 pub mod form_filler;
@@ -186,6 +187,7 @@ pub use tls_fingerprint::BrowserFingerprint;
 
 pub use durable::{CrashPolicy, DurableConfig, DurableSession, DurableState, DurableStatus, parse_duration};
 pub use reactor::{EventFilter, Reactor, ReactorConfig, ReactorEvent, ReactorEventType, ReactorHandler, ReactorRule, ReactorStatus, RuleStatus};
+pub use event_bus::{EventBus, EventBusConfig, BusEvent, BusStats, WebhookSubscription, DeliveryStatus, JournalEntry};
 
 pub use orchestrator::{
     Orchestrator, Orchestration, OrchestrationResult, DeviceType, DeviceConfig,

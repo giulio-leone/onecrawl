@@ -2,6 +2,7 @@ pub mod android;
 pub mod browser;
 pub mod crypto;
 pub mod daemon;
+pub mod events;
 pub mod ios;
 pub mod orchestrator;
 pub mod parse;

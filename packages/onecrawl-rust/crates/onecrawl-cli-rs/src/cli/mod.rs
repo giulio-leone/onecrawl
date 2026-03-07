@@ -14,6 +14,7 @@ mod crawl;
 mod daemon;
 mod dom;
 mod durable;
+mod events;
 mod harness;
 mod interaction;
 mod ios;
@@ -38,6 +39,7 @@ pub(crate) use crawl::{PipelineAction, StructuredAction, AdaptiveAction, SpiderA
 pub(crate) use daemon::DaemonAction;
 pub(crate) use dom::{FingerprintAction, EmulateAction, DomAction, IframeAction, AdvancedEmulationAction, WindowAction, SetAction};
 pub(crate) use durable::DurableAction;
+pub(crate) use events::EventsAction;
 pub(crate) use react::ReactAction;
 pub(crate) use harness::HarnessAction;
 pub(crate) use interaction::{SelectAction, NavAction, KeyboardAction, MouseAction, FindAction};
@@ -870,6 +872,13 @@ pub(crate) enum Commands {
     React {
         #[command(subcommand)]
         action: ReactAction,
+    },
+
+    // ── Event Bus ────────────────────────────────────────────
+    /// Webhook & event bus for external integrations (n8n, Make, Zapier)
+    Events {
+        #[command(subcommand)]
+        action: EventsAction,
     },
 
     // ── Skills ──────────────────────────────────────────────────

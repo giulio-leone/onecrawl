@@ -1162,6 +1162,9 @@ pub(crate) async fn dispatch(command: Commands) {
             ReactAction::Events { limit } => commands::browser::react_events(limit).await,
         },
 
+        // ── Event Bus ───────────────────────────────────────────────
+        Commands::Events { action } => commands::events::handle(action).await,
+
         // ── Skills ────────────────────────────────────────────────
         Commands::Skills { action } => match action {
             SkillsAction::List => commands::skills::skills_list(),

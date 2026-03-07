@@ -63,6 +63,8 @@ pub struct BrowserState {
     pub stealth_applied: bool,
     // Browser mode
     pub headed: bool,
+    // Event bus for webhook pub/sub
+    pub event_bus: Option<Arc<onecrawl_cdp::EventBus>>,
 }
 
 pub type SharedBrowser = Arc<Mutex<BrowserState>>;
@@ -3224,3 +3226,66 @@ pub struct VaultImportEnvParams {
     #[schemars(description = "Environment variable prefix (default 'ONECRAWL_VAULT_')")]
     pub prefix: Option<String>,
 }
+
+// ────────────────────────────────────────────────────────────────────
+//  Event Bus params
+// ────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct EventsEmitParams {
+    #[schemars(description = "Event type (e.g. 'page:loaded', 'message:received')")]
+    pub event_type: String,
+    #[schemars(description = "Event source (default 'mcp')")]
+    pub source: Option<String>,
+    #[schemars(description = "Event payload as JSON")]
+    pub data: Option<serde_json::Value>,
+    #[schemars(description = "Optional metadata key-value pairs")]
+    pub metadata: Option<HashMap<String, String>>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct EventsSubscribeParams {
+    #[schemars(description = "Glob pattern to match event types (e.g. 'page:*', '**')")]
+    pub event_pattern: String,
+    #[schemars(description = "Webhook URL to POST events to")]
+    pub url: String,
+    #[schemars(description = "HTTP method (default POST)")]
+    pub method: Option<String>,
+    #[schemars(description = "Custom HTTP headers")]
+    pub headers: Option<HashMap<String, String>>,
+    #[schemars(description = "HMAC-SHA256 signing secret")]
+    pub secret: Option<String>,
+    #[schemars(description = "Number of retries on failure (default 3)")]
+    pub retry_count: Option<u32>,
+    #[schemars(description = "Delay between retries in ms (default 1000)")]
+    pub retry_delay_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct EventsUnsubscribeParams {
+    #[schemars(description = "Subscription ID to remove")]
+    pub id: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct EventsListParams {}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct EventsRecentParams {
+    #[schemars(description = "Max events to return (default 50)")]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct EventsReplayParams {
+    #[schemars(description = "Glob pattern to match event types")]
+    pub event_pattern: String,
+    #[schemars(description = "ISO 8601 timestamp — only replay events after this time")]
+    pub since: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct EventsStatsParams {}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct EventsClearParams {}

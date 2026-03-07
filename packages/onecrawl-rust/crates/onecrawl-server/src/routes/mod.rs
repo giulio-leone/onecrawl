@@ -2,6 +2,7 @@
 
 mod actions;
 mod content;
+mod events;
 mod instances;
 mod locking;
 mod profiles;
@@ -113,6 +114,16 @@ pub fn create_router(state: AppState) -> Router {
         .route("/tabs/{tab_id}/lock", post(locking::lock_tab))
         .route("/tabs/{tab_id}/lock", delete(locking::unlock_tab))
         .route("/tabs/{tab_id}/lock", get(locking::get_tab_lock))
+        // Event bus
+        .route("/events/emit", post(events::emit_event))
+        .route("/events/subscribe", post(events::subscribe_webhook))
+        .route("/events/subscribe/{id}", delete(events::unsubscribe_webhook))
+        .route("/events/subscriptions", get(events::list_subscriptions))
+        .route("/events/recent", get(events::recent_events))
+        .route("/events/replay", post(events::replay_events))
+        .route("/events/stats", get(events::event_stats))
+        .route("/events/stream", get(events::event_stream))
+        .route("/events/journal", delete(events::clear_journal))
         .layer(cors)
         .layer(CompressionLayer::new())
         .with_state(state)

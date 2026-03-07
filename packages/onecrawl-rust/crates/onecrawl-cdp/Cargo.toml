@@ -26,6 +26,7 @@ tracing = { workspace = true }
 rand = { workspace = true }
 url = { workspace = true }
 reqwest = { workspace = true }
+ring = { workspace = true }
 playwright = { workspace = true, optional = true }
 
 [dev-dependencies]

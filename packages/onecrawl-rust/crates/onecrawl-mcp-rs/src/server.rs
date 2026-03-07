@@ -1943,6 +1943,54 @@ impl OneCrawlMcp {
         }
     }
 
+    #[tool(
+        name = "events",
+        description = "Event Bus — pub/sub webhook integration for external systems (n8n, Make, Zapier, custom webhooks).\n\nActions:\n- emit {event_type, source?, data?, metadata?} — Emit an event to the bus\n- subscribe {event_pattern, url, method?, headers?, secret?, retry_count?, retry_delay_ms?} — Subscribe a webhook\n- unsubscribe {id} — Remove a webhook subscription\n- list_subscriptions — List all webhook subscriptions\n- recent {limit?} — Get recent events from journal\n- replay {event_pattern, since?} — Replay events matching a pattern\n- stats — Get event bus statistics\n- clear — Clear the event journal"
+    )]
+    async fn tool_events(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        self.enforce_safety("events", &action).await?;
+        let action = EventsAction::parse(&action)?;
+        match action {
+            EventsAction::Emit => {
+                let params: EventsEmitParams = parse_params(v, "events_emit")?;
+                self.events_emit(params).await
+            }
+            EventsAction::Subscribe => {
+                let params: EventsSubscribeParams = parse_params(v, "events_subscribe")?;
+                self.events_subscribe(params).await
+            }
+            EventsAction::Unsubscribe => {
+                let params: EventsUnsubscribeParams = parse_params(v, "events_unsubscribe")?;
+                self.events_unsubscribe(params).await
+            }
+            EventsAction::ListSubscriptions => {
+                let params: EventsListParams = parse_params(v, "events_list_subscriptions")?;
+                self.events_list_subscriptions(params).await
+            }
+            EventsAction::Recent => {
+                let params: EventsRecentParams = parse_params(v, "events_recent")?;
+                self.events_recent(params).await
+            }
+            EventsAction::Replay => {
+                let params: EventsReplayParams = parse_params(v, "events_replay")?;
+                self.events_replay(params).await
+            }
+            EventsAction::Stats => {
+                let params: EventsStatsParams = parse_params(v, "events_stats")?;
+                self.events_stats(params).await
+            }
+            EventsAction::Clear => {
+                let params: EventsClearParams = parse_params(v, "events_clear")?;
+                self.events_clear(params).await
+            }
+        }
+    }
+
     /// Create an `OneCrawlMcp` reusing an existing browser session.
     /// Used by the CLI `run` command to delegate to MCP handlers directly.
     pub fn from_browser(
@@ -1985,8 +2033,9 @@ impl OneCrawlMcp {
             "reactor" => self.tool_reactor(ta).await,
             "orchestrator" => self.tool_orchestrator(ta).await,
             "vault" => self.tool_vault(ta).await,
+            "events" => self.tool_events(ta).await,
             _ => return Err(format!(
-                "unknown tool: '{tool}'. Available: browser, crawl, agent, stealth, data, secure, computer, memory, automate, perf, reactor, orchestrator, vault"
+                "unknown tool: '{tool}'. Available: browser, crawl, agent, stealth, data, secure, computer, memory, automate, perf, reactor, orchestrator, vault, events"
             )),
         };
 
