@@ -261,6 +261,8 @@ pub struct NativeBrowser {
     recording: onecrawl_cdp::SharedRecording,
     safety: Arc<TokioMutex<Option<onecrawl_cdp::SafetyState>>>,
     agent_memory: Arc<TokioMutex<Option<onecrawl_cdp::AgentMemory>>>,
+    reactor: Arc<TokioMutex<Option<onecrawl_cdp::Reactor>>>,
+    vision_stream: Arc<TokioMutex<Option<onecrawl_cdp::VisionStream>>>,
 }
 
 #[napi]
@@ -302,6 +304,8 @@ impl NativeBrowser {
             recording: onecrawl_cdp::new_shared_recording(),
             safety: Arc::new(TokioMutex::new(None)),
             agent_memory: Arc::new(TokioMutex::new(None)),
+            reactor: Arc::new(TokioMutex::new(None)),
+            vision_stream: Arc::new(TokioMutex::new(None)),
         })
     }
 
@@ -338,6 +342,8 @@ impl NativeBrowser {
             recording: onecrawl_cdp::new_shared_recording(),
             safety: Arc::new(TokioMutex::new(None)),
             agent_memory: Arc::new(TokioMutex::new(None)),
+            reactor: Arc::new(TokioMutex::new(None)),
+            vision_stream: Arc::new(TokioMutex::new(None)),
         })
     }
 
@@ -6512,6 +6518,402 @@ impl NativeBrowser {
             .map_err(|e| Error::from_reason(e.to_string()))?;
         serde_json::to_string(&sitemap).map_err(|e| Error::from_reason(e.to_string()))
     }
+
+    // ──────────────── Durable Sessions ────────────────
+
+    /// Checkpoint current browser state. Returns saved state JSON.
+    #[napi]
+    pub async fn durable_checkpoint(
+        &self,
+        name: String,
+        config_json: Option<String>,
+    ) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let config = match config_json {
+            Some(json) => serde_json::from_str::<onecrawl_cdp::DurableConfig>(&json)
+                .map_err(|e| Error::from_reason(e.to_string()))?,
+            None => onecrawl_cdp::DurableConfig {
+                name: name.clone(),
+                ..Default::default()
+            },
+        };
+        let mut session = onecrawl_cdp::DurableSession::new(config)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let state = session
+            .checkpoint(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&state).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Restore browser state from a named checkpoint.
+    #[napi]
+    pub async fn durable_restore(&self, name: String) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let config = onecrawl_cdp::DurableConfig {
+            name: name.clone(),
+            ..Default::default()
+        };
+        let mut session = onecrawl_cdp::DurableSession::new(config)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        session
+            .restore(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let status = onecrawl_cdp::DurableSession::get_status(
+            &onecrawl_cdp::DurableSession::default_state_dir(),
+            &name,
+        )
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&status).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// List all durable sessions. Returns JSON array.
+    #[napi]
+    pub async fn durable_list(&self) -> Result<String> {
+        let sessions = onecrawl_cdp::DurableSession::list_sessions(
+            &onecrawl_cdp::DurableSession::default_state_dir(),
+        )
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&sessions).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Delete a durable session by name.
+    #[napi]
+    pub async fn durable_delete(&self, name: String) -> Result<()> {
+        onecrawl_cdp::DurableSession::delete_session(
+            &onecrawl_cdp::DurableSession::default_state_dir(),
+            &name,
+        )
+        .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get status of a named durable session. Returns JSON.
+    #[napi]
+    pub async fn durable_status(&self, name: String) -> Result<String> {
+        let status = onecrawl_cdp::DurableSession::get_status(
+            &onecrawl_cdp::DurableSession::default_state_dir(),
+            &name,
+        )
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&status).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    // ──────────────── Event Reactor ────────────────
+
+    /// Start the event reactor. Returns status JSON.
+    #[napi]
+    pub async fn reactor_start(&self, config_json: String) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let config: onecrawl_cdp::ReactorConfig = serde_json::from_str(&config_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let reactor = onecrawl_cdp::Reactor::new(config);
+        reactor
+            .start(page)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let status = reactor.status().await;
+        {
+            let mut r = self.reactor.lock().await;
+            *r = Some(reactor);
+        }
+        serde_json::to_string(&status).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Stop the event reactor. Returns final status JSON.
+    #[napi]
+    pub async fn reactor_stop(&self) -> Result<String> {
+        let guard = self.reactor.lock().await;
+        let reactor = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("reactor not running"))?;
+        let status = reactor
+            .stop()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&status).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Add a rule to the event reactor.
+    #[napi]
+    pub async fn reactor_add_rule(&self, rule_json: String) -> Result<()> {
+        let guard = self.reactor.lock().await;
+        let reactor = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("reactor not running"))?;
+        let rule: onecrawl_cdp::ReactorRule = serde_json::from_str(&rule_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        reactor
+            .add_rule(rule)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Remove a rule from the event reactor by ID.
+    #[napi]
+    pub async fn reactor_remove_rule(&self, rule_id: String) -> Result<()> {
+        let guard = self.reactor.lock().await;
+        let reactor = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("reactor not running"))?;
+        reactor
+            .remove_rule(&rule_id)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Toggle a reactor rule on or off.
+    #[napi]
+    pub async fn reactor_toggle_rule(&self, rule_id: String, enabled: bool) -> Result<()> {
+        let guard = self.reactor.lock().await;
+        let reactor = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("reactor not running"))?;
+        reactor
+            .toggle_rule(&rule_id, enabled)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get reactor status. Returns JSON.
+    #[napi]
+    pub async fn reactor_status(&self) -> Result<String> {
+        let guard = self.reactor.lock().await;
+        let reactor = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("reactor not running"))?;
+        let status = reactor.status().await;
+        serde_json::to_string(&status).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get recent reactor events. Returns JSON array.
+    #[napi]
+    pub async fn reactor_events(&self, limit: Option<u32>) -> Result<String> {
+        let guard = self.reactor.lock().await;
+        let reactor = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("reactor not running"))?;
+        let events = reactor.recent_events(limit.unwrap_or(50) as usize).await;
+        serde_json::to_string(&events).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Clear all reactor events.
+    #[napi]
+    pub async fn reactor_clear_events(&self) -> Result<()> {
+        let guard = self.reactor.lock().await;
+        let reactor = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("reactor not running"))?;
+        reactor.clear_events().await;
+        Ok(())
+    }
+
+    // ──────────────── Agent Auto ────────────────
+
+    /// Run the full auto agent. Returns result JSON.
+    #[napi]
+    pub async fn agent_auto_run(&self, config_json: String) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let config: onecrawl_cdp::AgentAutoConfig = serde_json::from_str(&config_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let result = onecrawl_cdp::agent_auto_run(page, config)
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Plan auto agent steps without executing. Returns steps JSON.
+    #[napi]
+    pub async fn agent_auto_plan(&self, config_json: String) -> Result<String> {
+        let config: onecrawl_cdp::AgentAutoConfig = serde_json::from_str(&config_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let steps = onecrawl_cdp::agent_auto_plan(&config)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&steps).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get auto agent status. Returns JSON.
+    #[napi]
+    pub async fn agent_auto_status(&self) -> Result<String> {
+        let guard = self.page.lock().await;
+        let _page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        Ok(serde_json::json!({"status": "idle"}).to_string())
+    }
+
+    // ──────────────── Event Bus ────────────────
+
+    /// Emit an event to the bus.
+    #[napi]
+    pub async fn event_bus_emit(&self, event_json: String) -> Result<()> {
+        let event: onecrawl_cdp::BusEvent = serde_json::from_str(&event_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let bus = onecrawl_cdp::EventBus::new(onecrawl_cdp::EventBusConfig::default());
+        bus.emit(event)
+            .await
+            .map_err(|e| Error::from_reason(e))
+    }
+
+    /// Subscribe a webhook to the event bus. Returns subscription ID.
+    #[napi]
+    pub async fn event_bus_subscribe_webhook(
+        &self,
+        url: String,
+        filter: Option<String>,
+    ) -> Result<String> {
+        let bus = onecrawl_cdp::EventBus::new(onecrawl_cdp::EventBusConfig::default());
+        let sub = onecrawl_cdp::WebhookSubscription {
+            id: String::new(),
+            event_pattern: filter.unwrap_or_else(|| "*".to_string()),
+            url,
+            method: None,
+            headers: None,
+            secret: None,
+            active: true,
+            retry_count: 3,
+            retry_delay_ms: 1000,
+            created_at: String::new(),
+            last_triggered: None,
+            trigger_count: 0,
+            last_error: None,
+        };
+        let id = bus
+            .subscribe_webhook(sub)
+            .await
+            .map_err(|e| Error::from_reason(e))?;
+        Ok(id)
+    }
+
+    /// Unsubscribe a webhook by ID.
+    #[napi]
+    pub async fn event_bus_unsubscribe_webhook(&self, id: String) -> Result<()> {
+        let bus = onecrawl_cdp::EventBus::new(onecrawl_cdp::EventBusConfig::default());
+        bus.unsubscribe_webhook(&id)
+            .await
+            .map_err(|e| Error::from_reason(e))
+    }
+
+    /// List all webhook subscriptions. Returns JSON array.
+    #[napi]
+    pub async fn event_bus_list_webhooks(&self) -> Result<String> {
+        let bus = onecrawl_cdp::EventBus::new(onecrawl_cdp::EventBusConfig::default());
+        let hooks = bus.list_webhooks().await;
+        serde_json::to_string(&hooks).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get recent events from the bus. Returns JSON array.
+    #[napi]
+    pub async fn event_bus_recent(&self, limit: Option<u32>) -> Result<String> {
+        let bus = onecrawl_cdp::EventBus::new(onecrawl_cdp::EventBusConfig::default());
+        let events = bus.recent_events(limit.unwrap_or(50) as usize).await;
+        serde_json::to_string(&events).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get event bus stats. Returns JSON.
+    #[napi]
+    pub async fn event_bus_stats(&self) -> Result<String> {
+        let bus = onecrawl_cdp::EventBus::new(onecrawl_cdp::EventBusConfig::default());
+        let stats = bus.stats().await;
+        serde_json::to_string(&stats).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Clear the event bus journal.
+    #[napi]
+    pub async fn event_bus_clear(&self) -> Result<()> {
+        let bus = onecrawl_cdp::EventBus::new(onecrawl_cdp::EventBusConfig::default());
+        bus.clear_journal()
+            .await
+            .map_err(|e| Error::from_reason(e))
+    }
+
+    // ──────────────── Vision Stream ────────────────
+
+    /// Start continuous vision stream. Returns status JSON.
+    #[napi]
+    pub async fn vision_start(&self, config_json: Option<String>) -> Result<String> {
+        let guard = self.page.lock().await;
+        let page = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("browser closed"))?;
+        let config = match config_json {
+            Some(json) => serde_json::from_str::<onecrawl_cdp::VisionConfig>(&json)
+                .map_err(|e| Error::from_reason(e.to_string()))?,
+            None => onecrawl_cdp::VisionConfig::default(),
+        };
+        let stream = onecrawl_cdp::VisionStream::new(config);
+        stream
+            .start(page)
+            .await
+            .map_err(|e| Error::from_reason(e))?;
+        let status = stream.status().await;
+        {
+            let mut vs = self.vision_stream.lock().await;
+            *vs = Some(stream);
+        }
+        serde_json::to_string(&status).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Stop the vision stream. Returns final status JSON.
+    #[napi]
+    pub async fn vision_stop(&self) -> Result<String> {
+        let guard = self.vision_stream.lock().await;
+        let stream = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("vision stream not running"))?;
+        let status = stream
+            .stop()
+            .await
+            .map_err(|e| Error::from_reason(e))?;
+        serde_json::to_string(&status).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get vision stream status. Returns JSON.
+    #[napi]
+    pub async fn vision_status(&self) -> Result<String> {
+        let guard = self.vision_stream.lock().await;
+        let stream = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("vision stream not running"))?;
+        let status = stream.status().await;
+        serde_json::to_string(&status).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Get recent vision observations. Returns JSON array.
+    #[napi]
+    pub async fn vision_observations(&self, limit: Option<u32>) -> Result<String> {
+        let guard = self.vision_stream.lock().await;
+        let stream = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("vision stream not running"))?;
+        let obs = stream.observations(limit.unwrap_or(20) as usize).await;
+        serde_json::to_string(&obs).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Set vision stream FPS.
+    #[napi]
+    pub async fn vision_set_fps(&self, fps: f64) -> Result<()> {
+        let guard = self.vision_stream.lock().await;
+        let stream = guard
+            .as_ref()
+            .ok_or_else(|| Error::from_reason("vision stream not running"))?;
+        stream
+            .set_fps(fps as f32)
+            .await
+            .map_err(|e| Error::from_reason(e))
+    }
 }
 
 fn parse_network_profile(name: &str) -> std::result::Result<onecrawl_cdp::NetworkProfile, String> {
@@ -6524,6 +6926,252 @@ fn parse_network_profile(name: &str) -> std::result::Result<onecrawl_cdp::Networ
         _ => Err(format!(
             "Unknown profile: {name}. Use: fast3g, slow3g, offline, regular4g, wifi"
         )),
+    }
+}
+
+// ──────────────────────────── Orchestrator ────────────────────────────
+
+/// Multi-device orchestration engine.
+#[napi(js_name = "NativeOrchestrator")]
+pub struct NativeOrchestrator {
+    inner: Arc<TokioMutex<onecrawl_cdp::Orchestrator>>,
+}
+
+#[napi]
+impl NativeOrchestrator {
+    /// Create an orchestrator from a YAML/JSON file path.
+    #[napi(factory)]
+    pub async fn from_file(path: String) -> Result<Self> {
+        let orch = onecrawl_cdp::Orchestrator::from_file(&path)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(Self {
+            inner: Arc::new(TokioMutex::new(onecrawl_cdp::Orchestrator::new(orch))),
+        })
+    }
+
+    /// Create an orchestrator from a JSON string.
+    #[napi(factory)]
+    pub async fn from_json(json: String) -> Result<Self> {
+        let orch: onecrawl_cdp::Orchestration = serde_json::from_str(&json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        Ok(Self {
+            inner: Arc::new(TokioMutex::new(onecrawl_cdp::Orchestrator::new(orch))),
+        })
+    }
+
+    /// Validate an orchestration JSON. Returns validation result JSON.
+    #[napi]
+    pub async fn validate(json: String) -> Result<String> {
+        let orch: onecrawl_cdp::Orchestration = serde_json::from_str(&json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        match onecrawl_cdp::Orchestrator::validate(&orch) {
+            Ok(()) => Ok(serde_json::json!({"valid": true}).to_string()),
+            Err(errors) => Ok(serde_json::json!({"valid": false, "errors": errors}).to_string()),
+        }
+    }
+
+    /// Execute the orchestration. Returns result JSON.
+    #[napi]
+    pub async fn execute(&self) -> Result<String> {
+        let mut guard = self.inner.lock().await;
+        let result = guard
+            .execute()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        serde_json::to_string(&result).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Disconnect all devices.
+    #[napi]
+    pub async fn disconnect(&self) -> Result<()> {
+        let mut guard = self.inner.lock().await;
+        guard
+            .disconnect()
+            .await
+            .map_err(|e| Error::from_reason(e.to_string()))
+    }
+}
+
+// ──────────────────────────── Plugins ────────────────────────────
+
+/// Plugin registry for managing OneCrawl plugins.
+#[napi(js_name = "NativePlugins")]
+pub struct NativePlugins {
+    inner: Arc<TokioMutex<onecrawl_cdp::PluginRegistry>>,
+}
+
+#[napi]
+impl NativePlugins {
+    /// Create a new plugin registry. Uses default dir if none provided.
+    #[napi(factory)]
+    pub async fn create(dir: Option<String>) -> Result<Self> {
+        let plugins_dir = dir.unwrap_or_else(|| {
+            onecrawl_cdp::default_plugins_dir()
+                .to_string_lossy()
+                .to_string()
+        });
+        let registry = onecrawl_cdp::PluginRegistry::new(&plugins_dir)
+            .map_err(|e| Error::from_reason(e))?;
+        Ok(Self {
+            inner: Arc::new(TokioMutex::new(registry)),
+        })
+    }
+
+    /// Install a plugin from a local path. Returns plugin info JSON.
+    #[napi]
+    pub async fn install_local(&self, path: String) -> Result<String> {
+        let mut guard = self.inner.lock().await;
+        let plugin = guard
+            .install_local(&path)
+            .map_err(|e| Error::from_reason(e))?;
+        serde_json::to_string(&plugin).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Uninstall a plugin by name.
+    #[napi]
+    pub async fn uninstall(&self, name: String) -> Result<()> {
+        let mut guard = self.inner.lock().await;
+        guard
+            .uninstall(&name)
+            .map_err(|e| Error::from_reason(e))
+    }
+
+    /// Enable a plugin by name.
+    #[napi]
+    pub async fn enable(&self, name: String) -> Result<()> {
+        let mut guard = self.inner.lock().await;
+        guard
+            .enable(&name)
+            .map_err(|e| Error::from_reason(e))
+    }
+
+    /// Disable a plugin by name.
+    #[napi]
+    pub async fn disable(&self, name: String) -> Result<()> {
+        let mut guard = self.inner.lock().await;
+        guard
+            .disable(&name)
+            .map_err(|e| Error::from_reason(e))
+    }
+
+    /// List all installed plugins. Returns JSON array.
+    #[napi]
+    pub async fn list(&self) -> Result<String> {
+        let guard = self.inner.lock().await;
+        let plugins = guard.list();
+        serde_json::to_string(&plugins).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Configure a plugin with JSON settings.
+    #[napi]
+    pub async fn configure(&self, name: String, config_json: String) -> Result<()> {
+        let mut guard = self.inner.lock().await;
+        let config: serde_json::Value = serde_json::from_str(&config_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        guard
+            .configure(&name, config)
+            .map_err(|e| Error::from_reason(e))
+    }
+}
+
+// ──────────────────────────── Studio ────────────────────────────
+
+/// Visual workflow builder and project manager.
+#[napi(js_name = "NativeStudio")]
+pub struct NativeStudio {
+    inner: Arc<TokioMutex<onecrawl_cdp::studio::StudioWorkspace>>,
+}
+
+#[napi]
+impl NativeStudio {
+    /// Create a new studio workspace. Uses default dir if none provided.
+    #[napi(factory)]
+    pub async fn create(dir: Option<String>) -> Result<Self> {
+        let workspace_dir = dir.unwrap_or_else(|| "~/.onecrawl/studio".to_string());
+        let studio = onecrawl_cdp::studio::StudioWorkspace::new(&workspace_dir)
+            .map_err(|e| Error::from_reason(e))?;
+        Ok(Self {
+            inner: Arc::new(TokioMutex::new(studio)),
+        })
+    }
+
+    /// Get available workflow templates. Returns JSON array.
+    #[napi]
+    pub async fn templates(&self) -> Result<String> {
+        let templates = onecrawl_cdp::studio::StudioWorkspace::templates();
+        serde_json::to_string(&templates).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Save a studio project.
+    #[napi]
+    pub async fn save_project(&self, project_json: String) -> Result<()> {
+        let guard = self.inner.lock().await;
+        let project: onecrawl_cdp::studio::StudioProject = serde_json::from_str(&project_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        guard
+            .save_project(&project)
+            .map_err(|e| Error::from_reason(e))
+    }
+
+    /// Load a studio project by ID. Returns project JSON.
+    #[napi]
+    pub async fn load_project(&self, id: String) -> Result<String> {
+        let guard = self.inner.lock().await;
+        let project = guard
+            .load_project(&id)
+            .map_err(|e| Error::from_reason(e))?;
+        serde_json::to_string(&project).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// List all studio projects. Returns JSON array.
+    #[napi]
+    pub async fn list_projects(&self) -> Result<String> {
+        let guard = self.inner.lock().await;
+        let projects = guard
+            .list_projects()
+            .map_err(|e| Error::from_reason(e))?;
+        serde_json::to_string(&projects).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Delete a studio project by ID.
+    #[napi]
+    pub async fn delete_project(&self, id: String) -> Result<()> {
+        let guard = self.inner.lock().await;
+        guard
+            .delete_project(&id)
+            .map_err(|e| Error::from_reason(e))
+    }
+
+    /// Export a project's workflow as JSON.
+    #[napi]
+    pub async fn export_workflow(&self, id: String) -> Result<String> {
+        let guard = self.inner.lock().await;
+        guard
+            .export_workflow(&id)
+            .map_err(|e| Error::from_reason(e))
+    }
+
+    /// Import a workflow from JSON. Returns new project JSON.
+    #[napi]
+    pub async fn import_workflow(&self, name: String, workflow_json: String) -> Result<String> {
+        let guard = self.inner.lock().await;
+        let project = guard
+            .import_workflow(&name, &workflow_json)
+            .map_err(|e| Error::from_reason(e))?;
+        serde_json::to_string(&project).map_err(|e| Error::from_reason(e.to_string()))
+    }
+
+    /// Validate a workflow JSON. Returns validation result JSON.
+    #[napi]
+    pub async fn validate_workflow(&self, workflow_json: String) -> Result<String> {
+        let workflow: serde_json::Value = serde_json::from_str(&workflow_json)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        match onecrawl_cdp::studio::StudioWorkspace::validate_workflow(&workflow) {
+            Ok(warnings) => {
+                Ok(serde_json::json!({"valid": true, "warnings": warnings}).to_string())
+            }
+            Err(e) => Ok(serde_json::json!({"valid": false, "error": e}).to_string()),
+        }
     }
 }
 

@@ -220,6 +220,9 @@ struct Browser {
     retry_queue: Arc<std::sync::Mutex<onecrawl_cdp::RetryQueue>>,
     scheduler: Arc<std::sync::Mutex<onecrawl_cdp::Scheduler>>,
     session_pool: Arc<std::sync::Mutex<onecrawl_cdp::SessionPool>>,
+    reactor: Arc<std::sync::Mutex<Option<onecrawl_cdp::Reactor>>>,
+    event_bus: Arc<std::sync::Mutex<onecrawl_cdp::EventBus>>,
+    vision_stream: Arc<std::sync::Mutex<Option<onecrawl_cdp::VisionStream>>>,
 }
 
 fn py_err(e: impl std::fmt::Display) -> PyErr {
@@ -275,6 +278,11 @@ impl Browser {
             session_pool: Arc::new(std::sync::Mutex::new(onecrawl_cdp::SessionPool::new(
                 onecrawl_cdp::PoolConfig::default(),
             ))),
+            reactor: Arc::new(std::sync::Mutex::new(None)),
+            event_bus: Arc::new(std::sync::Mutex::new(onecrawl_cdp::EventBus::new(
+                onecrawl_cdp::EventBusConfig::default(),
+            ))),
+            vision_stream: Arc::new(std::sync::Mutex::new(None)),
         })
     }
 
@@ -305,6 +313,11 @@ impl Browser {
             session_pool: Arc::new(std::sync::Mutex::new(onecrawl_cdp::SessionPool::new(
                 onecrawl_cdp::PoolConfig::default(),
             ))),
+            reactor: Arc::new(std::sync::Mutex::new(None)),
+            event_bus: Arc::new(std::sync::Mutex::new(onecrawl_cdp::EventBus::new(
+                onecrawl_cdp::EventBusConfig::default(),
+            ))),
+            vision_stream: Arc::new(std::sync::Mutex::new(None)),
         })
     }
 
@@ -4471,6 +4484,271 @@ impl Browser {
             ))
             .map_err(py_err)
     }
+
+    // ──────────────── Durable Sessions ────────────────
+
+    /// Save a checkpoint of current browser state. `config_json` is optional JSON
+    /// for `DurableConfig`; when omitted a default config with the given `name` is used.
+    #[pyo3(signature = (name, config_json=None))]
+    fn durable_checkpoint(&self, name: &str, config_json: Option<&str>) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let config: onecrawl_cdp::DurableConfig = match config_json {
+            Some(j) => serde_json::from_str(j)
+                .map_err(|e| py_err(format!("invalid DurableConfig JSON: {e}")))?,
+            None => {
+                let mut c = onecrawl_cdp::DurableConfig::default();
+                c.name = name.to_string();
+                c
+            }
+        };
+        let mut session = onecrawl_cdp::DurableSession::new(config).map_err(py_err)?;
+        let state = self.rt.block_on(session.checkpoint(page)).map_err(py_err)?;
+        serde_json::to_string(&state).map_err(py_err)
+    }
+
+    /// Restore browser state from a saved checkpoint.
+    #[pyo3(signature = (name, config_json=None))]
+    fn durable_restore(&self, name: &str, config_json: Option<&str>) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let config: onecrawl_cdp::DurableConfig = match config_json {
+            Some(j) => serde_json::from_str(j)
+                .map_err(|e| py_err(format!("invalid DurableConfig JSON: {e}")))?,
+            None => {
+                let mut c = onecrawl_cdp::DurableConfig::default();
+                c.name = name.to_string();
+                c
+            }
+        };
+        let mut session = onecrawl_cdp::DurableSession::new(config).map_err(py_err)?;
+        self.rt.block_on(session.restore(page)).map_err(py_err)
+    }
+
+    /// List all saved durable sessions. Returns JSON array.
+    #[pyo3(signature = (state_dir=None))]
+    fn durable_list(&self, state_dir: Option<&str>) -> PyResult<String> {
+        let dir = match state_dir {
+            Some(d) => std::path::PathBuf::from(d),
+            None => onecrawl_cdp::DurableSession::default_state_dir(),
+        };
+        let sessions = onecrawl_cdp::DurableSession::list_sessions(&dir).map_err(py_err)?;
+        serde_json::to_string(&sessions).map_err(py_err)
+    }
+
+    /// Delete a saved durable session by name.
+    #[pyo3(signature = (name, state_dir=None))]
+    fn durable_delete(&self, name: &str, state_dir: Option<&str>) -> PyResult<()> {
+        let dir = match state_dir {
+            Some(d) => std::path::PathBuf::from(d),
+            None => onecrawl_cdp::DurableSession::default_state_dir(),
+        };
+        onecrawl_cdp::DurableSession::delete_session(&dir, name).map_err(py_err)
+    }
+
+    /// Get the status of a named durable session. Returns JSON.
+    #[pyo3(signature = (name, state_dir=None))]
+    fn durable_status(&self, name: &str, state_dir: Option<&str>) -> PyResult<String> {
+        let dir = match state_dir {
+            Some(d) => std::path::PathBuf::from(d),
+            None => onecrawl_cdp::DurableSession::default_state_dir(),
+        };
+        let state = onecrawl_cdp::DurableSession::get_status(&dir, name).map_err(py_err)?;
+        serde_json::to_string(&state).map_err(py_err)
+    }
+
+    // ──────────────── Event Reactor ────────────────
+
+    /// Start the event reactor with the given config JSON.
+    fn reactor_start(&self, config_json: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let config: onecrawl_cdp::ReactorConfig = serde_json::from_str(config_json)
+            .map_err(|e| py_err(format!("invalid ReactorConfig JSON: {e}")))?;
+        let reactor = onecrawl_cdp::Reactor::new(config);
+        self.rt.block_on(reactor.start(page)).map_err(py_err)?;
+        let mut r = self.reactor.lock().map_err(py_err)?;
+        *r = Some(reactor);
+        Ok(())
+    }
+
+    /// Stop the event reactor. Returns status JSON.
+    fn reactor_stop(&self) -> PyResult<String> {
+        let r = self.reactor.lock().map_err(py_err)?;
+        let reactor = r.as_ref().ok_or_else(|| py_err("reactor not started"))?;
+        let status = self.rt.block_on(reactor.stop()).map_err(py_err)?;
+        serde_json::to_string(&status).map_err(py_err)
+    }
+
+    /// Add a rule to the running reactor. `rule_json` is JSON of `ReactorRule`.
+    fn reactor_add_rule(&self, rule_json: &str) -> PyResult<()> {
+        let rule: onecrawl_cdp::ReactorRule = serde_json::from_str(rule_json)
+            .map_err(|e| py_err(format!("invalid ReactorRule JSON: {e}")))?;
+        let r = self.reactor.lock().map_err(py_err)?;
+        let reactor = r.as_ref().ok_or_else(|| py_err("reactor not started"))?;
+        self.rt.block_on(reactor.add_rule(rule)).map_err(py_err)
+    }
+
+    /// Remove a rule by ID.
+    fn reactor_remove_rule(&self, rule_id: &str) -> PyResult<()> {
+        let r = self.reactor.lock().map_err(py_err)?;
+        let reactor = r.as_ref().ok_or_else(|| py_err("reactor not started"))?;
+        self.rt.block_on(reactor.remove_rule(rule_id)).map_err(py_err)
+    }
+
+    /// Toggle a rule on/off.
+    fn reactor_toggle_rule(&self, rule_id: &str, enabled: bool) -> PyResult<()> {
+        let r = self.reactor.lock().map_err(py_err)?;
+        let reactor = r.as_ref().ok_or_else(|| py_err("reactor not started"))?;
+        self.rt.block_on(reactor.toggle_rule(rule_id, enabled)).map_err(py_err)
+    }
+
+    /// Get reactor status. Returns JSON.
+    fn reactor_status(&self) -> PyResult<String> {
+        let r = self.reactor.lock().map_err(py_err)?;
+        let reactor = r.as_ref().ok_or_else(|| py_err("reactor not started"))?;
+        let status = self.rt.block_on(reactor.status());
+        serde_json::to_string(&status).map_err(py_err)
+    }
+
+    /// Get recent reactor events. Returns JSON array.
+    #[pyo3(signature = (limit=50))]
+    fn reactor_events(&self, limit: usize) -> PyResult<String> {
+        let r = self.reactor.lock().map_err(py_err)?;
+        let reactor = r.as_ref().ok_or_else(|| py_err("reactor not started"))?;
+        let events = self.rt.block_on(reactor.recent_events(limit));
+        serde_json::to_string(&events).map_err(py_err)
+    }
+
+    /// Clear all recorded reactor events.
+    fn reactor_clear_events(&self) -> PyResult<()> {
+        let r = self.reactor.lock().map_err(py_err)?;
+        let reactor = r.as_ref().ok_or_else(|| py_err("reactor not started"))?;
+        self.rt.block_on(reactor.clear_events());
+        Ok(())
+    }
+
+    // ──────────────── Agent Auto ────────────────
+
+    /// Run an autonomous agent with the given config. Returns result JSON.
+    fn agent_auto_run(&self, config_json: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let config: onecrawl_cdp::AgentAutoConfig = serde_json::from_str(config_json)
+            .map_err(|e| py_err(format!("invalid AgentAutoConfig JSON: {e}")))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::agent_auto::agent_auto_run(page, config))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Plan steps for an autonomous agent without executing. Returns JSON array of steps.
+    fn agent_auto_plan(&self, config_json: &str) -> PyResult<String> {
+        let config: onecrawl_cdp::AgentAutoConfig = serde_json::from_str(config_json)
+            .map_err(|e| py_err(format!("invalid AgentAutoConfig JSON: {e}")))?;
+        let steps = onecrawl_cdp::agent_auto::agent_auto_plan(&config).map_err(py_err)?;
+        serde_json::to_string(&steps).map_err(py_err)
+    }
+
+    // ──────────────── Event Bus ────────────────
+
+    /// Emit an event to the event bus. `event_json` is JSON of `BusEvent`.
+    fn event_bus_emit(&self, event_json: &str) -> PyResult<()> {
+        let event: onecrawl_cdp::BusEvent = serde_json::from_str(event_json)
+            .map_err(|e| py_err(format!("invalid BusEvent JSON: {e}")))?;
+        let bus = self.event_bus.lock().map_err(py_err)?;
+        self.rt.block_on(bus.emit(event)).map_err(py_err)
+    }
+
+    /// Subscribe a webhook. `sub_json` is JSON of `WebhookSubscription`. Returns subscription ID.
+    fn event_bus_subscribe_webhook(&self, sub_json: &str) -> PyResult<String> {
+        let sub: onecrawl_cdp::WebhookSubscription = serde_json::from_str(sub_json)
+            .map_err(|e| py_err(format!("invalid WebhookSubscription JSON: {e}")))?;
+        let bus = self.event_bus.lock().map_err(py_err)?;
+        self.rt.block_on(bus.subscribe_webhook(sub)).map_err(py_err)
+    }
+
+    /// Unsubscribe a webhook by ID.
+    fn event_bus_unsubscribe_webhook(&self, id: &str) -> PyResult<()> {
+        let bus = self.event_bus.lock().map_err(py_err)?;
+        self.rt.block_on(bus.unsubscribe_webhook(id)).map_err(py_err)
+    }
+
+    /// List all webhook subscriptions. Returns JSON array.
+    fn event_bus_list_webhooks(&self) -> PyResult<String> {
+        let bus = self.event_bus.lock().map_err(py_err)?;
+        let webhooks = self.rt.block_on(bus.list_webhooks());
+        serde_json::to_string(&webhooks).map_err(py_err)
+    }
+
+    /// Get recent events from the journal. Returns JSON array.
+    #[pyo3(signature = (limit=50))]
+    fn event_bus_recent(&self, limit: usize) -> PyResult<String> {
+        let bus = self.event_bus.lock().map_err(py_err)?;
+        let events = self.rt.block_on(bus.recent_events(limit));
+        serde_json::to_string(&events).map_err(py_err)
+    }
+
+    /// Get event bus statistics. Returns JSON.
+    fn event_bus_stats(&self) -> PyResult<String> {
+        let bus = self.event_bus.lock().map_err(py_err)?;
+        let stats = self.rt.block_on(bus.stats());
+        serde_json::to_string(&stats).map_err(py_err)
+    }
+
+    /// Clear the event bus journal.
+    fn event_bus_clear(&self) -> PyResult<()> {
+        let bus = self.event_bus.lock().map_err(py_err)?;
+        self.rt.block_on(bus.clear_journal()).map_err(py_err)
+    }
+
+    // ──────────────── Vision Stream ────────────────
+
+    /// Start the vision stream with the given config JSON.
+    fn vision_start(&self, config_json: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let config: onecrawl_cdp::VisionConfig = serde_json::from_str(config_json)
+            .map_err(|e| py_err(format!("invalid VisionConfig JSON: {e}")))?;
+        let stream = onecrawl_cdp::VisionStream::new(config);
+        self.rt.block_on(stream.start(page)).map_err(py_err)?;
+        let mut v = self.vision_stream.lock().map_err(py_err)?;
+        *v = Some(stream);
+        Ok(())
+    }
+
+    /// Stop the vision stream. Returns status JSON.
+    fn vision_stop(&self) -> PyResult<String> {
+        let v = self.vision_stream.lock().map_err(py_err)?;
+        let stream = v.as_ref().ok_or_else(|| py_err("vision stream not started"))?;
+        let status = self.rt.block_on(stream.stop()).map_err(py_err)?;
+        serde_json::to_string(&status).map_err(py_err)
+    }
+
+    /// Get vision stream status. Returns JSON.
+    fn vision_status(&self) -> PyResult<String> {
+        let v = self.vision_stream.lock().map_err(py_err)?;
+        let stream = v.as_ref().ok_or_else(|| py_err("vision stream not started"))?;
+        let status = self.rt.block_on(stream.status());
+        serde_json::to_string(&status).map_err(py_err)
+    }
+
+    /// Get recent vision observations. Returns JSON array.
+    #[pyo3(signature = (limit=10))]
+    fn vision_observations(&self, limit: usize) -> PyResult<String> {
+        let v = self.vision_stream.lock().map_err(py_err)?;
+        let stream = v.as_ref().ok_or_else(|| py_err("vision stream not started"))?;
+        let obs = self.rt.block_on(stream.observations(limit));
+        serde_json::to_string(&obs).map_err(py_err)
+    }
+
+    /// Update vision stream FPS at runtime.
+    fn vision_set_fps(&self, fps: f32) -> PyResult<()> {
+        let v = self.vision_stream.lock().map_err(py_err)?;
+        let stream = v.as_ref().ok_or_else(|| py_err("vision stream not started"))?;
+        self.rt.block_on(stream.set_fps(fps)).map_err(py_err)
+    }
 }
 
 // ──────────────────────────── IosClient ────────────────────────────
@@ -5148,6 +5426,211 @@ impl AgentMemory {
     }
 }
 
+// ──────────────────────────── Orchestrator ────────────────────────────
+
+/// Multi-device orchestration engine.
+#[pyclass]
+struct Orchestrator {
+    rt: tokio::runtime::Runtime,
+    inner: Option<onecrawl_cdp::Orchestrator>,
+}
+
+#[pymethods]
+impl Orchestrator {
+    /// Create an orchestrator from a JSON file path.
+    #[staticmethod]
+    fn from_file(path: &str) -> PyResult<Self> {
+        let rt = tokio::runtime::Runtime::new().map_err(py_err)?;
+        let orchestration = onecrawl_cdp::Orchestrator::from_file(path).map_err(py_err)?;
+        let mut orch = onecrawl_cdp::Orchestrator::new(orchestration);
+        rt.block_on(orch.connect_devices()).map_err(py_err)?;
+        Ok(Self {
+            rt,
+            inner: Some(orch),
+        })
+    }
+
+    /// Create an orchestrator from a JSON string.
+    #[staticmethod]
+    fn from_json(json: &str) -> PyResult<Self> {
+        let rt = tokio::runtime::Runtime::new().map_err(py_err)?;
+        let orchestration: onecrawl_cdp::Orchestration = serde_json::from_str(json)
+            .map_err(|e| py_err(format!("invalid Orchestration JSON: {e}")))?;
+        let mut orch = onecrawl_cdp::Orchestrator::new(orchestration);
+        rt.block_on(orch.connect_devices()).map_err(py_err)?;
+        Ok(Self {
+            rt,
+            inner: Some(orch),
+        })
+    }
+
+    /// Validate an orchestration JSON without executing. Returns validation result JSON.
+    #[staticmethod]
+    fn validate(json: &str) -> PyResult<String> {
+        let orchestration: onecrawl_cdp::Orchestration = serde_json::from_str(json)
+            .map_err(|e| py_err(format!("invalid Orchestration JSON: {e}")))?;
+        match onecrawl_cdp::Orchestrator::validate(&orchestration) {
+            Ok(()) => Ok(serde_json::json!({"valid": true, "errors": []}).to_string()),
+            Err(errors) => Ok(serde_json::json!({"valid": false, "errors": errors}).to_string()),
+        }
+    }
+
+    /// Execute the orchestration. Returns result JSON.
+    fn execute(&mut self) -> PyResult<String> {
+        let orch = self
+            .inner
+            .as_mut()
+            .ok_or_else(|| py_err("orchestrator disconnected"))?;
+        let result = self.rt.block_on(orch.execute()).map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Disconnect all devices.
+    fn disconnect(&mut self) -> PyResult<()> {
+        let orch = self
+            .inner
+            .as_mut()
+            .ok_or_else(|| py_err("orchestrator already disconnected"))?;
+        self.rt.block_on(orch.disconnect()).map_err(py_err)?;
+        self.inner = None;
+        Ok(())
+    }
+}
+
+// ──────────────────────────── PluginManager ────────────────────────────
+
+/// Plugin registry for installing, enabling, and configuring plugins.
+#[pyclass]
+struct PluginManager {
+    inner: onecrawl_cdp::PluginRegistry,
+}
+
+#[pymethods]
+impl PluginManager {
+    /// Create a new plugin manager. Uses the default plugins directory when `dir` is None.
+    #[new]
+    #[pyo3(signature = (dir=None))]
+    fn new(dir: Option<&str>) -> PyResult<Self> {
+        let plugins_dir = match dir {
+            Some(d) => d.to_string(),
+            None => onecrawl_cdp::default_plugins_dir()
+                .to_string_lossy()
+                .to_string(),
+        };
+        let registry = onecrawl_cdp::PluginRegistry::new(&plugins_dir).map_err(py_err)?;
+        Ok(Self { inner: registry })
+    }
+
+    /// Install a plugin from a local path. Returns installed plugin info JSON.
+    fn install_local(&mut self, path: &str) -> PyResult<String> {
+        let plugin = self.inner.install_local(path).map_err(py_err)?;
+        serde_json::to_string(&plugin).map_err(py_err)
+    }
+
+    /// Uninstall a plugin by name.
+    fn uninstall(&mut self, name: &str) -> PyResult<()> {
+        self.inner.uninstall(name).map_err(py_err)
+    }
+
+    /// Enable a plugin by name.
+    fn enable(&mut self, name: &str) -> PyResult<()> {
+        self.inner.enable(name).map_err(py_err)
+    }
+
+    /// Disable a plugin by name.
+    fn disable(&mut self, name: &str) -> PyResult<()> {
+        self.inner.disable(name).map_err(py_err)
+    }
+
+    /// List all installed plugins. Returns JSON array.
+    fn list(&self) -> PyResult<String> {
+        let plugins = self.inner.list();
+        serde_json::to_string(&plugins).map_err(py_err)
+    }
+
+    /// Set plugin configuration from a JSON string.
+    fn configure(&mut self, name: &str, config_json: &str) -> PyResult<()> {
+        let config: serde_json::Value = serde_json::from_str(config_json)
+            .map_err(|e| py_err(format!("invalid config JSON: {e}")))?;
+        self.inner.configure(name, config).map_err(py_err)
+    }
+}
+
+// ──────────────────────────── Studio ────────────────────────────
+
+/// Studio workspace for managing automation projects and workflow templates.
+#[pyclass]
+struct Studio {
+    inner: onecrawl_cdp::studio::StudioWorkspace,
+}
+
+#[pymethods]
+impl Studio {
+    /// Create a new Studio workspace. Uses `~/.onecrawl/studio` when `dir` is None.
+    #[new]
+    #[pyo3(signature = (dir=None))]
+    fn new(dir: Option<&str>) -> PyResult<Self> {
+        let workspace_dir = dir.unwrap_or("~/.onecrawl/studio");
+        let workspace =
+            onecrawl_cdp::studio::StudioWorkspace::new(workspace_dir).map_err(py_err)?;
+        Ok(Self { inner: workspace })
+    }
+
+    /// Get built-in workflow templates. Returns JSON array.
+    #[staticmethod]
+    fn templates() -> PyResult<String> {
+        let tpl = onecrawl_cdp::studio::StudioWorkspace::templates();
+        serde_json::to_string(&tpl).map_err(py_err)
+    }
+
+    /// Save a project from JSON.
+    fn save_project(&self, project_json: &str) -> PyResult<()> {
+        let project: onecrawl_cdp::studio::StudioProject = serde_json::from_str(project_json)
+            .map_err(|e| py_err(format!("invalid StudioProject JSON: {e}")))?;
+        self.inner.save_project(&project).map_err(py_err)
+    }
+
+    /// Load a project by ID. Returns JSON.
+    fn load_project(&self, id: &str) -> PyResult<String> {
+        let project = self.inner.load_project(id).map_err(py_err)?;
+        serde_json::to_string(&project).map_err(py_err)
+    }
+
+    /// List all projects. Returns JSON array.
+    fn list_projects(&self) -> PyResult<String> {
+        let projects = self.inner.list_projects().map_err(py_err)?;
+        serde_json::to_string(&projects).map_err(py_err)
+    }
+
+    /// Delete a project by ID.
+    fn delete_project(&self, id: &str) -> PyResult<()> {
+        self.inner.delete_project(id).map_err(py_err)
+    }
+
+    /// Export a project's workflow as JSON.
+    fn export_workflow(&self, id: &str) -> PyResult<String> {
+        self.inner.export_workflow(id).map_err(py_err)
+    }
+
+    /// Import a workflow JSON as a new project. Returns project JSON.
+    fn import_workflow(&self, name: &str, workflow_json: &str) -> PyResult<String> {
+        let project = self
+            .inner
+            .import_workflow(name, workflow_json)
+            .map_err(py_err)?;
+        serde_json::to_string(&project).map_err(py_err)
+    }
+
+    /// Validate a workflow JSON. Returns validation result JSON.
+    fn validate_workflow(&self, workflow_json: &str) -> PyResult<String> {
+        let workflow: serde_json::Value = serde_json::from_str(workflow_json)
+            .map_err(|e| py_err(format!("invalid workflow JSON: {e}")))?;
+        let warnings =
+            onecrawl_cdp::studio::StudioWorkspace::validate_workflow(&workflow).map_err(py_err)?;
+        serde_json::to_string(&warnings).map_err(py_err)
+    }
+}
+
 // ──────────────────────────── Module ────────────────────────────
 
 fn register_crypto(parent: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -5209,6 +5692,9 @@ fn onecrawl(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<IosClient>()?;
     m.add_class::<AndroidClient>()?;
     m.add_class::<AgentMemory>()?;
+    m.add_class::<Orchestrator>()?;
+    m.add_class::<PluginManager>()?;
+    m.add_class::<Studio>()?;
     m.add_function(wrap_pyfunction!(start_server, m)?)?;
     Ok(())
 }
