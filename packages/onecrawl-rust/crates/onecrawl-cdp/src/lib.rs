@@ -209,3 +209,10 @@ pub use vision::{
 
 // Re-export onecrawl_browser::Page for downstream consumers
 pub use onecrawl_browser::Page;
+
+// Port traits (hexagonal architecture)
+pub use onecrawl_browser::ports::{
+    BrowserPort, PagePort, ElementPort, NetworkPort, EmulationPort, InputPort,
+    ElementRect, CookieInfo,
+};
+pub use onecrawl_browser::factory::{create_browser, connect_browser};
