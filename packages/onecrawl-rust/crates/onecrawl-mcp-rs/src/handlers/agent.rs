@@ -817,6 +817,268 @@ impl OneCrawlMcp {
         }))
     }
 
+    pub(crate) async fn agent_ios_pinch(
+        &self,
+        p: IosPinchParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        client.pinch(p.x, p.y, p.scale, p.velocity.unwrap_or(1.0)).await
+            .map_err(|e| mcp_err(format!("iOS pinch failed: {e}")))?;
+        json_ok(&serde_json::json!({
+            "pinched": true,
+            "x": p.x, "y": p.y, "scale": p.scale
+        }))
+    }
+
+    pub(crate) async fn agent_ios_long_press(
+        &self,
+        p: IosLongPressParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        let dur = p.duration_ms.unwrap_or(1000);
+        client.long_press(p.x, p.y, dur).await
+            .map_err(|e| mcp_err(format!("iOS long press failed: {e}")))?;
+        json_ok(&serde_json::json!({
+            "long_pressed": true,
+            "x": p.x, "y": p.y, "duration_ms": dur
+        }))
+    }
+
+    pub(crate) async fn agent_ios_double_tap(
+        &self,
+        p: IosDoubleTapParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        client.double_tap(p.x, p.y).await
+            .map_err(|e| mcp_err(format!("iOS double tap failed: {e}")))?;
+        json_ok(&serde_json::json!({
+            "double_tapped": true,
+            "x": p.x, "y": p.y
+        }))
+    }
+
+    pub(crate) async fn agent_ios_orientation(
+        &self,
+        p: IosOrientationParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        if let Some(orient) = p.set {
+            client.set_orientation(&orient).await
+                .map_err(|e| mcp_err(format!("iOS set orientation failed: {e}")))?;
+            json_ok(&serde_json::json!({"orientation": orient.to_uppercase(), "action": "set"}))
+        } else {
+            let orient = client.get_orientation().await
+                .map_err(|e| mcp_err(format!("iOS get orientation failed: {e}")))?;
+            json_ok(&serde_json::json!({"orientation": orient, "action": "get"}))
+        }
+    }
+
+    pub(crate) async fn agent_ios_scroll(
+        &self,
+        p: IosScrollParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        client.scroll_to_element(&p.using, &p.value).await
+            .map_err(|e| mcp_err(format!("iOS scroll failed: {e}")))?;
+        json_ok(&serde_json::json!({
+            "scrolled": true,
+            "using": p.using, "value": p.value
+        }))
+    }
+
+    pub(crate) async fn agent_ios_script(
+        &self,
+        p: IosScriptParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        let args = p.args.unwrap_or_default();
+        let result = client.execute_script(&p.script, &args).await
+            .map_err(|e| mcp_err(format!("iOS execute script failed: {e}")))?;
+        json_ok(&serde_json::json!({"result": result}))
+    }
+
+    pub(crate) async fn agent_ios_cookies(
+        &self,
+        _p: IosCookiesParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        let cookies = client.get_cookies().await
+            .map_err(|e| mcp_err(format!("iOS get cookies failed: {e}")))?;
+        json_ok(&serde_json::json!({"cookies": cookies}))
+    }
+
+    pub(crate) async fn agent_ios_app_launch(
+        &self,
+        p: IosAppLaunchParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        client.launch_app(&p.bundle_id).await
+            .map_err(|e| mcp_err(format!("iOS launch app failed: {e}")))?;
+        json_ok(&serde_json::json!({"launched": true, "bundle_id": p.bundle_id}))
+    }
+
+    pub(crate) async fn agent_ios_app_kill(
+        &self,
+        p: IosAppKillParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        client.terminate_app(&p.bundle_id).await
+            .map_err(|e| mcp_err(format!("iOS terminate app failed: {e}")))?;
+        json_ok(&serde_json::json!({"terminated": true, "bundle_id": p.bundle_id}))
+    }
+
+    pub(crate) async fn agent_ios_app_state(
+        &self,
+        p: IosAppStateParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        let app_state = client.app_state(&p.bundle_id).await
+            .map_err(|e| mcp_err(format!("iOS app state failed: {e}")))?;
+        let label = match app_state {
+            1 => "not running",
+            2 => "background suspended",
+            3 => "background",
+            4 => "foreground",
+            _ => "unknown",
+        };
+        json_ok(&serde_json::json!({
+            "bundle_id": p.bundle_id,
+            "state": app_state,
+            "label": label
+        }))
+    }
+
+    pub(crate) async fn agent_ios_lock(
+        &self,
+        _p: IosLockParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        client.lock_device().await
+            .map_err(|e| mcp_err(format!("iOS lock failed: {e}")))?;
+        json_ok(&serde_json::json!({"locked": true}))
+    }
+
+    pub(crate) async fn agent_ios_unlock(
+        &self,
+        _p: IosUnlockParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        client.unlock_device().await
+            .map_err(|e| mcp_err(format!("iOS unlock failed: {e}")))?;
+        json_ok(&serde_json::json!({"unlocked": true}))
+    }
+
+    pub(crate) async fn agent_ios_home(
+        &self,
+        _p: IosHomeParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        client.home_button().await
+            .map_err(|e| mcp_err(format!("iOS home button failed: {e}")))?;
+        json_ok(&serde_json::json!({"home": true}))
+    }
+
+    pub(crate) async fn agent_ios_button(
+        &self,
+        p: IosButtonParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        client.press_button(&p.name).await
+            .map_err(|e| mcp_err(format!("iOS press button failed: {e}")))?;
+        json_ok(&serde_json::json!({"pressed": true, "button": p.name}))
+    }
+
+    pub(crate) async fn agent_ios_battery(
+        &self,
+        _p: IosBatteryParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        let info = client.battery_info().await
+            .map_err(|e| mcp_err(format!("iOS battery info failed: {e}")))?;
+        json_ok(&info)
+    }
+
+    pub(crate) async fn agent_ios_info(
+        &self,
+        _p: IosInfoParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        let info = client.device_info().await
+            .map_err(|e| mcp_err(format!("iOS device info failed: {e}")))?;
+        json_ok(&info)
+    }
+
+    pub(crate) async fn agent_ios_simulator(
+        &self,
+        p: IosSimulatorParams,
+    ) -> Result<CallToolResult, McpError> {
+        let result = onecrawl_cdp::ios::IosClient::simulator_action(
+            &p.action,
+            p.udid.as_deref(),
+            p.device_type.as_deref(),
+            p.runtime.as_deref(),
+        )
+        .await
+        .map_err(|e| mcp_err(format!("iOS simulator failed: {e}")))?;
+        json_ok(&result)
+    }
+
+    pub(crate) async fn agent_ios_url(
+        &self,
+        _p: IosUrlParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        let url = client.get_url().await
+            .map_err(|e| mcp_err(format!("iOS get URL failed: {e}")))?;
+        json_ok(&serde_json::json!({"url": url}))
+    }
+
+    pub(crate) async fn agent_ios_title(
+        &self,
+        _p: IosTitleParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.ios_client.as_ref()
+            .ok_or_else(|| mcp_err("no active iOS session — call agent.ios_connect first"))?;
+        let title = client.get_title().await
+            .map_err(|e| mcp_err(format!("iOS get title failed: {e}")))?;
+        json_ok(&serde_json::json!({"title": title}))
+    }
+
     // ──────────────── Computer Use Protocol ─────────────────
 
     // ════════════════════════════════════════════════════════════════

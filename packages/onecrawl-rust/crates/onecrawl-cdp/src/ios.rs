@@ -242,6 +242,384 @@ impl IosClient {
         Ok(())
     }
 
+    /// Pinch gesture (zoom in/out).
+    pub async fn pinch(&self, x: f64, y: f64, scale: f64, velocity: f64) -> Result<()> {
+        let base = self.session_url()?;
+        self.client
+            .post(format!("{base}/wda/pinch"))
+            .json(&serde_json::json!({
+                "x": x, "y": y, "scale": scale, "velocity": velocity
+            }))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS pinch failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Long press at coordinates.
+    pub async fn long_press(&self, x: f64, y: f64, duration_ms: u64) -> Result<()> {
+        let base = self.session_url()?;
+        self.client
+            .post(format!("{base}/actions"))
+            .json(&serde_json::json!({
+                "actions": [{
+                    "type": "pointer",
+                    "id": "finger1",
+                    "parameters": {"pointerType": "touch"},
+                    "actions": [
+                        {"type": "pointerMove", "duration": 0, "x": x as i64, "y": y as i64},
+                        {"type": "pointerDown", "button": 0},
+                        {"type": "pause", "duration": duration_ms},
+                        {"type": "pointerUp", "button": 0}
+                    ]
+                }]
+            }))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS long press failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Double tap at coordinates.
+    pub async fn double_tap(&self, x: f64, y: f64) -> Result<()> {
+        let base = self.session_url()?;
+        self.client
+            .post(format!("{base}/wda/doubleTap"))
+            .json(&serde_json::json!({"x": x, "y": y}))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS double tap failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Set device orientation.
+    pub async fn set_orientation(&self, orientation: &str) -> Result<()> {
+        let base = self.session_url()?;
+        self.client
+            .post(format!("{base}/orientation"))
+            .json(&serde_json::json!({"orientation": orientation.to_uppercase()}))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS set orientation failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Get device orientation.
+    pub async fn get_orientation(&self) -> Result<String> {
+        let base = self.session_url()?;
+        let resp = self
+            .client
+            .get(format!("{base}/orientation"))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS get orientation failed: {e}")))?;
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| {
+                onecrawl_core::Error::Cdp(format!("iOS orientation parse failed: {e}"))
+            })?;
+        Ok(json["value"].as_str().unwrap_or("PORTRAIT").to_string())
+    }
+
+    /// Get device screen size.
+    pub async fn get_screen_size(&self) -> Result<serde_json::Value> {
+        let base = self.session_url()?;
+        let resp = self
+            .client
+            .get(format!("{base}/window/size"))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS screen size failed: {e}")))?;
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| {
+                onecrawl_core::Error::Cdp(format!("iOS screen size parse failed: {e}"))
+            })?;
+        Ok(json["value"].clone())
+    }
+
+    /// Scroll to element by locator strategy.
+    pub async fn scroll_to_element(&self, using: &str, value: &str) -> Result<()> {
+        let el_id = self.find_element(using, value).await?;
+        let base = self.session_url()?;
+        self.client
+            .post(format!("{base}/wda/element/{el_id}/scroll"))
+            .json(&serde_json::json!({"toVisible": true}))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS scroll failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Get current page URL (Safari).
+    pub async fn get_url(&self) -> Result<String> {
+        let base = self.session_url()?;
+        let resp = self
+            .client
+            .get(format!("{base}/url"))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS get URL failed: {e}")))?;
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS URL parse failed: {e}")))?;
+        Ok(json["value"].as_str().unwrap_or("").to_string())
+    }
+
+    /// Get page title (Safari).
+    pub async fn get_title(&self) -> Result<String> {
+        let base = self.session_url()?;
+        let resp = self
+            .client
+            .get(format!("{base}/title"))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS get title failed: {e}")))?;
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS title parse failed: {e}")))?;
+        Ok(json["value"].as_str().unwrap_or("").to_string())
+    }
+
+    /// Execute JavaScript in Safari.
+    pub async fn execute_script(
+        &self,
+        script: &str,
+        args: &[serde_json::Value],
+    ) -> Result<serde_json::Value> {
+        let base = self.session_url()?;
+        let resp = self
+            .client
+            .post(format!("{base}/execute/sync"))
+            .json(&serde_json::json!({"script": script, "args": args}))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS execute script failed: {e}")))?;
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| {
+                onecrawl_core::Error::Cdp(format!("iOS script parse failed: {e}"))
+            })?;
+        Ok(json["value"].clone())
+    }
+
+    /// Get all cookies (Safari).
+    pub async fn get_cookies(&self) -> Result<serde_json::Value> {
+        let base = self.session_url()?;
+        let resp = self
+            .client
+            .get(format!("{base}/cookie"))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS get cookies failed: {e}")))?;
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| {
+                onecrawl_core::Error::Cdp(format!("iOS cookies parse failed: {e}"))
+            })?;
+        Ok(json["value"].clone())
+    }
+
+    /// Launch app by bundle ID.
+    pub async fn launch_app(&self, bundle_id: &str) -> Result<()> {
+        let base = self.session_url()?;
+        self.client
+            .post(format!("{base}/wda/apps/launch"))
+            .json(&serde_json::json!({"bundleId": bundle_id}))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS launch app failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Terminate (kill) app by bundle ID.
+    pub async fn terminate_app(&self, bundle_id: &str) -> Result<()> {
+        let base = self.session_url()?;
+        self.client
+            .post(format!("{base}/wda/apps/terminate"))
+            .json(&serde_json::json!({"bundleId": bundle_id}))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS terminate app failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Get app state (1=not running, 2=bg suspended, 3=bg, 4=foreground).
+    pub async fn app_state(&self, bundle_id: &str) -> Result<u8> {
+        let base = self.session_url()?;
+        let resp = self
+            .client
+            .post(format!("{base}/wda/apps/state"))
+            .json(&serde_json::json!({"bundleId": bundle_id}))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS app state failed: {e}")))?;
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| {
+                onecrawl_core::Error::Cdp(format!("iOS app state parse failed: {e}"))
+            })?;
+        Ok(json["value"].as_u64().unwrap_or(1) as u8)
+    }
+
+    /// Lock device.
+    pub async fn lock_device(&self) -> Result<()> {
+        let base = self.session_url()?;
+        self.client
+            .post(format!("{base}/wda/lock"))
+            .json(&serde_json::json!({}))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS lock failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Unlock device.
+    pub async fn unlock_device(&self) -> Result<()> {
+        let base = self.session_url()?;
+        self.client
+            .post(format!("{base}/wda/unlock"))
+            .json(&serde_json::json!({}))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS unlock failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Press home button.
+    pub async fn home_button(&self) -> Result<()> {
+        self.client
+            .post(format!("{}/wda/homescreen", self.config.wda_url))
+            .json(&serde_json::json!({}))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS home button failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Press a hardware button (e.g. `"volumeUp"`, `"volumeDown"`).
+    pub async fn press_button(&self, name: &str) -> Result<()> {
+        let base = self.session_url()?;
+        self.client
+            .post(format!("{base}/wda/pressButton"))
+            .json(&serde_json::json!({"name": name}))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS press button failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Get battery info.
+    pub async fn battery_info(&self) -> Result<serde_json::Value> {
+        let base = self.session_url()?;
+        let resp = self
+            .client
+            .get(format!("{base}/wda/batteryInfo"))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS battery info failed: {e}")))?;
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| {
+                onecrawl_core::Error::Cdp(format!("iOS battery info parse failed: {e}"))
+            })?;
+        Ok(json["value"].clone())
+    }
+
+    /// Get device info (model, name, OS version).
+    pub async fn device_info(&self) -> Result<serde_json::Value> {
+        let base = self.session_url()?;
+        let resp = self
+            .client
+            .get(format!("{base}/wda/device/info"))
+            .send()
+            .await
+            .map_err(|e| onecrawl_core::Error::Cdp(format!("iOS device info failed: {e}")))?;
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| {
+                onecrawl_core::Error::Cdp(format!("iOS device info parse failed: {e}"))
+            })?;
+        Ok(json["value"].clone())
+    }
+
+    /// Manage iOS simulators: list, boot, shutdown, create, delete.
+    pub async fn simulator_action(
+        action: &str,
+        udid: Option<&str>,
+        device_type: Option<&str>,
+        runtime: Option<&str>,
+    ) -> Result<serde_json::Value> {
+        use tokio::process::Command;
+        match action {
+            "list" => {
+                let out = Command::new("xcrun")
+                    .args(["simctl", "list", "devices", "--json"])
+                    .output()
+                    .await
+                    .map_err(|e| onecrawl_core::Error::Cdp(format!("xcrun simctl: {e}")))?;
+                let json: serde_json::Value = serde_json::from_slice(&out.stdout)
+                    .unwrap_or(serde_json::json!({"error": "parse failed"}));
+                Ok(json)
+            }
+            "boot" => {
+                let udid =
+                    udid.ok_or(onecrawl_core::Error::Cdp("udid required for boot".into()))?;
+                Command::new("xcrun")
+                    .args(["simctl", "boot", udid])
+                    .output()
+                    .await
+                    .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?;
+                Ok(serde_json::json!({"status": "booted", "udid": udid}))
+            }
+            "shutdown" => {
+                let udid = udid
+                    .ok_or(onecrawl_core::Error::Cdp("udid required for shutdown".into()))?;
+                Command::new("xcrun")
+                    .args(["simctl", "shutdown", udid])
+                    .output()
+                    .await
+                    .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?;
+                Ok(serde_json::json!({"status": "shutdown", "udid": udid}))
+            }
+            "create" => {
+                let dt = device_type
+                    .ok_or(onecrawl_core::Error::Cdp("device_type required".into()))?;
+                let rt =
+                    runtime.ok_or(onecrawl_core::Error::Cdp("runtime required".into()))?;
+                let out = Command::new("xcrun")
+                    .args(["simctl", "create", "OneCrawl", dt, rt])
+                    .output()
+                    .await
+                    .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?;
+                let new_udid = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                Ok(serde_json::json!({"status": "created", "udid": new_udid}))
+            }
+            "delete" => {
+                let udid = udid
+                    .ok_or(onecrawl_core::Error::Cdp("udid required for delete".into()))?;
+                Command::new("xcrun")
+                    .args(["simctl", "delete", udid])
+                    .output()
+                    .await
+                    .map_err(|e| onecrawl_core::Error::Cdp(e.to_string()))?;
+                Ok(serde_json::json!({"status": "deleted", "udid": udid}))
+            }
+            _ => Err(onecrawl_core::Error::Cdp(format!(
+                "unknown simulator action: {action}"
+            ))),
+        }
+    }
+
     /// List available iOS simulator devices via `xcrun simctl`.
     pub fn list_devices() -> Result<Vec<IosDevice>> {
         let output = std::process::Command::new("xcrun")

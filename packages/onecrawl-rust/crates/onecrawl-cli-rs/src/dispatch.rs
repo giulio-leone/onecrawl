@@ -1132,6 +1132,44 @@ pub(crate) async fn dispatch(command: Commands) {
             IosAction::Tap { x, y } => commands::ios::tap(x, y).await,
             IosAction::Screenshot { output } => commands::ios::screenshot(&output).await,
             IosAction::Disconnect => commands::ios::disconnect().await,
+            IosAction::Pinch { x, y, scale, velocity } => {
+                commands::ios::pinch(x, y, scale, velocity).await
+            }
+            IosAction::LongPress { x, y, duration } => {
+                commands::ios::long_press(x, y, duration).await
+            }
+            IosAction::DoubleTap { x, y } => commands::ios::double_tap(x, y).await,
+            IosAction::Orientation { set } => {
+                commands::ios::orientation(set.as_deref()).await
+            }
+            IosAction::AppLaunch { bundle_id } => {
+                commands::ios::app_launch(&bundle_id).await
+            }
+            IosAction::AppKill { bundle_id } => {
+                commands::ios::app_kill(&bundle_id).await
+            }
+            IosAction::AppState { bundle_id } => {
+                commands::ios::app_state(&bundle_id).await
+            }
+            IosAction::Lock => commands::ios::lock().await,
+            IosAction::Unlock => commands::ios::unlock().await,
+            IosAction::Home => commands::ios::home().await,
+            IosAction::Button { name } => commands::ios::button(&name).await,
+            IosAction::Battery => commands::ios::battery().await,
+            IosAction::Info => commands::ios::info().await,
+            IosAction::Simulator { action, udid, device_type, runtime } => {
+                commands::ios::simulator(
+                    &action,
+                    udid.as_deref(),
+                    device_type.as_deref(),
+                    runtime.as_deref(),
+                )
+                .await
+            }
+            IosAction::Url => commands::ios::url().await,
+            IosAction::Title => commands::ios::title().await,
+            IosAction::Script { script } => commands::ios::script(&script).await,
+            IosAction::Cookies => commands::ios::cookies().await,
         },
 
         // ── SPA Interaction ─────────────────────────────────────────

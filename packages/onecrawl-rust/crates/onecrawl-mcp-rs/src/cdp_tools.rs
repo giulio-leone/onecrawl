@@ -563,6 +563,134 @@ pub struct IosScreenshotParams {
     // no params needed — returns base64 image
 }
 
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosPinchParams {
+    #[schemars(description = "X coordinate of pinch center")]
+    pub x: f64,
+    #[schemars(description = "Y coordinate of pinch center")]
+    pub y: f64,
+    #[schemars(description = "Scale factor (>1 zoom in, <1 zoom out)")]
+    pub scale: f64,
+    #[schemars(description = "Pinch velocity (default: 1.0)")]
+    pub velocity: Option<f64>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosLongPressParams {
+    #[schemars(description = "X coordinate")]
+    pub x: f64,
+    #[schemars(description = "Y coordinate")]
+    pub y: f64,
+    #[schemars(description = "Duration in milliseconds (default: 1000)")]
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosDoubleTapParams {
+    #[schemars(description = "X coordinate")]
+    pub x: f64,
+    #[schemars(description = "Y coordinate")]
+    pub y: f64,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosOrientationParams {
+    #[schemars(description = "Orientation to set (PORTRAIT/LANDSCAPE). Omit to get current.")]
+    pub set: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosScrollParams {
+    #[schemars(description = "Locator strategy (e.g. 'accessibility id', 'class name')")]
+    pub using: String,
+    #[schemars(description = "Locator value")]
+    pub value: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosScriptParams {
+    #[schemars(description = "JavaScript code to execute in Safari")]
+    pub script: String,
+    #[schemars(description = "Arguments to pass to the script")]
+    pub args: Option<Vec<serde_json::Value>>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosCookiesParams {
+    // no params needed
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosAppLaunchParams {
+    #[schemars(description = "Bundle ID of the app to launch")]
+    pub bundle_id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosAppKillParams {
+    #[schemars(description = "Bundle ID of the app to terminate")]
+    pub bundle_id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosAppStateParams {
+    #[schemars(description = "Bundle ID of the app to check")]
+    pub bundle_id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosLockParams {
+    // no params needed
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosUnlockParams {
+    // no params needed
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosHomeParams {
+    // no params needed
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosButtonParams {
+    #[schemars(description = "Button name (e.g. 'volumeUp', 'volumeDown')")]
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosBatteryParams {
+    // no params needed
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosInfoParams {
+    // no params needed
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosSimulatorParams {
+    #[schemars(description = "Simulator action: list, boot, shutdown, create, delete")]
+    pub action: String,
+    #[schemars(description = "Device UDID (required for boot/shutdown/delete)")]
+    pub udid: Option<String>,
+    #[schemars(description = "Device type for create (e.g. 'iPhone 15')")]
+    pub device_type: Option<String>,
+    #[schemars(description = "Runtime for create (e.g. 'com.apple.CoreSimulator.SimRuntime.iOS-17-0')")]
+    pub runtime: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosUrlParams {
+    // no params needed
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IosTitleParams {
+    // no params needed
+}
+
 // ──────────────── Computer Use Protocol params ─────────────────
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]

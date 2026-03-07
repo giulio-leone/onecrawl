@@ -690,7 +690,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "agent",
-        description = "AI agent orchestration — command chains, element screenshots, API capture, iframes (same-origin + cross-origin CDP), remote CDP, safety policies, skills, screencast, recording, iOS automation, WCAG accessibility auditing, session context, auto-chain, and structured reasoning.\n\nActions:\n- execute_chain {commands} — Execute multiple commands in sequence\n- element_screenshot {selector} — Screenshot a specific element\n- api_capture_start — Start capturing API calls\n- api_capture_summary — Get captured API call summary\n- iframe_list — List all iframes on page (DOM-based)\n- iframe_snapshot {index, interactive_only?} — Snapshot an iframe\n- iframe_eval_cdp {frame_url, expression} — Evaluate JS in cross-origin iframe via CDP (bypasses SOP)\n- iframe_click_cdp {frame_url, selector, human_like?} — Click element inside cross-origin iframe\n- iframe_frames — List all frames via CDP (includes cross-origin)\n- connect_remote {ws_url, headers?} — Connect to remote CDP\n- safety_set {policy} — Set safety policy JSON\n- safety_status — Get current safety policy status\n- skills_list — List available skills\n- screencast_start {quality?, max_width?, max_height?} — Start screencast\n- screencast_stop — Stop screencast\n- screencast_frame — Get latest screencast frame\n- recording_start {output?, fps?, quality?} — Start video recording\n- recording_stop — Stop recording and save\n- recording_status — Get recording status\n- ios_devices — List iOS devices\n- ios_connect {device_id, wda_url?} — Connect to iOS device\n- ios_navigate {url} — Navigate iOS Safari\n- ios_tap {x, y} — Tap on iOS screen\n- ios_screenshot — Take iOS screenshot\n- task_decompose {goal, context?, max_depth?} — Decompose goal into subtasks\n- task_plan {tasks, strategy?} — Generate execution plan\n- task_status — Get current task plans status\n- vision_describe {selector?, format?} — Describe page/element visually\n- vision_locate {description, strategy?} — Find element by description\n- vision_compare {baseline, current?, threshold?} — Compare page states\n- wcag_audit {level?, selector?} — Full WCAG compliance audit\n- aria_tree — Build ARIA accessibility tree\n- contrast_check {selector?, threshold?} — Color contrast ratio check\n- landmark_nav — List ARIA landmark regions\n- focus_order — Map tab/focus order of interactive elements\n- alt_text_audit {selector?, include_decorative?} — Audit image alt text\n- heading_structure — Validate heading hierarchy (h1-h6)\n- role_validate {selector?, roles?} — Validate ARIA roles and properties\n- keyboard_trap_detect — Detect keyboard focus traps\n- screen_reader_sim {selector?, max_elements?} — Simulate screen reader output\n- session_context {command, key?, value?} — Store/retrieve persistent context (set/get/get_all/clear)\n- auto_chain {actions, on_error?, max_retries?} — Execute JS chain with error recovery\n- think {context?} — Structured reasoning: observe page state and recommend actions\n- plan_execute {steps, stop_on_error?} — Execute multi-step JS plan with reporting\n- page_summary — AI-optimized page summary (headings, nav, forms, errors)\n- error_context — Get error info for debugging (console, network, DOM errors)"
+        description = "AI agent orchestration — command chains, element screenshots, API capture, iframes (same-origin + cross-origin CDP), remote CDP, safety policies, skills, screencast, recording, iOS automation, WCAG accessibility auditing, session context, auto-chain, and structured reasoning.\n\nActions:\n- execute_chain {commands} — Execute multiple commands in sequence\n- element_screenshot {selector} — Screenshot a specific element\n- api_capture_start — Start capturing API calls\n- api_capture_summary — Get captured API call summary\n- iframe_list — List all iframes on page (DOM-based)\n- iframe_snapshot {index, interactive_only?} — Snapshot an iframe\n- iframe_eval_cdp {frame_url, expression} — Evaluate JS in cross-origin iframe via CDP (bypasses SOP)\n- iframe_click_cdp {frame_url, selector, human_like?} — Click element inside cross-origin iframe\n- iframe_frames — List all frames via CDP (includes cross-origin)\n- connect_remote {ws_url, headers?} — Connect to remote CDP\n- safety_set {policy} — Set safety policy JSON\n- safety_status — Get current safety policy status\n- skills_list — List available skills\n- screencast_start {quality?, max_width?, max_height?} — Start screencast\n- screencast_stop — Stop screencast\n- screencast_frame — Get latest screencast frame\n- recording_start {output?, fps?, quality?} — Start video recording\n- recording_stop — Stop recording and save\n- recording_status — Get recording status\n- ios_devices — List iOS devices\n- ios_connect {device_id, wda_url?} — Connect to iOS device\n- ios_navigate {url} — Navigate iOS Safari\n- ios_tap {x, y} — Tap on iOS screen\n- ios_screenshot — Take iOS screenshot\n- ios_pinch {x, y, scale, velocity?} — Pinch gesture (zoom)\n- ios_long_press {x, y, duration_ms?} — Long press\n- ios_double_tap {x, y} — Double tap\n- ios_orientation {set?} — Get/set device orientation\n- ios_scroll {using, value} — Scroll to element\n- ios_script {script, args?} — Execute JS in Safari\n- ios_cookies — Get Safari cookies\n- ios_app_launch {bundle_id} — Launch iOS app\n- ios_app_kill {bundle_id} — Kill iOS app\n- ios_app_state {bundle_id} — Get app state\n- ios_lock — Lock device\n- ios_unlock — Unlock device\n- ios_home — Press home button\n- ios_button {name} — Press hardware button\n- ios_battery — Get battery info\n- ios_info — Get device info\n- ios_simulator {action, udid?, device_type?, runtime?} — Manage simulators\n- ios_url — Get current page URL\n- ios_title — Get current page title\n- task_decompose {goal, context?, max_depth?} — Decompose goal into subtasks\n- task_plan {tasks, strategy?} — Generate execution plan\n- task_status — Get current task plans status\n- vision_describe {selector?, format?} — Describe page/element visually\n- vision_locate {description, strategy?} — Find element by description\n- vision_compare {baseline, current?, threshold?} — Compare page states\n- wcag_audit {level?, selector?} — Full WCAG compliance audit\n- aria_tree — Build ARIA accessibility tree\n- contrast_check {selector?, threshold?} — Color contrast ratio check\n- landmark_nav — List ARIA landmark regions\n- focus_order — Map tab/focus order of interactive elements\n- alt_text_audit {selector?, include_decorative?} — Audit image alt text\n- heading_structure — Validate heading hierarchy (h1-h6)\n- role_validate {selector?, roles?} — Validate ARIA roles and properties\n- keyboard_trap_detect — Detect keyboard focus traps\n- screen_reader_sim {selector?, max_elements?} — Simulate screen reader output\n- session_context {command, key?, value?} — Store/retrieve persistent context (set/get/get_all/clear)\n- auto_chain {actions, on_error?, max_retries?} — Execute JS chain with error recovery\n- think {context?} — Structured reasoning: observe page state and recommend actions\n- plan_execute {steps, stop_on_error?} — Execute multi-step JS plan with reporting\n- page_summary — AI-optimized page summary (headings, nav, forms, errors)\n- error_context — Get error info for debugging (console, network, DOM errors)"
     )]
     async fn tool_agent(
         &self,
@@ -815,6 +815,82 @@ impl OneCrawlMcp {
             AgentAction::IosScreenshot => {
                 let params: IosScreenshotParams = parse_params(v, "ios_screenshot")?;
                 self.agent_ios_screenshot(params).await
+            }
+            AgentAction::IosPinch => {
+                let params: IosPinchParams = parse_params(v, "ios_pinch")?;
+                self.agent_ios_pinch(params).await
+            }
+            AgentAction::IosLongPress => {
+                let params: IosLongPressParams = parse_params(v, "ios_long_press")?;
+                self.agent_ios_long_press(params).await
+            }
+            AgentAction::IosDoubleTap => {
+                let params: IosDoubleTapParams = parse_params(v, "ios_double_tap")?;
+                self.agent_ios_double_tap(params).await
+            }
+            AgentAction::IosOrientation => {
+                let params: IosOrientationParams = parse_params(v, "ios_orientation")?;
+                self.agent_ios_orientation(params).await
+            }
+            AgentAction::IosScroll => {
+                let params: IosScrollParams = parse_params(v, "ios_scroll")?;
+                self.agent_ios_scroll(params).await
+            }
+            AgentAction::IosScript => {
+                let params: IosScriptParams = parse_params(v, "ios_script")?;
+                self.agent_ios_script(params).await
+            }
+            AgentAction::IosCookies => {
+                let params: IosCookiesParams = parse_params(v, "ios_cookies")?;
+                self.agent_ios_cookies(params).await
+            }
+            AgentAction::IosAppLaunch => {
+                let params: IosAppLaunchParams = parse_params(v, "ios_app_launch")?;
+                self.agent_ios_app_launch(params).await
+            }
+            AgentAction::IosAppKill => {
+                let params: IosAppKillParams = parse_params(v, "ios_app_kill")?;
+                self.agent_ios_app_kill(params).await
+            }
+            AgentAction::IosAppState => {
+                let params: IosAppStateParams = parse_params(v, "ios_app_state")?;
+                self.agent_ios_app_state(params).await
+            }
+            AgentAction::IosLock => {
+                let params: IosLockParams = parse_params(v, "ios_lock")?;
+                self.agent_ios_lock(params).await
+            }
+            AgentAction::IosUnlock => {
+                let params: IosUnlockParams = parse_params(v, "ios_unlock")?;
+                self.agent_ios_unlock(params).await
+            }
+            AgentAction::IosHome => {
+                let params: IosHomeParams = parse_params(v, "ios_home")?;
+                self.agent_ios_home(params).await
+            }
+            AgentAction::IosButton => {
+                let params: IosButtonParams = parse_params(v, "ios_button")?;
+                self.agent_ios_button(params).await
+            }
+            AgentAction::IosBattery => {
+                let params: IosBatteryParams = parse_params(v, "ios_battery")?;
+                self.agent_ios_battery(params).await
+            }
+            AgentAction::IosInfo => {
+                let params: IosInfoParams = parse_params(v, "ios_info")?;
+                self.agent_ios_info(params).await
+            }
+            AgentAction::IosSimulator => {
+                let params: IosSimulatorParams = parse_params(v, "ios_simulator")?;
+                self.agent_ios_simulator(params).await
+            }
+            AgentAction::IosUrl => {
+                let params: IosUrlParams = parse_params(v, "ios_url")?;
+                self.agent_ios_url(params).await
+            }
+            AgentAction::IosTitle => {
+                let params: IosTitleParams = parse_params(v, "ios_title")?;
+                self.agent_ios_title(params).await
             }
             // Task decomposition engine
             AgentAction::TaskDecompose => {
