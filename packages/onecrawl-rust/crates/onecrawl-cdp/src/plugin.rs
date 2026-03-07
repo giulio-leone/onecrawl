@@ -603,12 +603,17 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
         .map_err(|e| format!("failed to read {}: {e}", src.display()))?
     {
         let entry = entry.map_err(|e| format!("directory entry error: {e}"))?;
-        let src_path = entry.path();
-        let dst_path = dst.join(
-            entry.file_name(),
-        );
+        let file_type = entry.file_type().map_err(|e| format!("file type error: {e}"))?;
 
-        if src_path.is_dir() {
+        // Skip symlinks entirely — prevent cycles and exfiltration
+        if file_type.is_symlink() {
+            continue;
+        }
+
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+
+        if file_type.is_dir() {
             copy_dir_recursive(&src_path, &dst_path)?;
         } else {
             std::fs::copy(&src_path, &dst_path)
