@@ -1172,6 +1172,55 @@ pub(crate) async fn dispatch(command: Commands) {
             IosAction::Cookies => commands::ios::cookies().await,
         },
 
+        // ── Android / ADB + UIAutomator2 ──────────────────────────
+        Commands::Android { action } => match action {
+            AndroidAction::Devices => commands::android::devices().await,
+            AndroidAction::Connect { server_url, serial, package, activity } => {
+                commands::android::connect(&server_url, serial.as_deref(), &package, activity.as_deref()).await
+            }
+            AndroidAction::Navigate { url } => commands::android::navigate(&url).await,
+            AndroidAction::Tap { x, y } => commands::android::tap(x, y).await,
+            AndroidAction::Swipe { from_x, from_y, to_x, to_y, duration } => {
+                commands::android::swipe(from_x, from_y, to_x, to_y, duration).await
+            }
+            AndroidAction::LongPress { x, y, duration } => {
+                commands::android::long_press(x, y, duration).await
+            }
+            AndroidAction::DoubleTap { x, y } => commands::android::double_tap(x, y).await,
+            AndroidAction::Pinch { x, y, scale } => commands::android::pinch(x, y, scale).await,
+            AndroidAction::Type { text } => commands::android::type_text(&text).await,
+            AndroidAction::Find { strategy, value } => {
+                commands::android::find(&strategy, &value).await
+            }
+            AndroidAction::Click { element_id } => commands::android::click(&element_id).await,
+            AndroidAction::Screenshot { output } => commands::android::screenshot(&output).await,
+            AndroidAction::Orientation { set } => {
+                commands::android::orientation(set.as_deref()).await
+            }
+            AndroidAction::Key { keycode } => commands::android::key(keycode).await,
+            AndroidAction::AppLaunch { package, activity } => {
+                commands::android::app_launch(&package, activity.as_deref()).await
+            }
+            AndroidAction::AppKill { package } => commands::android::app_kill(&package).await,
+            AndroidAction::AppState { package } => commands::android::app_state(&package).await,
+            AndroidAction::Install { apk_path } => commands::android::install(&apk_path).await,
+            AndroidAction::Script { script } => commands::android::script(&script).await,
+            AndroidAction::Shell { serial, command } => {
+                commands::android::shell(&serial, &command).await
+            }
+            AndroidAction::Push { serial, local, remote } => {
+                commands::android::push(&serial, &local, &remote).await
+            }
+            AndroidAction::Pull { serial, remote, local } => {
+                commands::android::pull(&serial, &remote, &local).await
+            }
+            AndroidAction::Info { serial } => commands::android::info(&serial).await,
+            AndroidAction::Battery { serial } => commands::android::battery(&serial).await,
+            AndroidAction::Disconnect => commands::android::disconnect().await,
+            AndroidAction::Url => commands::android::url().await,
+            AndroidAction::Title => commands::android::title().await,
+        },
+
         // ── SPA Interaction ─────────────────────────────────────────
         Commands::Spa { action } => match action {
             SpaAction::NavWatch => commands::browser::spa_nav_watch().await,

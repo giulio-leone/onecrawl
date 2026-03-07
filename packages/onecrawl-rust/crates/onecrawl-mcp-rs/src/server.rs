@@ -892,6 +892,111 @@ impl OneCrawlMcp {
                 let params: IosTitleParams = parse_params(v, "ios_title")?;
                 self.agent_ios_title(params).await
             }
+            // Android Automation
+            AgentAction::AndroidDevices => {
+                let params: AndroidDevicesParams = parse_params(v, "android_devices")?;
+                self.agent_android_devices(params).await
+            }
+            AgentAction::AndroidConnect => {
+                let params: AndroidConnectParams = parse_params(v, "android_connect")?;
+                self.agent_android_connect(params).await
+            }
+            AgentAction::AndroidNavigate => {
+                let params: AndroidNavigateParams = parse_params(v, "android_navigate")?;
+                self.agent_android_navigate(params).await
+            }
+            AgentAction::AndroidTap => {
+                let params: AndroidTapParams = parse_params(v, "android_tap")?;
+                self.agent_android_tap(params).await
+            }
+            AgentAction::AndroidSwipe => {
+                let params: AndroidSwipeParams = parse_params(v, "android_swipe")?;
+                self.agent_android_swipe(params).await
+            }
+            AgentAction::AndroidLongPress => {
+                let params: AndroidLongPressParams = parse_params(v, "android_long_press")?;
+                self.agent_android_long_press(params).await
+            }
+            AgentAction::AndroidDoubleTap => {
+                let params: AndroidDoubleTapParams = parse_params(v, "android_double_tap")?;
+                self.agent_android_double_tap(params).await
+            }
+            AgentAction::AndroidPinch => {
+                let params: AndroidPinchParams = parse_params(v, "android_pinch")?;
+                self.agent_android_pinch(params).await
+            }
+            AgentAction::AndroidType => {
+                let params: AndroidTypeParams = parse_params(v, "android_type")?;
+                self.agent_android_type(params).await
+            }
+            AgentAction::AndroidFind => {
+                let params: AndroidFindParams = parse_params(v, "android_find")?;
+                self.agent_android_find(params).await
+            }
+            AgentAction::AndroidClick => {
+                let params: AndroidClickParams = parse_params(v, "android_click")?;
+                self.agent_android_click(params).await
+            }
+            AgentAction::AndroidScreenshot => {
+                let params: AndroidScreenshotParams = parse_params(v, "android_screenshot")?;
+                self.agent_android_screenshot(params).await
+            }
+            AgentAction::AndroidOrientation => {
+                let params: AndroidOrientationParams = parse_params(v, "android_orientation")?;
+                self.agent_android_orientation(params).await
+            }
+            AgentAction::AndroidKey => {
+                let params: AndroidKeyParams = parse_params(v, "android_key")?;
+                self.agent_android_key(params).await
+            }
+            AgentAction::AndroidAppLaunch => {
+                let params: AndroidAppLaunchParams = parse_params(v, "android_app_launch")?;
+                self.agent_android_app_launch(params).await
+            }
+            AgentAction::AndroidAppKill => {
+                let params: AndroidAppKillParams = parse_params(v, "android_app_kill")?;
+                self.agent_android_app_kill(params).await
+            }
+            AgentAction::AndroidAppState => {
+                let params: AndroidAppStateParams = parse_params(v, "android_app_state")?;
+                self.agent_android_app_state(params).await
+            }
+            AgentAction::AndroidInstall => {
+                let params: AndroidInstallParams = parse_params(v, "android_install")?;
+                self.agent_android_install(params).await
+            }
+            AgentAction::AndroidScript => {
+                let params: AndroidScriptParams = parse_params(v, "android_script")?;
+                self.agent_android_script(params).await
+            }
+            AgentAction::AndroidShell => {
+                let params: AndroidShellParams = parse_params(v, "android_shell")?;
+                self.agent_android_shell(params).await
+            }
+            AgentAction::AndroidPush => {
+                let params: AndroidPushParams = parse_params(v, "android_push")?;
+                self.agent_android_push(params).await
+            }
+            AgentAction::AndroidPull => {
+                let params: AndroidPullParams = parse_params(v, "android_pull")?;
+                self.agent_android_pull(params).await
+            }
+            AgentAction::AndroidInfo => {
+                let params: AndroidInfoParams = parse_params(v, "android_info")?;
+                self.agent_android_info(params).await
+            }
+            AgentAction::AndroidBattery => {
+                let params: AndroidBatteryParams = parse_params(v, "android_battery")?;
+                self.agent_android_battery(params).await
+            }
+            AgentAction::AndroidUrl => {
+                let params: AndroidUrlParams = parse_params(v, "android_url")?;
+                self.agent_android_url(params).await
+            }
+            AgentAction::AndroidTitle => {
+                let params: AndroidTitleParams = parse_params(v, "android_title")?;
+                self.agent_android_title(params).await
+            }
             // Task decomposition engine
             AgentAction::TaskDecompose => {
                 let params: TaskDecomposeParams = parse_params(v, "task_decompose")?;

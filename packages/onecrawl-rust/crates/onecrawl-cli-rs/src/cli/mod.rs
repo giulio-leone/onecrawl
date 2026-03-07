@@ -7,6 +7,7 @@ pub(crate) struct Cli {
     pub command: Commands,
 }
 mod agent;
+mod android;
 mod auth;
 mod computer;
 mod crawl;
@@ -26,6 +27,7 @@ mod tabs;
 mod utility;
 
 pub(crate) use agent::AgentCliAction;
+pub(crate) use android::AndroidAction;
 pub(crate) use auth::{CaptchaAction, AuthAction, StealthAction, AntibotAction, AuthStateAction};
 pub(crate) use computer::ComputerCliAction;
 pub(crate) use crawl::{PipelineAction, StructuredAction, AdaptiveAction, SpiderAction, RobotsAction, GraphAction};
@@ -869,6 +871,13 @@ pub(crate) enum Commands {
     Ios {
         #[command(subcommand)]
         action: IosAction,
+    },
+
+    // ── Android / ADB + UIAutomator2 ──────────────────────────
+    /// Android automation via ADB + UIAutomator2
+    Android {
+        #[command(subcommand)]
+        action: AndroidAction,
     },
 
     // ── SPA Interaction ─────────────────────────────────────────

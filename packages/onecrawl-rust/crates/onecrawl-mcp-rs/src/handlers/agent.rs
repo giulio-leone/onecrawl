@@ -1079,6 +1079,339 @@ impl OneCrawlMcp {
         json_ok(&serde_json::json!({"title": title}))
     }
 
+    // ──────────────── Android Automation ─────────────────
+
+    pub(crate) async fn agent_android_devices(
+        &self,
+        _p: AndroidDevicesParams,
+    ) -> Result<CallToolResult, McpError> {
+        let result = onecrawl_cdp::android::AndroidClient::list_devices()
+            .await
+            .map_err(|e| mcp_err(format!("Android list devices failed: {e}")))?;
+        json_ok(&result)
+    }
+
+    pub(crate) async fn agent_android_connect(
+        &self,
+        p: AndroidConnectParams,
+    ) -> Result<CallToolResult, McpError> {
+        let config = onecrawl_cdp::android::AndroidSessionConfig {
+            server_url: p.server_url.unwrap_or_else(|| "http://localhost:4723".to_string()),
+            device_serial: p.serial,
+            package: p.package.unwrap_or_else(|| "com.android.chrome".to_string()),
+            activity: p.activity,
+        };
+        let mut client = onecrawl_cdp::android::AndroidClient::new(config);
+        let session_id = client.create_session(None, None).await
+            .map_err(|e| mcp_err(format!("Android connect failed: {e}")))?;
+
+        let mut state = self.browser.lock().await;
+        state.android_client = Some(client);
+
+        json_ok(&serde_json::json!({
+            "connected": true,
+            "session_id": session_id
+        }))
+    }
+
+    pub(crate) async fn agent_android_navigate(
+        &self,
+        p: AndroidNavigateParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        client.navigate(&p.url).await
+            .map_err(|e| mcp_err(format!("Android navigate failed: {e}")))?;
+        json_ok(&serde_json::json!({"navigated": true, "url": p.url}))
+    }
+
+    pub(crate) async fn agent_android_tap(
+        &self,
+        p: AndroidTapParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        client.tap(p.x, p.y).await
+            .map_err(|e| mcp_err(format!("Android tap failed: {e}")))?;
+        json_ok(&serde_json::json!({"tapped": true, "x": p.x, "y": p.y}))
+    }
+
+    pub(crate) async fn agent_android_swipe(
+        &self,
+        p: AndroidSwipeParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        let dur = p.duration_ms.unwrap_or(500);
+        client.swipe(p.from_x, p.from_y, p.to_x, p.to_y, dur).await
+            .map_err(|e| mcp_err(format!("Android swipe failed: {e}")))?;
+        json_ok(&serde_json::json!({
+            "swiped": true,
+            "from": [p.from_x, p.from_y],
+            "to": [p.to_x, p.to_y],
+            "duration_ms": dur
+        }))
+    }
+
+    pub(crate) async fn agent_android_long_press(
+        &self,
+        p: AndroidLongPressParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        let dur = p.duration_ms.unwrap_or(1000);
+        client.long_press(p.x, p.y, dur).await
+            .map_err(|e| mcp_err(format!("Android long press failed: {e}")))?;
+        json_ok(&serde_json::json!({"long_pressed": true, "x": p.x, "y": p.y, "duration_ms": dur}))
+    }
+
+    pub(crate) async fn agent_android_double_tap(
+        &self,
+        p: AndroidDoubleTapParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        client.double_tap(p.x, p.y).await
+            .map_err(|e| mcp_err(format!("Android double tap failed: {e}")))?;
+        json_ok(&serde_json::json!({"double_tapped": true, "x": p.x, "y": p.y}))
+    }
+
+    pub(crate) async fn agent_android_pinch(
+        &self,
+        p: AndroidPinchParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        client.pinch(p.x, p.y, p.scale).await
+            .map_err(|e| mcp_err(format!("Android pinch failed: {e}")))?;
+        json_ok(&serde_json::json!({"pinched": true, "x": p.x, "y": p.y, "scale": p.scale}))
+    }
+
+    pub(crate) async fn agent_android_type(
+        &self,
+        p: AndroidTypeParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        client.type_text(&p.text).await
+            .map_err(|e| mcp_err(format!("Android type failed: {e}")))?;
+        json_ok(&serde_json::json!({"typed": true, "text": p.text}))
+    }
+
+    pub(crate) async fn agent_android_find(
+        &self,
+        p: AndroidFindParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        let element_id = client.find_element(&p.strategy, &p.value).await
+            .map_err(|e| mcp_err(format!("Android find element failed: {e}")))?;
+        json_ok(&serde_json::json!({"element_id": element_id, "strategy": p.strategy, "value": p.value}))
+    }
+
+    pub(crate) async fn agent_android_click(
+        &self,
+        p: AndroidClickParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        client.click_element(&p.element_id).await
+            .map_err(|e| mcp_err(format!("Android click failed: {e}")))?;
+        json_ok(&serde_json::json!({"clicked": true, "element_id": p.element_id}))
+    }
+
+    pub(crate) async fn agent_android_screenshot(
+        &self,
+        _p: AndroidScreenshotParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        let b64 = client.screenshot().await
+            .map_err(|e| mcp_err(format!("Android screenshot failed: {e}")))?;
+        json_ok(&serde_json::json!({"format": "png", "data": b64}))
+    }
+
+    pub(crate) async fn agent_android_orientation(
+        &self,
+        p: AndroidOrientationParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        if let Some(orient) = p.set {
+            client.set_orientation(&orient).await
+                .map_err(|e| mcp_err(format!("Android set orientation failed: {e}")))?;
+            json_ok(&serde_json::json!({"orientation": orient.to_uppercase(), "action": "set"}))
+        } else {
+            let orient = client.get_orientation().await
+                .map_err(|e| mcp_err(format!("Android get orientation failed: {e}")))?;
+            json_ok(&serde_json::json!({"orientation": orient, "action": "get"}))
+        }
+    }
+
+    pub(crate) async fn agent_android_key(
+        &self,
+        p: AndroidKeyParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        client.press_key(p.keycode).await
+            .map_err(|e| mcp_err(format!("Android press key failed: {e}")))?;
+        json_ok(&serde_json::json!({"pressed": true, "keycode": p.keycode}))
+    }
+
+    pub(crate) async fn agent_android_app_launch(
+        &self,
+        p: AndroidAppLaunchParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        client.launch_app(&p.package, p.activity.as_deref()).await
+            .map_err(|e| mcp_err(format!("Android launch app failed: {e}")))?;
+        json_ok(&serde_json::json!({"launched": true, "package": p.package}))
+    }
+
+    pub(crate) async fn agent_android_app_kill(
+        &self,
+        p: AndroidAppKillParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        client.terminate_app(&p.package).await
+            .map_err(|e| mcp_err(format!("Android terminate app failed: {e}")))?;
+        json_ok(&serde_json::json!({"terminated": true, "package": p.package}))
+    }
+
+    pub(crate) async fn agent_android_app_state(
+        &self,
+        p: AndroidAppStateParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        let app_state = client.app_state(&p.package).await
+            .map_err(|e| mcp_err(format!("Android app state failed: {e}")))?;
+        let label = match app_state {
+            1 => "not running",
+            2 => "background",
+            3 => "background suspended",
+            4 => "foreground",
+            _ => "unknown",
+        };
+        json_ok(&serde_json::json!({
+            "package": p.package,
+            "state": app_state,
+            "label": label
+        }))
+    }
+
+    pub(crate) async fn agent_android_install(
+        &self,
+        p: AndroidInstallParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        client.install_app(&p.apk_path).await
+            .map_err(|e| mcp_err(format!("Android install app failed: {e}")))?;
+        json_ok(&serde_json::json!({"installed": true, "apk_path": p.apk_path}))
+    }
+
+    pub(crate) async fn agent_android_script(
+        &self,
+        p: AndroidScriptParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        let args = p.args.unwrap_or_default();
+        let result = client.execute_script(&p.script, &args).await
+            .map_err(|e| mcp_err(format!("Android execute script failed: {e}")))?;
+        json_ok(&serde_json::json!({"result": result}))
+    }
+
+    pub(crate) async fn agent_android_shell(
+        &self,
+        p: AndroidShellParams,
+    ) -> Result<CallToolResult, McpError> {
+        let output = onecrawl_cdp::android::AndroidClient::shell(&p.serial, &p.command).await
+            .map_err(|e| mcp_err(format!("Android shell failed: {e}")))?;
+        json_ok(&serde_json::json!({"output": output, "serial": p.serial}))
+    }
+
+    pub(crate) async fn agent_android_push(
+        &self,
+        p: AndroidPushParams,
+    ) -> Result<CallToolResult, McpError> {
+        onecrawl_cdp::android::AndroidClient::push_file(&p.serial, &p.local, &p.remote).await
+            .map_err(|e| mcp_err(format!("Android push failed: {e}")))?;
+        json_ok(&serde_json::json!({"pushed": true, "local": p.local, "remote": p.remote}))
+    }
+
+    pub(crate) async fn agent_android_pull(
+        &self,
+        p: AndroidPullParams,
+    ) -> Result<CallToolResult, McpError> {
+        onecrawl_cdp::android::AndroidClient::pull_file(&p.serial, &p.remote, &p.local).await
+            .map_err(|e| mcp_err(format!("Android pull failed: {e}")))?;
+        json_ok(&serde_json::json!({"pulled": true, "remote": p.remote, "local": p.local}))
+    }
+
+    pub(crate) async fn agent_android_info(
+        &self,
+        p: AndroidInfoParams,
+    ) -> Result<CallToolResult, McpError> {
+        let info = onecrawl_cdp::android::AndroidClient::device_info(&p.serial).await
+            .map_err(|e| mcp_err(format!("Android device info failed: {e}")))?;
+        json_ok(&info)
+    }
+
+    pub(crate) async fn agent_android_battery(
+        &self,
+        p: AndroidBatteryParams,
+    ) -> Result<CallToolResult, McpError> {
+        let info = onecrawl_cdp::android::AndroidClient::battery_info(&p.serial).await
+            .map_err(|e| mcp_err(format!("Android battery info failed: {e}")))?;
+        json_ok(&info)
+    }
+
+    pub(crate) async fn agent_android_url(
+        &self,
+        _p: AndroidUrlParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        let url = client.get_url().await
+            .map_err(|e| mcp_err(format!("Android get URL failed: {e}")))?;
+        json_ok(&serde_json::json!({"url": url}))
+    }
+
+    pub(crate) async fn agent_android_title(
+        &self,
+        _p: AndroidTitleParams,
+    ) -> Result<CallToolResult, McpError> {
+        let state = self.browser.lock().await;
+        let client = state.android_client.as_ref()
+            .ok_or_else(|| mcp_err("no active Android session — call agent.android_connect first"))?;
+        let title = client.get_title().await
+            .map_err(|e| mcp_err(format!("Android get title failed: {e}")))?;
+        json_ok(&serde_json::json!({"title": title}))
+    }
+
     // ──────────────── Computer Use Protocol ─────────────────
 
     // ════════════════════════════════════════════════════════════════

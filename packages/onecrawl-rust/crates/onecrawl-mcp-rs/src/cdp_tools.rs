@@ -21,6 +21,7 @@ pub struct BrowserState {
     pub safety: Option<onecrawl_cdp::SafetyState>,
     pub recording: Option<onecrawl_cdp::RecordingState>,
     pub ios_client: Option<onecrawl_cdp::ios::IosClient>,
+    pub android_client: Option<onecrawl_cdp::android::AndroidClient>,
     pub pool: onecrawl_cdp::BrowserPool,
     pub memory: Option<onecrawl_cdp::AgentMemory>,
     pub mutation_buffer: Vec<serde_json::Value>,
@@ -688,6 +689,202 @@ pub struct IosUrlParams {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct IosTitleParams {
+    // no params needed
+}
+
+// ──────────────── Android / UIAutomator2 params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidDevicesParams {
+    // no params needed — lists connected Android devices via ADB
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidConnectParams {
+    #[schemars(description = "UIAutomator2 server URL (default: http://localhost:4723)")]
+    pub server_url: Option<String>,
+    #[schemars(description = "Device serial (auto-detect if omitted)")]
+    pub serial: Option<String>,
+    #[schemars(description = "Android package to automate (default: com.android.chrome)")]
+    pub package: Option<String>,
+    #[schemars(description = "Activity to launch (optional)")]
+    pub activity: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidNavigateParams {
+    #[schemars(description = "URL to navigate to in Chrome")]
+    pub url: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidTapParams {
+    #[schemars(description = "X coordinate")]
+    pub x: f64,
+    #[schemars(description = "Y coordinate")]
+    pub y: f64,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidSwipeParams {
+    #[schemars(description = "Start X coordinate")]
+    pub from_x: f64,
+    #[schemars(description = "Start Y coordinate")]
+    pub from_y: f64,
+    #[schemars(description = "End X coordinate")]
+    pub to_x: f64,
+    #[schemars(description = "End Y coordinate")]
+    pub to_y: f64,
+    #[schemars(description = "Duration in milliseconds (default: 500)")]
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidLongPressParams {
+    #[schemars(description = "X coordinate")]
+    pub x: f64,
+    #[schemars(description = "Y coordinate")]
+    pub y: f64,
+    #[schemars(description = "Duration in milliseconds (default: 1000)")]
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidDoubleTapParams {
+    #[schemars(description = "X coordinate")]
+    pub x: f64,
+    #[schemars(description = "Y coordinate")]
+    pub y: f64,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidPinchParams {
+    #[schemars(description = "X coordinate of pinch center")]
+    pub x: f64,
+    #[schemars(description = "Y coordinate of pinch center")]
+    pub y: f64,
+    #[schemars(description = "Scale factor (>1 zoom in, <1 zoom out)")]
+    pub scale: f64,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidTypeParams {
+    #[schemars(description = "Text to type into the focused element")]
+    pub text: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidFindParams {
+    #[schemars(description = "Locator strategy (e.g. 'id', 'xpath', 'accessibility id', 'class name')")]
+    pub strategy: String,
+    #[schemars(description = "Locator value")]
+    pub value: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidClickParams {
+    #[schemars(description = "Element ID to click")]
+    pub element_id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidScreenshotParams {
+    // no params needed — returns base64 PNG
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidOrientationParams {
+    #[schemars(description = "Orientation to set (PORTRAIT/LANDSCAPE). Omit to get current.")]
+    pub set: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidKeyParams {
+    #[schemars(description = "Android keycode (e.g. 3=HOME, 4=BACK, 24=VOLUME_UP, 25=VOLUME_DOWN, 26=POWER)")]
+    pub keycode: i32,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidAppLaunchParams {
+    #[schemars(description = "Package name of the app to launch")]
+    pub package: String,
+    #[schemars(description = "Activity to launch (optional)")]
+    pub activity: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidAppKillParams {
+    #[schemars(description = "Package name of the app to terminate")]
+    pub package: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidAppStateParams {
+    #[schemars(description = "Package name of the app to check")]
+    pub package: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidInstallParams {
+    #[schemars(description = "Path to the APK file to install")]
+    pub apk_path: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidScriptParams {
+    #[schemars(description = "JavaScript code to execute in Chrome")]
+    pub script: String,
+    #[schemars(description = "Arguments to pass to the script")]
+    pub args: Option<Vec<serde_json::Value>>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidShellParams {
+    #[schemars(description = "Device serial number")]
+    pub serial: String,
+    #[schemars(description = "Shell command to execute")]
+    pub command: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidPushParams {
+    #[schemars(description = "Device serial number")]
+    pub serial: String,
+    #[schemars(description = "Local file path")]
+    pub local: String,
+    #[schemars(description = "Remote path on device")]
+    pub remote: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidPullParams {
+    #[schemars(description = "Device serial number")]
+    pub serial: String,
+    #[schemars(description = "Remote path on device")]
+    pub remote: String,
+    #[schemars(description = "Local file path")]
+    pub local: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidInfoParams {
+    #[schemars(description = "Device serial number")]
+    pub serial: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidBatteryParams {
+    #[schemars(description = "Device serial number")]
+    pub serial: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidUrlParams {
+    // no params needed
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct AndroidTitleParams {
     // no params needed
 }
 
