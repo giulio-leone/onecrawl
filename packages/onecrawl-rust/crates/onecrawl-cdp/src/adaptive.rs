@@ -41,7 +41,7 @@ pub struct ElementMatch {
 
 /// Capture a fingerprint of an element for later relocation.
 pub async fn fingerprint_element(page: &Page, selector: &str) -> Result<ElementFingerprint> {
-    let escaped = selector.replace('\'', "\\'");
+    let escaped = selector.replace('\\', "\\\\").replace('\'', "\\'");
     let js = format!(
         r#"
         (() => {{

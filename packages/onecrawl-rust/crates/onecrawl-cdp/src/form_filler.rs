@@ -211,7 +211,7 @@ pub async fn submit_form(page: &Page, form_selector: &str) -> Result<()> {
             form.submit();
             return 'submitted';
         }})()"#,
-        sel = form_selector.replace('\'', "\\'"),
+        sel = form_selector.replace('\\', "\\\\").replace('\'', "\\'"),
     );
     let res: String = page
         .evaluate(js)
@@ -241,7 +241,7 @@ async fn set_field_value(page: &Page, field: &FormField, value: &str) -> Result<
                 el.dispatchEvent(new Event('change', {{ bubbles: true }}));
                 return true;
             }})()"#,
-            sel = sel.replace('\'', "\\'"),
+            sel = sel.replace('\\', "\\\\").replace('\'', "\\'"),
             val = if escaped == "true" || escaped == "1" {
                 "true"
             } else {
@@ -256,7 +256,7 @@ async fn set_field_value(page: &Page, field: &FormField, value: &str) -> Result<
                 el.dispatchEvent(new Event('change', {{ bubbles: true }}));
                 return true;
             }})()"#,
-            sel = sel.replace('\'', "\\'"),
+            sel = sel.replace('\\', "\\\\").replace('\'', "\\'"),
             val = escaped,
         ),
         "radio" => format!(
@@ -268,7 +268,7 @@ async fn set_field_value(page: &Page, field: &FormField, value: &str) -> Result<
                 el.dispatchEvent(new Event('change', {{ bubbles: true }}));
                 return true;
             }})()"#,
-            sel = sel.replace('\'', "\\'"),
+            sel = sel.replace('\\', "\\\\").replace('\'', "\\'"),
             val = escaped,
         ),
         _ => format!(
@@ -280,7 +280,7 @@ async fn set_field_value(page: &Page, field: &FormField, value: &str) -> Result<
                 el.dispatchEvent(new Event('change', {{ bubbles: true }}));
                 return true;
             }})()"#,
-            sel = sel.replace('\'', "\\'"),
+            sel = sel.replace('\\', "\\\\").replace('\'', "\\'"),
             val = escaped,
         ),
     };

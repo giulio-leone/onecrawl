@@ -37,7 +37,7 @@ pub async fn css_select(page: &Page, selector: &str) -> Result<SelectorResult> {
             }}));
         }})()
     "#,
-        real_selector.replace('\'', "\\'")
+        real_selector.replace('\\', "\\\\").replace('\'', "\\'")
     );
 
     let val = page
@@ -258,7 +258,7 @@ pub async fn auto_selector(page: &Page, target_selector: &str) -> Result<String>
             return getSelector(el);
         }})()
     "#,
-        target_selector.replace('\'', "\\'")
+        target_selector.replace('\\', "\\\\").replace('\'', "\\'")
     );
 
     let val = page

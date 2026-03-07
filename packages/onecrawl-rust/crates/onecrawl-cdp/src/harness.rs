@@ -265,8 +265,8 @@ pub async fn checkpoint_restore(page: &Page, checkpoint_path: &str, name: &str) 
             if let Some(v) = value.as_str() {
                 let js = format!(
                     "localStorage.setItem('{}', '{}')",
-                    key.replace('\'', "\\'"),
-                    v.replace('\'', "\\'")
+                    key.replace('\\', "\\\\").replace('\'', "\\'"),
+                    v.replace('\\', "\\\\").replace('\'', "\\'")
                 );
                 let _ = page.evaluate(js).await;
             }
@@ -279,8 +279,8 @@ pub async fn checkpoint_restore(page: &Page, checkpoint_path: &str, name: &str) 
             if let Some(v) = value.as_str() {
                 let js = format!(
                     "sessionStorage.setItem('{}', '{}')",
-                    key.replace('\'', "\\'"),
-                    v.replace('\'', "\\'")
+                    key.replace('\\', "\\\\").replace('\'', "\\'"),
+                    v.replace('\\', "\\\\").replace('\'', "\\'")
                 );
                 let _ = page.evaluate(js).await;
             }

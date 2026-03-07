@@ -47,8 +47,8 @@ pub async fn drag_and_drop(page: &Page, source: &str, target: &str) -> Result<()
             return 'ok';
         }})()
         "#,
-        source = source.replace('\'', "\\'"),
-        target = target.replace('\'', "\\'"),
+        source = source.replace('\\', "\\\\").replace('\'', "\\'"),
+        target = target.replace('\\', "\\\\").replace('\'', "\\'"),
     );
     page.evaluate(js)
         .await
@@ -90,7 +90,7 @@ pub async fn bounding_box(page: &Page, selector: &str) -> Result<(f64, f64, f64,
                 return JSON.stringify({{ x: r.x, y: r.y, width: r.width, height: r.height }});
             }})()
             "#,
-            selector = selector.replace('\'', "\\'"),
+            selector = selector.replace('\\', "\\\\").replace('\'', "\\'"),
         ))
         .await
         .map_err(|e| Error::Cdp(format!("bounding_box eval failed: {e}")))?
@@ -128,7 +128,7 @@ pub async fn tap(page: &Page, selector: &str) -> Result<()> {
             el.dispatchEvent(new TouchEvent('touchend', {{ changedTouches: [touch], bubbles: true }}));
         }})()
         "#,
-        selector = selector.replace('\'', "\\'"),
+        selector = selector.replace('\\', "\\\\").replace('\'', "\\'"),
     );
     page.evaluate(js)
         .await

@@ -15,7 +15,7 @@ pub struct DownloadInfo {
 
 /// Set the download directory and enable download interception via JS.
 pub async fn set_download_path(page: &Page, download_path: &Path) -> Result<()> {
-    let path_str = download_path.to_string_lossy().replace('\'', "\\'");
+    let path_str = download_path.to_string_lossy().replace('\\', "\\\\").replace('\'', "\\'");
     let js = format!(
         r#"
         window.__onecrawl_downloads = window.__onecrawl_downloads || {{
@@ -66,7 +66,7 @@ pub async fn get_downloads(page: &Page) -> Result<Vec<DownloadInfo>> {
 
 /// Download a file by URL using fetch and return as base64.
 pub async fn download_file(page: &Page, url: &str) -> Result<String> {
-    let escaped = url.replace('\'', "\\'");
+    let escaped = url.replace('\\', "\\\\").replace('\'', "\\'");
     let js = format!(
         r#"
         (async () => {{

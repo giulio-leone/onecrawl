@@ -11,7 +11,7 @@ use onecrawl_core::{Error, Result};
 /// Dismisses any `beforeunload` dialog that may block navigation, then polls until
 /// the URL changes to the target domain or 60 seconds elapse.
 pub async fn goto(page: &Page, url: &str) -> Result<()> {
-    let safe_url = url.replace('\'', "\\'");
+    let safe_url = url.replace('\\', "\\\\").replace('\'', "\\'");
 
     // Dismiss any beforeunload dialog that could block navigation.
     // We clear onbeforeunload first, then trigger navigation.
@@ -120,7 +120,7 @@ pub async fn wait_for_selector(page: &Page, selector: &str, timeout_ms: u64) -> 
     let deadline = tokio::time::Instant::now() + tokio::time::Duration::from_millis(timeout_ms);
     let js = format!(
         "!!document.querySelector('{}')",
-        selector.replace('\'', "\\'")
+        selector.replace('\\', "\\\\").replace('\'', "\\'")
     );
     loop {
         let found = page

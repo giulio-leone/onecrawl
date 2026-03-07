@@ -24,7 +24,7 @@ pub async fn set_dialog_handler(
     prompt_text: Option<&str>,
 ) -> Result<()> {
     let prompt_val = match prompt_text {
-        Some(t) => format!("'{}'", t.replace('\'', "\\'")),
+        Some(t) => format!("'{}'", t.replace('\\', "\\\\").replace('\'', "\\'")),
         None => "null".to_string(),
     };
     let js = format!(

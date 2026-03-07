@@ -46,8 +46,8 @@ pub async fn override_permission(page: &Page, permission: &str, state: &str) -> 
             return origQuery(desc);
         }};
     }})()"#,
-        permission.replace('\'', "\\'"),
-        state.replace('\'', "\\'")
+        permission.replace('\\', "\\\\").replace('\'', "\\'"),
+        state.replace('\\', "\\\\").replace('\'', "\\'")
     );
     page.evaluate(js)
         .await
@@ -97,7 +97,7 @@ pub async fn set_connection_info(
             }},
             configurable: true
         }})"#,
-        effective_type.replace('\'', "\\'"),
+        effective_type.replace('\\', "\\\\").replace('\'', "\\'"),
         downlink,
         rtt
     );

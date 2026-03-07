@@ -259,11 +259,11 @@ async fn crawl_single_page(
                 let js = match config.extract_format.as_str() {
                     "html" => format!(
                         "document.querySelector('{}')?.innerHTML || ''",
-                        sel.replace('\'', "\\'")
+                        sel.replace('\\', "\\\\").replace('\'', "\\'")
                     ),
                     _ => format!(
                         "document.querySelector('{}')?.textContent || ''",
-                        sel.replace('\'', "\\'")
+                        sel.replace('\\', "\\\\").replace('\'', "\\'")
                     ),
                 };
                 page.evaluate(js)

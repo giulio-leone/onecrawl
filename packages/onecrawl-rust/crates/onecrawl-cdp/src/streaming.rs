@@ -59,8 +59,8 @@ fn write_field_extractor(
     target: &str, // "fields" or "result"
     include_required_check: bool,
 ) {
-    let escaped_selector = f.selector.replace('\'', "\\'");
-    let escaped_name = f.name.replace('\'', "\\'");
+    let escaped_selector = f.selector.replace('\\', "\\\\").replace('\'', "\\'");
+    let escaped_name = f.name.replace('\\', "\\\\").replace('\'', "\\'");
 
     let property = if f.extract == "text" {
         "textContent"
@@ -75,7 +75,7 @@ fn write_field_extractor(
     };
 
     if let Some(attr_name) = f.extract.strip_prefix("attr:") {
-        let escaped_attr = attr_name.replace('\'', "\\'");
+        let escaped_attr = attr_name.replace('\\', "\\\\").replace('\'', "\\'");
         let _ = write!(
             buf,
             "{target}['{escaped_name}'] = ({root}.querySelector('{escaped_selector}')?.getAttribute('{escaped_attr}') || '')"
@@ -105,7 +105,7 @@ fn write_field_extractor(
 }
 
 fn build_extract_js(fields: &[ExtractionRule], item_selector: &str, page_num: usize) -> String {
-    let escaped_item = item_selector.replace('\'', "\\'");
+    let escaped_item = item_selector.replace('\\', "\\\\").replace('\'', "\\'");
     let mut js = String::with_capacity(256 + fields.len() * 128);
     let _ = write!(
         js,
@@ -224,7 +224,7 @@ pub async fn extract_with_pagination(
                     if (btn) {{ btn.click(); return true; }}
                     return false;
                 }})()"#,
-                pagination.next_selector.replace('\'', "\\'")
+                pagination.next_selector.replace('\\', "\\\\").replace('\'', "\\'")
             );
             let click_val = page
                 .evaluate(click_js)

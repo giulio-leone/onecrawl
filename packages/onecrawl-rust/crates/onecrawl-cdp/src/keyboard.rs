@@ -17,7 +17,7 @@ pub async fn press_key(page: &Page, key: &str) -> Result<()> {
             document.activeElement.dispatchEvent(new KeyboardEvent('keyup', opts));
         }})()
         "#,
-        key = key.replace('\'', "\\'")
+        key = key.replace('\\', "\\\\").replace('\'', "\\'")
     );
     page.evaluate(js)
         .await
@@ -59,7 +59,7 @@ pub async fn keyboard_shortcut(page: &Page, shortcut: &str) -> Result<()> {
             el.dispatchEvent(new KeyboardEvent('keyup', opts));
         }})()
         "#,
-        key = key.replace('\'', "\\'"),
+        key = key.replace('\\', "\\\\").replace('\'', "\\'"),
         ctrl = ctrl,
         meta = meta,
         alt = alt,
@@ -82,7 +82,7 @@ pub async fn key_down(page: &Page, key: &str) -> Result<()> {
             }}));
         }})()
         "#,
-        key = key.replace('\'', "\\'")
+        key = key.replace('\\', "\\\\").replace('\'', "\\'")
     );
     page.evaluate(js)
         .await
@@ -101,7 +101,7 @@ pub async fn key_up(page: &Page, key: &str) -> Result<()> {
             }}));
         }})()
         "#,
-        key = key.replace('\'', "\\'")
+        key = key.replace('\\', "\\\\").replace('\'', "\\'")
     );
     page.evaluate(js)
         .await
@@ -124,8 +124,8 @@ pub async fn fill(page: &Page, selector: &str, value: &str) -> Result<()> {
             el.dispatchEvent(new Event('change', {{ bubbles: true }}));
         }})()
         "#,
-        selector = selector.replace('\'', "\\'"),
-        value = value.replace('\'', "\\'"),
+        selector = selector.replace('\\', "\\\\").replace('\'', "\\'"),
+        value = value.replace('\\', "\\\\").replace('\'', "\\'"),
     );
     page.evaluate(js)
         .await

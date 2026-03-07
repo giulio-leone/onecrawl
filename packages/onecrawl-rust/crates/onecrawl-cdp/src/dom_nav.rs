@@ -28,7 +28,7 @@ pub async fn get_parent(page: &Page, selector: &str) -> Result<Option<NavElement
             }};
         }})()
     "#,
-        selector.replace('\'', "\\'")
+        selector.replace('\\', "\\\\").replace('\'', "\\'")
     );
     let val = page
         .evaluate(js)
@@ -63,7 +63,7 @@ pub async fn get_next_sibling(page: &Page, selector: &str) -> Result<Option<NavE
             }};
         }})()
     "#,
-        selector.replace('\'', "\\'")
+        selector.replace('\\', "\\\\").replace('\'', "\\'")
     );
     let val = page
         .evaluate(js)
@@ -93,7 +93,7 @@ pub async fn get_prev_sibling(page: &Page, selector: &str) -> Result<Option<NavE
             }};
         }})()
     "#,
-        selector.replace('\'', "\\'")
+        selector.replace('\\', "\\\\").replace('\'', "\\'")
     );
     let val = page
         .evaluate(js)
@@ -158,7 +158,7 @@ pub async fn find_similar(page: &Page, selector: &str) -> Result<Vec<NavElement>
             return results;
         }})()
     "#,
-        selector.replace('\'', "\\'")
+        selector.replace('\\', "\\\\").replace('\'', "\\'")
     );
 
     let val = page
@@ -196,7 +196,7 @@ pub async fn above_elements(page: &Page, selector: &str, limit: usize) -> Result
             return results;
         }})()
     "#,
-        selector.replace('\'', "\\'"),
+        selector.replace('\\', "\\\\").replace('\'', "\\'"),
         limit
     );
 
@@ -235,7 +235,7 @@ pub async fn below_elements(page: &Page, selector: &str, limit: usize) -> Result
             return results;
         }})()
     "#,
-        selector.replace('\'', "\\'"),
+        selector.replace('\\', "\\\\").replace('\'', "\\'"),
         limit
     );
 
@@ -263,7 +263,7 @@ async fn nav_query(page: &Page, selector: &str, collection_expr: &str) -> Result
             }}));
         }})()
     "#,
-        selector.replace('\'', "\\'"),
+        selector.replace('\\', "\\\\").replace('\'', "\\'"),
         collection_expr
     );
 

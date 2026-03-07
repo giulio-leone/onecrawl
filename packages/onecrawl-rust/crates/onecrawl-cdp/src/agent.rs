@@ -106,7 +106,7 @@ pub async fn goal_assert(
             "element_exists" => {
                 let js = format!(
                     "document.querySelector('{}') !== null",
-                    value.replace('\'', "\\'")
+                    value.replace('\\', "\\\\").replace('\'', "\\'")
                 );
                 let r = evaluate_js(page, &js).await?;
                 r.as_bool().unwrap_or(false)
@@ -114,7 +114,7 @@ pub async fn goal_assert(
             "text_contains" => {
                 let js = format!(
                     "document.body?.innerText?.includes('{}') || false",
-                    value.replace('\'', "\\'")
+                    value.replace('\\', "\\\\").replace('\'', "\\'")
                 );
                 let r = evaluate_js(page, &js).await?;
                 r.as_bool().unwrap_or(false)
@@ -127,7 +127,7 @@ pub async fn goal_assert(
                         const rect = el.getBoundingClientRect();
                         return rect.width > 0 && rect.height > 0;
                     }})()"#,
-                    value.replace('\'', "\\'")
+                    value.replace('\\', "\\\\").replace('\'', "\\'")
                 );
                 let r = evaluate_js(page, &js).await?;
                 r.as_bool().unwrap_or(false)
@@ -248,7 +248,7 @@ pub async fn session_context(
                     window.__onecrawl_ctx['{}'] = '{}';
                     return JSON.stringify({{ action: 'set', key: '{}', stored: true }});
                 }})()
-            "#, k.replace('\'', "\\'"), v.replace('\'', "\\'"), k.replace('\'', "\\'"))
+            "#, k.replace('\\', "\\\\").replace('\'', "\\'"), v.replace('\\', "\\\\").replace('\'', "\\'"), k.replace('\\', "\\\\").replace('\'', "\\'"))
         }
         "get" => {
             let k = key.unwrap_or("default");
@@ -257,7 +257,7 @@ pub async fn session_context(
                     if (!window.__onecrawl_ctx) return JSON.stringify({{ action: 'get', key: '{}', value: null }});
                     return JSON.stringify({{ action: 'get', key: '{}', value: window.__onecrawl_ctx['{}'] || null }});
                 }})()
-            "#, k.replace('\'', "\\'"), k.replace('\'', "\\'"), k.replace('\'', "\\'"))
+            "#, k.replace('\\', "\\\\").replace('\'', "\\'"), k.replace('\\', "\\\\").replace('\'', "\\'"), k.replace('\\', "\\\\").replace('\'', "\\'"))
         }
         "get_all" => {
             r#"
@@ -505,7 +505,7 @@ pub async fn input_replay(
                         if (el) {{ el.click(); return 'clicked'; }}
                         return 'not_found';
                     }})()
-                "#, selector.replace('\'', "\\'"));
+                "#, selector.replace('\\', "\\\\").replace('\'', "\\'"));
                 page.evaluate(js).await.map(|v| {
                     let s: String = v.into_value().unwrap_or_default();
                     serde_json::json!({"status": s})
@@ -526,7 +526,7 @@ pub async fn input_replay(
                         }}
                         return 'not_found';
                     }})()
-                "#, selector.replace('\'', "\\'"), text.replace('\'', "\\'"));
+                "#, selector.replace('\\', "\\\\").replace('\'', "\\'"), text.replace('\\', "\\\\").replace('\'', "\\'"));
                 page.evaluate(js).await.map(|v| {
                     let s: String = v.into_value().unwrap_or_default();
                     serde_json::json!({"status": s})

@@ -148,7 +148,7 @@ pub async fn set_geolocation(
 pub async fn set_timezone(page: &Page, timezone_id: &str) -> Result<()> {
     let js = format!(
         "Intl.DateTimeFormat().resolvedOptions().timeZone = '{}'",
-        timezone_id.replace('\'', "\\'")
+        timezone_id.replace('\\', "\\\\").replace('\'', "\\'")
     );
     page.evaluate(js)
         .await

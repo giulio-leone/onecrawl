@@ -551,17 +551,18 @@ impl OneCrawlMcp {
         let event = &p.event;
         let timeout = p.timeout.unwrap_or(30000);
         let target = match &p.selector {
-            Some(sel) => format!("document.querySelector('{sel}')"),
+            Some(sel) => format!("document.querySelector({})", json_escape(sel)),
             None => "document".to_string(),
         };
+        let event_js = json_escape(event);
         let js = format!(
             r#"new Promise((resolve, reject) => {{
                 const el = {target};
                 if (!el) return reject('element not found');
                 const timer = setTimeout(() => reject('timeout after {timeout}ms'), {timeout});
-                el.addEventListener('{event}', function handler(e) {{
+                el.addEventListener({event_js}, function handler(e) {{
                     clearTimeout(timer);
-                    el.removeEventListener('{event}', handler);
+                    el.removeEventListener({event_js}, handler);
                     resolve(JSON.stringify({{
                         type: e.type,
                         target: e.target?.tagName || 'unknown',
@@ -893,13 +894,13 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let resource_types = p.resource_types.unwrap_or_default();
         let patterns_js = p.patterns.iter()
-            .map(|p| format!("new RegExp('{}')", p.replace('*', ".*").replace('\'', "\\'")))
+            .map(|p| format!("new RegExp('{}')", p.replace('*', ".*").replace('\\', "\\\\").replace('\'', "\\'")))
             .collect::<Vec<_>>()
             .join(",");
         let types_js = if resource_types.is_empty() {
             "null".to_string()
         } else {
-            format!("[{}]", resource_types.iter().map(|t| format!("'{}'", t)).collect::<Vec<_>>().join(","))
+            format!("[{}]", resource_types.iter().map(|t| json_escape(t)).collect::<Vec<_>>().join(","))
         };
         let js = format!(
             r#"(() => {{

@@ -251,14 +251,21 @@ pub(crate) async fn launch_normal_chrome(
     // Only match the Chrome main process: must have --user-data-dir=<path>.
     // Crashpad handlers use --database= and --metrics-dir= with the same path but never
     // --user-data-dir=, so they are excluded by the tighter grep pattern.
-    let real_chrome_running = std::process::Command::new("sh")
-        .args(["-c", &format!(
-            r#"ps -eo args | grep -v grep | grep -F 'Google Chrome' | grep -qF -- '--user-data-dir={}'"#,
-            user_data_dir
-        )])
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
+    // Uses pure Rust process inspection to avoid shell command injection via user_data_dir.
+    let is_chrome_with_profile = |udd: &str| -> bool {
+        let needle = format!("--user-data-dir={}", udd);
+        std::process::Command::new("ps")
+            .args(["eo", "args"])
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|out| {
+                out.lines().any(|l| l.contains("Google Chrome") && l.contains(&needle))
+            })
+            .unwrap_or(false)
+    };
+
+    let real_chrome_running = is_chrome_with_profile(&user_data_dir);
 
     if real_chrome_running {
         // Remote debugging cannot be added to an already-running Chrome process.
@@ -269,30 +276,17 @@ pub(crate) async fn launch_normal_chrome(
         println!("  (Press Ctrl+C to abort)");
 
         // Poll up to 60s for Chrome to quit (check that the profile is no longer in ps args)
-        let quit_check = format!(
-            r#"ps -eo args | grep -v grep | grep -F 'Google Chrome' | grep -qF -- '--user-data-dir={}'"#,
-            user_data_dir
-        );
         for _ in 0..120 {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            let still_running = std::process::Command::new("sh")
-                .args(["-c", &quit_check])
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
+            let still_running = is_chrome_with_profile(&user_data_dir);
             if !still_running {
                 println!("{} Chrome closed. Relaunching with remote debugging...", "✓".green());
-                // Fall through to Step 4 by breaking out of the loop
                 break;
             }
         }
 
         // Re-check; if still running after 60s, bail out
-        let still_running = std::process::Command::new("sh")
-            .args(["-c", &quit_check])
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false);
+        let still_running = is_chrome_with_profile(&user_data_dir);
         if still_running {
             return Err(
                 "Timed out (60s) waiting for Chrome to quit.\n\

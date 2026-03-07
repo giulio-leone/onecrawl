@@ -472,7 +472,7 @@ pub async fn dynamic_import_wait(page: &Page, module_pattern: &str, timeout_ms: 
             }};
             check();
         }})
-    "#, module_pattern.replace('\'', "\\'"), timeout_ms);
+    "#, module_pattern.replace('\\', "\\\\").replace('\'', "\\'"), timeout_ms);
 
     let result = page
         .evaluate(js)

@@ -50,7 +50,7 @@ impl OneCrawlMcp {
                     &page,
                     &format!(
                         "await new Promise(r => {{ const i = setInterval(() => {{ if (document.querySelector('{}')) {{ clearInterval(i); r(); }} }}, 100); setTimeout(() => {{ clearInterval(i); r(); }}, 10000); }})",
-                        wait.replace('\'', "\\'")
+                        wait.replace('\\', "\\\\").replace('\'', "\\'")
                     ),
                 ).await;
             }

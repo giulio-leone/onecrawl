@@ -67,8 +67,8 @@ fn build_fetch_js(request: &HttpRequest) -> String {
                 return {{ error: err.message || String(err) }};
             }}
         }})()"#,
-        url = request.url.replace('\'', "\\'"),
-        method = request.method.replace('\'', "\\'"),
+        url = request.url.replace('\\', "\\\\").replace('\'', "\\'"),
+        method = request.method.replace('\\', "\\\\").replace('\'', "\\'"),
         headers = headers_json,
         timeout = request.timeout_ms,
         body = body_part,

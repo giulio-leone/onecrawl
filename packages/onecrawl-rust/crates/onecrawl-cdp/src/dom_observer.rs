@@ -24,7 +24,7 @@ pub struct DomMutation {
 pub async fn start_dom_observer(page: &Page, target_selector: Option<&str>) -> Result<()> {
     let target_js = match target_selector {
         Some(sel) if sel.starts_with("document.") => sel.to_string(),
-        Some(sel) => format!("document.querySelector('{}')", sel.replace('\'', "\\'")),
+        Some(sel) => format!("document.querySelector('{}')", sel.replace('\\', "\\\\").replace('\'', "\\'")),
         None => "document.body".to_string(),
     };
 
@@ -112,7 +112,7 @@ pub async fn get_dom_snapshot(page: &Page, selector: Option<&str>) -> Result<Str
     let js = match selector {
         Some(sel) => format!(
             "document.querySelector('{}')?.outerHTML || ''",
-            sel.replace('\'', "\\'")
+            sel.replace('\\', "\\\\").replace('\'', "\\'")
         ),
         None => "document.documentElement.outerHTML".to_string(),
     };

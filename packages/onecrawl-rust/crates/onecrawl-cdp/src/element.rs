@@ -81,7 +81,7 @@ pub async fn focus(page: &Page, selector: &str) -> Result<()> {
 pub async fn hover(page: &Page, selector: &str) -> Result<()> {
     page.evaluate(format!(
         "document.querySelector('{}')?.dispatchEvent(new MouseEvent('mouseover', {{bubbles: true}}))",
-        selector.replace('\'', "\\'")
+        selector.replace('\\', "\\\\").replace('\'', "\\'")
     ))
     .await
     .map_err(|e| Error::Cdp(format!("hover failed: {e}")))?;
@@ -92,7 +92,7 @@ pub async fn hover(page: &Page, selector: &str) -> Result<()> {
 pub async fn scroll_into_view(page: &Page, selector: &str) -> Result<()> {
     page.evaluate(format!(
         "document.querySelector('{}')?.scrollIntoView({{behavior: 'smooth', block: 'center'}})",
-        selector.replace('\'', "\\'")
+        selector.replace('\\', "\\\\").replace('\'', "\\'")
     ))
     .await
     .map_err(|e| Error::Cdp(format!("scroll_into_view failed: {e}")))?;
@@ -131,7 +131,7 @@ pub async fn double_click(page: &Page, selector: &str) -> Result<()> {
          if (!el) throw new Error('not found'); \
          el.dispatchEvent(new MouseEvent('dblclick', {{bubbles: true}})); \
          }})()",
-        selector.replace('\'', "\\'")
+        selector.replace('\\', "\\\\").replace('\'', "\\'")
     ))
     .await
     .map_err(|e| Error::Cdp(format!("double_click failed: {e}")))?;
@@ -146,7 +146,7 @@ pub async fn check(page: &Page, selector: &str) -> Result<()> {
          if (!el.checked) {{ el.checked = true; \
          el.dispatchEvent(new Event('change', {{bubbles: true}})); }} \
          }})()",
-        selector.replace('\'', "\\'")
+        selector.replace('\\', "\\\\").replace('\'', "\\'")
     ))
     .await
     .map_err(|e| Error::Cdp(format!("check failed: {e}")))?;
@@ -161,7 +161,7 @@ pub async fn uncheck(page: &Page, selector: &str) -> Result<()> {
          if (el.checked) {{ el.checked = false; \
          el.dispatchEvent(new Event('change', {{bubbles: true}})); }} \
          }})()",
-        selector.replace('\'', "\\'")
+        selector.replace('\\', "\\\\").replace('\'', "\\'")
     ))
     .await
     .map_err(|e| Error::Cdp(format!("uncheck failed: {e}")))?;
@@ -173,8 +173,8 @@ pub async fn get_attribute(page: &Page, selector: &str, attribute: &str) -> Resu
     let val = page
         .evaluate(format!(
             "document.querySelector('{}')?.getAttribute('{}')",
-            selector.replace('\'', "\\'"),
-            attribute.replace('\'', "\\'")
+            selector.replace('\\', "\\\\").replace('\'', "\\'"),
+            attribute.replace('\\', "\\\\").replace('\'', "\\'")
         ))
         .await
         .map_err(|e| Error::Cdp(format!("get_attribute failed: {e}")))?
@@ -195,8 +195,8 @@ pub async fn select_option(page: &Page, selector: &str, value: &str) -> Result<(
          el.value = '{}'; \
          el.dispatchEvent(new Event('change', {{bubbles: true}})); \
          }})()",
-        selector.replace('\'', "\\'"),
-        value.replace('\'', "\\'")
+        selector.replace('\\', "\\\\").replace('\'', "\\'"),
+        value.replace('\\', "\\\\").replace('\'', "\\'")
     ))
     .await
     .map_err(|e| Error::Cdp(format!("select_option failed: {e}")))?;

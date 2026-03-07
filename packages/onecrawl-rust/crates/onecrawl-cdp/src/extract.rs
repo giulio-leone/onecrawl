@@ -150,7 +150,7 @@ pub async fn extract(
             }};
         }})()
     "#,
-        sel.replace('\'', "\\'")
+        sel.replace('\\', "\\\\").replace('\'', "\\'")
     );
 
     let val = page
