@@ -3421,6 +3421,1731 @@ impl Browser {
         }
         serde_json::to_string(&creds).map_err(py_err)
     }
+
+    // ── Tabs ──────────────────────────────────────────────────────────
+
+    /// List all open tabs.
+    fn list_tabs(&self) -> PyResult<String> {
+        let tabs = self
+            .rt
+            .block_on(onecrawl_cdp::tabs::list_tabs(self.session.browser()))
+            .map_err(py_err)?;
+        serde_json::to_string(&tabs).map_err(py_err)
+    }
+
+    /// Close a tab by index.
+    fn close_tab(&self, index: usize) -> PyResult<()> {
+        self.rt
+            .block_on(onecrawl_cdp::tabs::close_tab(
+                self.session.browser(),
+                index,
+            ))
+            .map_err(py_err)
+    }
+
+    /// Get number of open tabs.
+    fn tab_count(&self) -> PyResult<usize> {
+        self.rt
+            .block_on(onecrawl_cdp::tabs::tab_count(self.session.browser()))
+            .map_err(py_err)
+    }
+
+    // ── Downloads ─────────────────────────────────────────────────────
+
+    /// Set the download path.
+    fn set_download_path(&self, path: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::downloads::set_download_path(
+                page,
+                std::path::Path::new(path),
+            ))
+            .map_err(py_err)
+    }
+
+    /// Get list of downloads as JSON.
+    fn get_downloads(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let downloads = self
+            .rt
+            .block_on(onecrawl_cdp::downloads::get_downloads(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&downloads).map_err(py_err)
+    }
+
+    /// Download a file from a URL.
+    fn download_file(&self, url: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::downloads::download_file(page, url))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Wait for a download to complete.
+    #[pyo3(signature = (timeout_ms=30000))]
+    fn wait_for_download(&self, timeout_ms: u64) -> PyResult<Option<String>> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::downloads::wait_for_download(
+                page, timeout_ms,
+            ))
+            .map_err(py_err)?;
+        match result {
+            Some(v) => Ok(Some(serde_json::to_string(&v).map_err(py_err)?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Clear all downloads.
+    fn clear_downloads(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::downloads::clear_downloads(page))
+            .map_err(py_err)
+    }
+
+    // ── Form Filler ───────────────────────────────────────────────────
+
+    /// Detect forms on the page.
+    fn detect_forms(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::form_filler::detect_forms(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Fill a form with provided values.
+    fn fill_form(&self, form_selector: &str, values_json: &str) -> PyResult<String> {
+        let values: std::collections::HashMap<String, String> =
+            serde_json::from_str(values_json).map_err(py_err)?;
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::form_filler::fill_form(
+                page,
+                form_selector,
+                &values,
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Auto-fill a form using a profile.
+    fn auto_fill_form(&self, form_selector: &str, profile_json: &str) -> PyResult<String> {
+        let profile: std::collections::HashMap<String, String> =
+            serde_json::from_str(profile_json).map_err(py_err)?;
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::form_filler::auto_fill(
+                page,
+                form_selector,
+                &profile,
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Submit a form.
+    fn submit_form(&self, form_selector: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::form_filler::submit_form(page, form_selector))
+            .map_err(py_err)
+    }
+
+    // ── Human-like Behavior ───────────────────────────────────────────
+
+    /// Perform a human-like click on an element.
+    fn human_click(&self, selector: &str) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::human::human_click(page, selector))
+            .map_err(py_err)
+    }
+
+    /// Move mouse along a Bézier curve.
+    fn mouse_move_bezier(&self, x0: f64, y0: f64, x1: f64, y1: f64) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::human::mouse_move_bezier(page, x0, y0, x1, y1))
+            .map_err(py_err)
+    }
+
+    /// Perform a human-like scroll.
+    fn human_scroll(&self, dx: i64, dy: i64) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::human::human_scroll(page, dx, dy))
+            .map_err(py_err)
+    }
+
+    /// Apply a pre-action delay for human-like behavior.
+    fn human_pre_delay(&self) -> PyResult<()> {
+        self.rt.block_on(onecrawl_cdp::human::pre_action_delay());
+        Ok(())
+    }
+
+    /// Apply a post-action delay for human-like behavior.
+    fn human_post_delay(&self) -> PyResult<()> {
+        self.rt.block_on(onecrawl_cdp::human::post_action_delay());
+        Ok(())
+    }
+
+    /// Check if a Cloudflare challenge is present.
+    fn is_cloudflare_challenge(&self) -> PyResult<bool> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        Ok(self
+            .rt
+            .block_on(onecrawl_cdp::human::is_cloudflare_challenge(page)))
+    }
+
+    /// Wait for Cloudflare clearance.
+    #[pyo3(signature = (timeout_ms=30000))]
+    fn wait_for_cf_clearance(&self, timeout_ms: u64) -> PyResult<bool> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        Ok(self
+            .rt
+            .block_on(onecrawl_cdp::human::wait_for_cf_clearance(
+                page, timeout_ms,
+            )))
+    }
+
+    // ── Smart Actions ─────────────────────────────────────────────────
+
+    /// Find elements using natural language query.
+    fn smart_find(&self, query: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::smart_actions::smart_find(page, query))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Click an element using natural language query.
+    fn smart_click(&self, query: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::smart_actions::smart_click(page, query))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Fill an element using natural language query.
+    fn smart_fill(&self, query: &str, value: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::smart_actions::smart_fill(page, query, value))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ── SPA Helpers ───────────────────────────────────────────────────
+
+    /// Detect virtual scroll containers.
+    fn detect_virtual_scroll(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::spa::detect_virtual_scroll(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Extract items from a virtual scroll container.
+    fn extract_virtual_scroll(
+        &self,
+        container_selector: &str,
+        item_selector: &str,
+        max_items: usize,
+    ) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::spa::extract_virtual_scroll(
+                page,
+                container_selector,
+                item_selector,
+                max_items,
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Wait for SPA hydration to complete.
+    #[pyo3(signature = (timeout_ms=10000))]
+    fn wait_hydration(&self, timeout_ms: u64) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::spa::wait_hydration(page, timeout_ms))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Wait for CSS animations/transitions to finish.
+    #[pyo3(signature = (selector, timeout_ms=5000))]
+    fn wait_animations(&self, selector: &str, timeout_ms: u64) -> PyResult<bool> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::spa::wait_animations(
+                page, selector, timeout_ms,
+            ))
+            .map_err(py_err)
+    }
+
+    /// Wait for network to become idle.
+    #[pyo3(signature = (idle_ms=500, timeout_ms=30000))]
+    fn wait_network_idle(&self, idle_ms: u64, timeout_ms: u64) -> PyResult<bool> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::spa::wait_network_idle(
+                page, idle_ms, timeout_ms,
+            ))
+            .map_err(py_err)
+    }
+
+    /// Trigger lazy loading for elements matching a selector.
+    fn trigger_lazy_load(&self, selector: &str) -> PyResult<usize> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::spa::trigger_lazy_load(page, selector))
+            .map_err(py_err)
+    }
+
+    /// Inspect SPA state store.
+    fn state_inspect(&self, store_path: Option<&str>) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::spa::state_inspect(page, store_path))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Track multi-step form wizard state.
+    fn form_wizard_track(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::spa::form_wizard_track(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Wait for a dynamic import to load.
+    #[pyo3(signature = (module_pattern, timeout_ms=10000))]
+    fn dynamic_import_wait(&self, module_pattern: &str, timeout_ms: u64) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::spa::dynamic_import_wait(
+                page,
+                module_pattern,
+                timeout_ms,
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Execute multiple actions in parallel.
+    fn parallel_exec(&self, actions_json: &str) -> PyResult<String> {
+        let actions: Vec<String> = serde_json::from_str(actions_json).map_err(py_err)?;
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::spa::parallel_exec(page, &actions))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ── Harness ───────────────────────────────────────────────────────
+
+    /// Run a health check on the browser connection.
+    fn health_check(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::harness::health_check(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Reconnect CDP session.
+    #[pyo3(signature = (max_retries=3))]
+    fn reconnect_cdp(&self, max_retries: usize) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::harness::reconnect_cdp(page, max_retries))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Save a checkpoint.
+    fn checkpoint_save(&self, path: &str, name: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::harness::checkpoint_save(page, path, name))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Restore a checkpoint.
+    fn checkpoint_restore(&self, path: &str, name: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::harness::checkpoint_restore(page, path, name))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Get tab GC info.
+    fn gc_tabs_info(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::harness::gc_tabs_info(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Get watchdog status.
+    fn watchdog_status(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::harness::watchdog_status(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ── Screencast ────────────────────────────────────────────────────
+
+    /// Start a screencast session.
+    #[pyo3(signature = (format=None, quality=None, max_width=None, max_height=None, every_nth_frame=None))]
+    fn start_screencast(
+        &self,
+        format: Option<&str>,
+        quality: Option<u32>,
+        max_width: Option<u32>,
+        max_height: Option<u32>,
+        every_nth_frame: Option<u32>,
+    ) -> PyResult<()> {
+        let opts = onecrawl_cdp::screencast::ScreencastOptions {
+            format: format.unwrap_or("png").to_string(),
+            quality,
+            max_width,
+            max_height,
+            every_nth_frame,
+        };
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::screencast::start_screencast(page, &opts))
+            .map_err(py_err)
+    }
+
+    /// Stop the screencast session.
+    fn stop_screencast(&self) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::screencast::stop_screencast(page))
+            .map_err(py_err)
+    }
+
+    /// Capture a single frame.
+    #[pyo3(signature = (format=None, quality=None))]
+    fn capture_frame(&self, format: Option<&str>, quality: Option<u32>) -> PyResult<Vec<u8>> {
+        let opts = onecrawl_cdp::screencast::ScreencastOptions {
+            format: format.unwrap_or("png").to_string(),
+            quality,
+            max_width: None,
+            max_height: None,
+            every_nth_frame: Some(1),
+        };
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::screencast::capture_frame(page, &opts))
+            .map_err(py_err)
+    }
+
+    /// Capture multiple frames in burst mode.
+    #[pyo3(signature = (count=5, interval_ms=200))]
+    fn capture_frames_burst(
+        &self,
+        count: usize,
+        interval_ms: u64,
+    ) -> PyResult<Vec<Vec<u8>>> {
+        let opts = onecrawl_cdp::screencast::ScreencastOptions {
+            format: "png".to_string(),
+            quality: Some(80),
+            max_width: None,
+            max_height: None,
+            every_nth_frame: Some(1),
+        };
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::screencast::capture_frames_burst(
+                page,
+                &opts,
+                count,
+                interval_ms,
+            ))
+            .map_err(py_err)
+    }
+
+    /// Stream captured frames to disk.
+    #[pyo3(signature = (output_dir, count=10, interval_ms=200, format=None))]
+    fn stream_to_disk(
+        &self,
+        output_dir: &str,
+        count: usize,
+        interval_ms: u64,
+        format: Option<&str>,
+    ) -> PyResult<String> {
+        let opts = onecrawl_cdp::screencast::ScreencastOptions {
+            format: format.unwrap_or("png").to_string(),
+            quality: Some(80),
+            max_width: None,
+            max_height: None,
+            every_nth_frame: Some(1),
+        };
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::screencast::stream_to_disk(
+                page,
+                &opts,
+                output_dir,
+                count,
+                interval_ms,
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ── Recording ─────────────────────────────────────────────────────
+
+    /// Encode frames into a video file.
+    #[pyo3(signature = (frames_dir, output, fps=30, format="mp4"))]
+    fn recording_encode(
+        &self,
+        frames_dir: &str,
+        output: &str,
+        fps: u32,
+        format: &str,
+    ) -> PyResult<String> {
+        let result = onecrawl_cdp::recording::encode_video(frames_dir, output, fps, format)
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Save frames and encode into a video.
+    #[pyo3(signature = (frames_json, output_dir, output, fps=30, format="mp4"))]
+    fn recording_save_and_encode(
+        &self,
+        frames_json: &str,
+        output_dir: &str,
+        output: &str,
+        fps: u32,
+        format: &str,
+    ) -> PyResult<String> {
+        let frames: Vec<Vec<u8>> = serde_json::from_str(frames_json).map_err(py_err)?;
+        let result = onecrawl_cdp::recording::save_and_encode(
+            &frames, output_dir, output, fps, format,
+        )
+        .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ── Agent ─────────────────────────────────────────────────────────
+
+    /// Run an agent loop toward a goal.
+    #[pyo3(signature = (goal, max_steps=10, verify_js=None))]
+    fn agent_loop(
+        &self,
+        goal: &str,
+        max_steps: usize,
+        verify_js: Option<&str>,
+    ) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::agent::agent_loop(
+                page, goal, max_steps, verify_js,
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Assert goals against the page.
+    fn goal_assert(&self, assertions_json: &str) -> PyResult<String> {
+        let pairs: Vec<(String, String)> =
+            serde_json::from_str(assertions_json).map_err(py_err)?;
+        let refs: Vec<(&str, &str)> = pairs.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::agent::goal_assert(page, &refs))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Get an annotated observation of the page.
+    fn annotated_observe(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::agent::annotated_observe(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Manage agent session context.
+    #[pyo3(signature = (command, key=None, value=None))]
+    fn session_context(
+        &self,
+        command: &str,
+        key: Option<&str>,
+        value: Option<&str>,
+    ) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::agent::session_context(
+                page, command, key, value,
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Chain actions with error recovery.
+    #[pyo3(signature = (actions_json, on_error="retry", max_retries=3))]
+    fn auto_chain(
+        &self,
+        actions_json: &str,
+        on_error: &str,
+        max_retries: usize,
+    ) -> PyResult<String> {
+        let actions: Vec<String> = serde_json::from_str(actions_json).map_err(py_err)?;
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::agent::auto_chain(
+                page,
+                &actions,
+                on_error,
+                max_retries,
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Agent think step — observe and plan.
+    fn think(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::agent::think(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Click at specific coordinates.
+    fn click_at_coords(&self, x: f64, y: f64) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::agent::click_at_coords(page, x, y))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Replay input events.
+    fn input_replay(&self, events_json: &str) -> PyResult<String> {
+        let events: Vec<serde_json::Value> =
+            serde_json::from_str(events_json).map_err(py_err)?;
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::agent::input_replay(page, &events))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ── Annotated Screenshots ─────────────────────────────────────────
+
+    /// Take an annotated screenshot of the page.
+    fn annotated_screenshot(&self) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::annotated::annotated_screenshot(page))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Retry an action with adaptive strategies.
+    #[pyo3(signature = (action_js, max_retries=3, strategies_json=None))]
+    fn adaptive_retry(
+        &self,
+        action_js: &str,
+        max_retries: usize,
+        strategies_json: Option<&str>,
+    ) -> PyResult<String> {
+        let strategies: Vec<String> = match strategies_json {
+            Some(s) => serde_json::from_str(s).map_err(py_err)?,
+            None => vec!["wait".into(), "scroll".into(), "reload".into()],
+        };
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::annotated::adaptive_retry(
+                page,
+                action_js,
+                max_retries,
+                &strategies,
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ── Computer Use ──────────────────────────────────────────────────
+
+    /// Observe page for computer-use style interaction.
+    #[pyo3(signature = (last_error=None, include_screenshot=true))]
+    fn computer_use_observe(
+        &self,
+        last_error: Option<&str>,
+        include_screenshot: bool,
+    ) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::computer_use::observe(
+                page,
+                last_error.map(String::from),
+                include_screenshot,
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ── Pixel Diff ────────────────────────────────────────────────────
+
+    /// Compare two base64-encoded images pixel by pixel.
+    #[pyo3(signature = (image_a_b64, image_b_b64, threshold=0.01, generate_diff_image=false))]
+    fn pixel_diff(
+        &self,
+        image_a_b64: &str,
+        image_b_b64: &str,
+        threshold: f64,
+        generate_diff_image: bool,
+    ) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::pixel_diff::pixel_diff(
+                page,
+                image_a_b64,
+                image_b_b64,
+                threshold,
+                generate_diff_image,
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Compare two image files pixel by pixel.
+    #[pyo3(signature = (path_a, path_b, threshold=0.01))]
+    fn pixel_diff_files(
+        &self,
+        path_a: &str,
+        path_b: &str,
+        threshold: f64,
+    ) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::pixel_diff::pixel_diff_files(
+                page, path_a, path_b, threshold,
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ── Screenshot Diff ───────────────────────────────────────────────
+
+    /// Compare two screenshot byte arrays.
+    fn compare_screenshots_bytes(&self, baseline: Vec<u8>, current: Vec<u8>) -> PyResult<String> {
+        let result =
+            onecrawl_cdp::screenshot_diff::compare_screenshots(&baseline, &current)
+                .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Run visual regression against a baseline file.
+    fn visual_regression(&self, baseline_path: &str) -> PyResult<String> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::screenshot_diff::visual_regression(
+                page,
+                std::path::Path::new(baseline_path),
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ── Snapshot Diff ─────────────────────────────────────────────────
+
+    /// Diff two text snapshots.
+    fn diff_snapshots(&self, before: &str, after: &str) -> PyResult<String> {
+        let result =
+            onecrawl_cdp::snapshot_diff::diff_snapshots(before, after);
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ── Workflow Engine ───────────────────────────────────────────────
+
+    /// Validate a workflow definition (JSON or YAML).
+    fn workflow_validate(&self, workflow: &str) -> PyResult<String> {
+        let wf = if workflow.trim_start().starts_with('{') {
+            onecrawl_cdp::workflow::parse_json(workflow).map_err(py_err)?
+        } else {
+            onecrawl_cdp::workflow::parse_yaml(workflow).map_err(py_err)?
+        };
+        let errors = onecrawl_cdp::workflow::validate(&wf);
+        serde_json::to_string(&errors).map_err(py_err)
+    }
+
+    /// Execute a workflow definition (JSON or YAML).
+    fn workflow_execute(&self, workflow: &str) -> PyResult<String> {
+        let wf = if workflow.trim_start().starts_with('{') {
+            onecrawl_cdp::workflow::parse_json(workflow).map_err(py_err)?
+        } else {
+            onecrawl_cdp::workflow::parse_yaml(workflow).map_err(py_err)?
+        };
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::workflow::execute_workflow(page, &wf))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Execute a workflow from a file.
+    fn workflow_execute_file(&self, path: &str) -> PyResult<String> {
+        let wf = onecrawl_cdp::workflow::load_from_file(path).map_err(py_err)?;
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        let result = self
+            .rt
+            .block_on(onecrawl_cdp::workflow::execute_workflow(page, &wf))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ── Task Planner ──────────────────────────────────────────────────
+
+    /// Plan tasks from a goal description.
+    #[pyo3(signature = (goal, context_json=None))]
+    fn task_plan(&self, goal: &str, context_json: Option<&str>) -> PyResult<String> {
+        let context: std::collections::HashMap<String, String> = match context_json {
+            Some(c) => serde_json::from_str(c).map_err(py_err)?,
+            None => std::collections::HashMap::new(),
+        };
+        let result =
+            onecrawl_cdp::task_planner::plan_from_goal(goal, &context);
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// List built-in task patterns.
+    fn task_patterns(&self) -> PyResult<String> {
+        let result = onecrawl_cdp::task_planner::builtin_patterns();
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Match a goal to a task category.
+    fn task_match_goal(&self, goal: &str) -> PyResult<String> {
+        let (cat, steps) = onecrawl_cdp::task_planner::match_goal(goal);
+        let result = serde_json::json!({
+            "category": format!("{:?}", cat),
+            "steps": steps,
+        });
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ── Network Intelligence ──────────────────────────────────────────
+
+    /// Classify a network request.
+    fn net_classify_request(
+        &self,
+        url: &str,
+        content_type: Option<&str>,
+        method: &str,
+    ) -> PyResult<String> {
+        let cat = onecrawl_cdp::network_intel::classify_request(url, content_type, method);
+        Ok(format!("{:?}", cat))
+    }
+
+    /// Infer a JSON schema from a JSON value.
+    fn net_infer_schema(&self, json_value: &str) -> PyResult<String> {
+        let value: serde_json::Value = serde_json::from_str(json_value).map_err(py_err)?;
+        let schema = onecrawl_cdp::network_intel::infer_json_schema(&value);
+        serde_json::to_string(&schema).map_err(py_err)
+    }
+
+    // ── Performance Monitor ───────────────────────────────────────────
+
+    /// Get the performance metrics collection JavaScript.
+    fn perf_metrics_js(&self) -> String {
+        onecrawl_cdp::perf_monitor::metrics_collection_js().to_string()
+    }
+
+    // ── VRT ───────────────────────────────────────────────────────────
+
+    /// Compare two images and return similarity score.
+    fn vrt_compare_images(&self, baseline: Vec<u8>, current: Vec<u8>) -> f64 {
+        onecrawl_cdp::vrt::compare_images(&baseline, &current)
+    }
+
+    /// Load a VRT test suite from a file.
+    fn vrt_load_suite(&self, path: &str) -> PyResult<String> {
+        let suite = onecrawl_cdp::vrt::load_suite(path).map_err(py_err)?;
+        serde_json::to_string(&suite).map_err(py_err)
+    }
+
+    /// Save a baseline image.
+    fn vrt_save_baseline(&self, dir: &str, test_name: &str, data: Vec<u8>) -> PyResult<String> {
+        let path =
+            onecrawl_cdp::vrt::save_baseline(dir, test_name, &data).map_err(py_err)?;
+        Ok(path.to_string_lossy().to_string())
+    }
+
+    /// Load a baseline image.
+    fn vrt_load_baseline(&self, dir: &str, test_name: &str) -> Option<Vec<u8>> {
+        onecrawl_cdp::vrt::load_baseline(dir, test_name)
+    }
+
+    /// Validate a VRT suite definition.
+    fn vrt_validate_suite(&self, suite_json: &str) -> PyResult<String> {
+        let suite: onecrawl_cdp::vrt::VrtSuite =
+            serde_json::from_str(suite_json).map_err(py_err)?;
+        let errors = onecrawl_cdp::vrt::validate_suite(&suite);
+        serde_json::to_string(&errors).map_err(py_err)
+    }
+
+    // ── Sitemap ───────────────────────────────────────────────────────
+
+    /// Parse a sitemap XML string.
+    fn sitemap_parse(&self, xml: &str) -> PyResult<String> {
+        let result = onecrawl_cdp::sitemap::parse_sitemap(xml).map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Generate a sitemap XML string.
+    fn sitemap_generate(&self, entries_json: &str, config_json: &str) -> PyResult<String> {
+        let entries: Vec<onecrawl_cdp::sitemap::SitemapEntry> =
+            serde_json::from_str(entries_json).map_err(py_err)?;
+        let config: onecrawl_cdp::sitemap::SitemapConfig =
+            serde_json::from_str(config_json).map_err(py_err)?;
+        Ok(onecrawl_cdp::sitemap::generate_sitemap(&entries, &config))
+    }
+
+    /// Save a sitemap to a file.
+    fn sitemap_save(
+        &self,
+        entries_json: &str,
+        config_json: &str,
+        path: &str,
+    ) -> PyResult<usize> {
+        let entries: Vec<onecrawl_cdp::sitemap::SitemapEntry> =
+            serde_json::from_str(entries_json).map_err(py_err)?;
+        let config: onecrawl_cdp::sitemap::SitemapConfig =
+            serde_json::from_str(config_json).map_err(py_err)?;
+        onecrawl_cdp::sitemap::save_sitemap(&entries, &config, std::path::Path::new(path))
+            .map_err(py_err)
+    }
+
+    /// Generate a sitemap from crawl results.
+    fn sitemap_from_crawl(
+        &self,
+        results_json: &str,
+        config_json: &str,
+    ) -> PyResult<String> {
+        let results: Vec<onecrawl_cdp::spider::CrawlResult> =
+            serde_json::from_str(results_json).map_err(py_err)?;
+        let config: onecrawl_cdp::sitemap::SitemapConfig =
+            serde_json::from_str(config_json).map_err(py_err)?;
+        let entries = onecrawl_cdp::sitemap::from_crawl_results(&results, &config);
+        serde_json::to_string(&entries).map_err(py_err)
+    }
+
+    /// Generate a sitemap index from URLs.
+    fn sitemap_index(&self, urls_json: &str) -> PyResult<String> {
+        let urls: Vec<String> = serde_json::from_str(urls_json).map_err(py_err)?;
+        Ok(onecrawl_cdp::sitemap::generate_sitemap_index(&urls))
+    }
+
+    // ── Skills ────────────────────────────────────────────────────────
+
+    /// List built-in skills.
+    fn skills_list_builtins(&self) -> PyResult<String> {
+        let result = onecrawl_cdp::skills::SkillRegistry::builtins();
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    // ── Stealth Extras ────────────────────────────────────────────────
+
+    /// Inject persistent stealth patches.
+    fn inject_persistent_stealth(&self, real_ua: Option<&str>) -> PyResult<()> {
+        let guard = self.page.lock().map_err(py_err)?;
+        let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;
+        self.rt
+            .block_on(onecrawl_cdp::stealth::inject_persistent_stealth(
+                page, real_ua,
+            ))
+            .map_err(py_err)
+    }
+}
+
+// ──────────────────────────── IosClient ────────────────────────────
+
+#[pyclass]
+struct IosClient {
+    rt: Arc<tokio::runtime::Runtime>,
+    inner: Arc<std::sync::Mutex<onecrawl_cdp::ios::IosClient>>,
+}
+
+#[pymethods]
+impl IosClient {
+    /// Connect to an iOS device via WebDriverAgent.
+    #[staticmethod]
+    fn connect(wda_url: &str, bundle_id: &str) -> PyResult<Self> {
+        let rt = tokio::runtime::Runtime::new().map_err(py_err)?;
+        let config = onecrawl_cdp::ios::IosSessionConfig {
+            wda_url: wda_url.to_string(),
+            device_udid: None,
+            bundle_id: bundle_id.to_string(),
+        };
+        let mut client = onecrawl_cdp::ios::IosClient::new(config);
+        rt.block_on(client.create_session()).map_err(py_err)?;
+        Ok(Self {
+            rt: Arc::new(rt),
+            inner: Arc::new(std::sync::Mutex::new(client)),
+        })
+    }
+
+    /// List available iOS devices.
+    #[staticmethod]
+    fn list_devices() -> PyResult<String> {
+        let devices = onecrawl_cdp::ios::IosClient::list_devices()
+            .map_err(py_err)?;
+        serde_json::to_string(&devices).map_err(py_err)
+    }
+
+    /// Navigate to a URL.
+    fn navigate(&self, url: &str) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.navigate(url))
+            .map_err(py_err)
+    }
+
+    /// Tap at coordinates.
+    fn tap(&self, x: f64, y: f64) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt.block_on(client.tap(x, y)).map_err(py_err)
+    }
+
+    /// Take a screenshot.
+    fn screenshot(&self) -> PyResult<Vec<u8>> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.screenshot())
+            .map_err(py_err)
+    }
+
+    /// Swipe from one point to another.
+    fn swipe(&self, x0: f64, y0: f64, x1: f64, y1: f64, duration: f64) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.swipe(x0, y0, x1, y1, duration))
+            .map_err(py_err)
+    }
+
+    /// Pinch gesture.
+    fn pinch(&self, x: f64, y: f64, scale: f64, velocity: f64) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.pinch(x, y, scale, velocity))
+            .map_err(py_err)
+    }
+
+    /// Long press at coordinates.
+    fn long_press(&self, x: f64, y: f64, duration_ms: u64) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.long_press(x, y, duration_ms))
+            .map_err(py_err)
+    }
+
+    /// Double tap at coordinates.
+    fn double_tap(&self, x: f64, y: f64) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.double_tap(x, y))
+            .map_err(py_err)
+    }
+
+    /// Set device orientation.
+    fn set_orientation(&self, orientation: &str) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.set_orientation(orientation))
+            .map_err(py_err)
+    }
+
+    /// Get device orientation.
+    fn get_orientation(&self) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.get_orientation())
+            .map_err(py_err)
+    }
+
+    /// Scroll to an element.
+    fn scroll_to_element(&self, using: &str, value: &str) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.scroll_to_element(using, value))
+            .map_err(py_err)
+    }
+
+    /// Execute a script.
+    fn execute_script(&self, script: &str, args_json: Option<&str>) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        let args: Vec<serde_json::Value> = match args_json {
+            Some(a) => serde_json::from_str(a).map_err(py_err)?,
+            None => Vec::new(),
+        };
+        let result = self
+            .rt
+            .block_on(client.execute_script(script, &args))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Get cookies.
+    fn get_cookies(&self) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(client.get_cookies())
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Launch an app by bundle ID.
+    fn launch_app(&self, bundle_id: &str) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.launch_app(bundle_id))
+            .map_err(py_err)
+    }
+
+    /// Kill a running app.
+    fn kill_app(&self, bundle_id: &str) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.terminate_app(bundle_id))
+            .map_err(py_err)
+    }
+
+    /// Get app state.
+    fn app_state(&self, bundle_id: &str) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(client.app_state(bundle_id))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Lock the device.
+    fn lock_device(&self) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.lock_device())
+            .map_err(py_err)
+    }
+
+    /// Unlock the device.
+    fn unlock_device(&self) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.unlock_device())
+            .map_err(py_err)
+    }
+
+    /// Press the home button.
+    fn home_button(&self) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.home_button())
+            .map_err(py_err)
+    }
+
+    /// Press a named button.
+    fn press_button(&self, button: &str) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.press_button(button))
+            .map_err(py_err)
+    }
+
+    /// Get battery info.
+    fn battery_info(&self) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(client.battery_info())
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Get device info.
+    fn device_info(&self) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(client.device_info())
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Get the current URL.
+    fn get_url(&self) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.get_url())
+            .map_err(py_err)
+    }
+
+    /// Get the page title.
+    fn get_title(&self) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.get_title())
+            .map_err(py_err)
+    }
+
+    /// Get screen size.
+    fn get_screen_size(&self) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(client.get_screen_size())
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Find an element by selector.
+    fn find_element(&self, using: &str, value: &str) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(client.find_element(using, value))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Click an element by ID.
+    fn click_element(&self, element_id: &str) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.click_element(element_id))
+            .map_err(py_err)
+    }
+
+    /// Type text into an element.
+    fn type_text(&self, element_id: &str, text: &str) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.type_text(element_id, text))
+            .map_err(py_err)
+    }
+
+    /// Get the page source.
+    fn page_source(&self) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.page_source())
+            .map_err(py_err)
+    }
+
+    /// Perform a simulator action.
+    #[staticmethod]
+    fn simulator_action(
+        action: &str,
+        udid: Option<&str>,
+        device_type: Option<&str>,
+        runtime: Option<&str>,
+    ) -> PyResult<String> {
+        let rt = tokio::runtime::Runtime::new().map_err(py_err)?;
+        let result = rt
+            .block_on(onecrawl_cdp::ios::IosClient::simulator_action(
+                action,
+                udid,
+                device_type,
+                runtime,
+            ))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Close the client session.
+    fn close(&self) -> PyResult<()> {
+        let mut client = self.inner.lock().map_err(py_err)?;
+        self.rt.block_on(client.close_session()).map_err(py_err)
+    }
+}
+
+// ──────────────────────────── AndroidClient ────────────────────────────
+
+#[pyclass]
+struct AndroidClient {
+    rt: Arc<tokio::runtime::Runtime>,
+    inner: Arc<std::sync::Mutex<onecrawl_cdp::android::AndroidClient>>,
+}
+
+#[pymethods]
+impl AndroidClient {
+    /// Connect to an Android device.
+    #[staticmethod]
+    #[pyo3(signature = (server_url, package, device_serial=None, activity=None))]
+    fn connect(
+        server_url: &str,
+        package: &str,
+        device_serial: Option<&str>,
+        activity: Option<&str>,
+    ) -> PyResult<Self> {
+        let rt = tokio::runtime::Runtime::new().map_err(py_err)?;
+        let config = onecrawl_cdp::android::AndroidSessionConfig {
+            server_url: server_url.to_string(),
+            device_serial: device_serial.map(String::from),
+            package: package.to_string(),
+            activity: activity.map(String::from),
+        };
+        let mut client = onecrawl_cdp::android::AndroidClient::new(config);
+        rt.block_on(client.create_session(None, activity))
+            .map_err(py_err)?;
+        Ok(Self {
+            rt: Arc::new(rt),
+            inner: Arc::new(std::sync::Mutex::new(client)),
+        })
+    }
+
+    /// List available Android devices.
+    #[staticmethod]
+    fn list_devices() -> PyResult<String> {
+        let rt = tokio::runtime::Runtime::new().map_err(py_err)?;
+        let devices = rt
+            .block_on(onecrawl_cdp::android::AndroidClient::list_devices())
+            .map_err(py_err)?;
+        serde_json::to_string(&devices).map_err(py_err)
+    }
+
+    /// Navigate to a URL.
+    fn navigate(&self, url: &str) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.navigate(url))
+            .map_err(py_err)
+    }
+
+    /// Get the current URL.
+    fn get_url(&self) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.get_url())
+            .map_err(py_err)
+    }
+
+    /// Get the page title.
+    fn get_title(&self) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.get_title())
+            .map_err(py_err)
+    }
+
+    /// Go back.
+    fn back(&self) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt.block_on(client.back()).map_err(py_err)
+    }
+
+    /// Tap at coordinates.
+    fn tap(&self, x: f64, y: f64) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt.block_on(client.tap(x, y)).map_err(py_err)
+    }
+
+    /// Swipe from one point to another.
+    fn swipe(&self, x0: f64, y0: f64, x1: f64, y1: f64, duration_ms: u64) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.swipe(x0, y0, x1, y1, duration_ms))
+            .map_err(py_err)
+    }
+
+    /// Long press at coordinates.
+    fn long_press(&self, x: f64, y: f64, duration_ms: u64) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.long_press(x, y, duration_ms))
+            .map_err(py_err)
+    }
+
+    /// Double tap at coordinates.
+    fn double_tap(&self, x: f64, y: f64) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.double_tap(x, y))
+            .map_err(py_err)
+    }
+
+    /// Pinch gesture.
+    fn pinch(&self, x: f64, y: f64, scale: f64) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.pinch(x, y, scale))
+            .map_err(py_err)
+    }
+
+    /// Type text.
+    fn type_text(&self, text: &str) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.type_text(text))
+            .map_err(py_err)
+    }
+
+    /// Find an element by strategy and value.
+    fn find_element(&self, strategy: &str, value: &str) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(client.find_element(strategy, value))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Click an element by ID.
+    fn click_element(&self, element_id: &str) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.click_element(element_id))
+            .map_err(py_err)
+    }
+
+    /// Take a screenshot (returns base64 PNG).
+    fn screenshot(&self) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.screenshot())
+            .map_err(py_err)
+    }
+
+    /// Set device orientation.
+    fn set_orientation(&self, orientation: &str) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.set_orientation(orientation))
+            .map_err(py_err)
+    }
+
+    /// Get device orientation.
+    fn get_orientation(&self) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.get_orientation())
+            .map_err(py_err)
+    }
+
+    /// Press a hardware key.
+    fn press_key(&self, keycode: i32) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.press_key(keycode))
+            .map_err(py_err)
+    }
+
+    /// Launch an app.
+    fn launch_app(&self, package: &str, activity: Option<&str>) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.launch_app(package, activity))
+            .map_err(py_err)
+    }
+
+    /// Kill a running app.
+    fn kill_app(&self, package: &str) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.terminate_app(package))
+            .map_err(py_err)
+    }
+
+    /// Get app state.
+    fn app_state(&self, package: &str) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        let result = self
+            .rt
+            .block_on(client.app_state(package))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Install an APK.
+    fn install_app(&self, apk_path: &str) -> PyResult<()> {
+        let client = self.inner.lock().map_err(py_err)?;
+        self.rt
+            .block_on(client.install_app(apk_path))
+            .map_err(py_err)
+    }
+
+    /// Execute a script.
+    fn execute_script(&self, script: &str, args_json: Option<&str>) -> PyResult<String> {
+        let client = self.inner.lock().map_err(py_err)?;
+        let args: Vec<serde_json::Value> = match args_json {
+            Some(a) => serde_json::from_str(a).map_err(py_err)?,
+            None => Vec::new(),
+        };
+        let result = self
+            .rt
+            .block_on(client.execute_script(script, &args))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Run an ADB shell command.
+    #[staticmethod]
+    fn shell(serial: &str, command: &str) -> PyResult<String> {
+        let rt = tokio::runtime::Runtime::new().map_err(py_err)?;
+        rt.block_on(onecrawl_cdp::android::AndroidClient::shell(serial, command))
+            .map_err(py_err)
+    }
+
+    /// Push a file to the device.
+    #[staticmethod]
+    fn push_file(serial: &str, local: &str, remote: &str) -> PyResult<()> {
+        let rt = tokio::runtime::Runtime::new().map_err(py_err)?;
+        rt.block_on(onecrawl_cdp::android::AndroidClient::push_file(serial, local, remote))
+            .map_err(py_err)
+    }
+
+    /// Pull a file from the device.
+    #[staticmethod]
+    fn pull_file(serial: &str, remote: &str, local: &str) -> PyResult<()> {
+        let rt = tokio::runtime::Runtime::new().map_err(py_err)?;
+        rt.block_on(onecrawl_cdp::android::AndroidClient::pull_file(serial, remote, local))
+            .map_err(py_err)
+    }
+
+    /// Get device info.
+    #[staticmethod]
+    fn device_info(serial: &str) -> PyResult<String> {
+        let rt = tokio::runtime::Runtime::new().map_err(py_err)?;
+        let result = rt
+            .block_on(onecrawl_cdp::android::AndroidClient::device_info(serial))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Get battery info.
+    #[staticmethod]
+    fn battery_info(serial: &str) -> PyResult<String> {
+        let rt = tokio::runtime::Runtime::new().map_err(py_err)?;
+        let result = rt
+            .block_on(onecrawl_cdp::android::AndroidClient::battery_info(serial))
+            .map_err(py_err)?;
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Close the client session.
+    fn close(&self) -> PyResult<()> {
+        let mut client = self.inner.lock().map_err(py_err)?;
+        self.rt.block_on(client.close_session()).map_err(py_err)
+    }
+}
+
+// ──────────────────────────── AgentMemory ────────────────────────────
+
+#[pyclass]
+struct AgentMemory {
+    inner: std::sync::Mutex<onecrawl_cdp::agent_memory::AgentMemory>,
+}
+
+#[pymethods]
+impl AgentMemory {
+    /// Create a new empty agent memory.
+    #[new]
+    fn new(path: &str) -> PyResult<Self> {
+        let mem = onecrawl_cdp::agent_memory::AgentMemory::new(path);
+        Ok(Self {
+            inner: std::sync::Mutex::new(mem),
+        })
+    }
+
+    /// Load agent memory from a file.
+    #[staticmethod]
+    fn load(path: &str) -> PyResult<Self> {
+        let mem =
+            onecrawl_cdp::agent_memory::AgentMemory::load(path).map_err(py_err)?;
+        Ok(Self {
+            inner: std::sync::Mutex::new(mem),
+        })
+    }
+
+    /// Store a key-value pair with category and optional domain.
+    #[pyo3(signature = (key, value_json, category, domain=None))]
+    fn store(
+        &self,
+        key: &str,
+        value_json: &str,
+        category: &str,
+        domain: Option<&str>,
+    ) -> PyResult<()> {
+        let mut mem = self.inner.lock().map_err(py_err)?;
+        let value: serde_json::Value = serde_json::from_str(value_json).map_err(py_err)?;
+        let cat: onecrawl_cdp::agent_memory::MemoryCategory =
+            serde_json::from_str(&format!("\"{}\"", category)).map_err(py_err)?;
+        mem.store(key, value, cat, domain.map(String::from))
+            .map_err(py_err)
+    }
+
+    /// Recall a value by key.
+    fn recall(&self, key: &str) -> PyResult<Option<String>> {
+        let mut mem = self.inner.lock().map_err(py_err)?;
+        match mem.recall(key) {
+            Some(entry) => Ok(Some(serde_json::to_string(entry).map_err(py_err)?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Search memory by query with optional category and domain filters.
+    #[pyo3(signature = (query, category=None, domain=None))]
+    fn search(
+        &self,
+        query: &str,
+        category: Option<&str>,
+        domain: Option<&str>,
+    ) -> PyResult<String> {
+        let mem = self.inner.lock().map_err(py_err)?;
+        let cat: Option<onecrawl_cdp::agent_memory::MemoryCategory> = match category {
+            Some(c) => Some(serde_json::from_str(&format!("\"{}\"", c)).map_err(py_err)?),
+            None => None,
+        };
+        let results = mem.search(query, cat, domain);
+        serde_json::to_string(&results).map_err(py_err)
+    }
+
+    /// Forget a specific key.
+    fn forget(&self, key: &str) -> PyResult<bool> {
+        let mut mem = self.inner.lock().map_err(py_err)?;
+        Ok(mem.forget(key))
+    }
+
+    /// Clear all entries in a domain.
+    fn clear_domain(&self, domain: &str) -> PyResult<usize> {
+        let mut mem = self.inner.lock().map_err(py_err)?;
+        Ok(mem.clear_domain(domain))
+    }
+
+    /// Clear all memory.
+    fn clear_all(&self) -> PyResult<usize> {
+        let mut mem = self.inner.lock().map_err(py_err)?;
+        Ok(mem.clear_all())
+    }
+
+    /// Get memory statistics.
+    fn stats(&self) -> PyResult<String> {
+        let mem = self.inner.lock().map_err(py_err)?;
+        let result = mem.stats();
+        serde_json::to_string(&result).map_err(py_err)
+    }
+
+    /// Save memory to disk.
+    fn save(&self) -> PyResult<()> {
+        let mem = self.inner.lock().map_err(py_err)?;
+        mem.save().map_err(py_err)
+    }
 }
 
 // ──────────────────────────── Module ────────────────────────────
@@ -3481,6 +5206,9 @@ fn onecrawl(m: &Bound<'_, PyModule>) -> PyResult<()> {
     register_parser(m)?;
     m.add_class::<Store>()?;
     m.add_class::<Browser>()?;
+    m.add_class::<IosClient>()?;
+    m.add_class::<AndroidClient>()?;
+    m.add_class::<AgentMemory>()?;
     m.add_function(wrap_pyfunction!(start_server, m)?)?;
     Ok(())
 }
