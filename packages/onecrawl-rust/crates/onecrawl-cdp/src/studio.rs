@@ -3,6 +3,16 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+/// Validate that an ID contains only safe characters: `[a-zA-Z0-9_-]`.
+/// Prevents path traversal and XSS when IDs are embedded in HTML/JS contexts.
+fn is_safe_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 128
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
 /// Workflow template for the studio.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkflowTemplate {
@@ -194,8 +204,8 @@ impl StudioWorkspace {
 
     /// Save a project.
     pub fn save_project(&self, project: &StudioProject) -> Result<(), String> {
-        if project.id.contains('/') || project.id.contains('\\') || project.id.contains("..") {
-            return Err("Invalid project ID".into());
+        if !is_safe_id(&project.id) {
+            return Err("Invalid project ID: only alphanumeric, dash, and underscore allowed".into());
         }
         let path = self.workspace_dir.join(format!("{}.json", project.id));
         let content = serde_json::to_string_pretty(project).map_err(|e| e.to_string())?;
@@ -204,8 +214,8 @@ impl StudioWorkspace {
 
     /// Load a project.
     pub fn load_project(&self, id: &str) -> Result<StudioProject, String> {
-        if id.contains('/') || id.contains('\\') || id.contains("..") {
-            return Err("Invalid project ID".into());
+        if !is_safe_id(id) {
+            return Err("Invalid project ID: only alphanumeric, dash, and underscore allowed".into());
         }
         let path = self.workspace_dir.join(format!("{}.json", id));
         let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
@@ -232,8 +242,8 @@ impl StudioWorkspace {
 
     /// Delete a project.
     pub fn delete_project(&self, id: &str) -> Result<(), String> {
-        if id.contains('/') || id.contains('\\') || id.contains("..") {
-            return Err("Invalid project ID".into());
+        if !is_safe_id(id) {
+            return Err("Invalid project ID: only alphanumeric, dash, and underscore allowed".into());
         }
         let path = self.workspace_dir.join(format!("{}.json", id));
         std::fs::remove_file(path).map_err(|e| e.to_string())

@@ -198,6 +198,9 @@ impl EventBus {
         &self,
         mut sub: WebhookSubscription,
     ) -> Result<String, String> {
+        // Validate webhook URL to prevent SSRF
+        validate_webhook_url(&sub.url)?;
+
         let mut webhooks = self.webhooks.write().await;
         if webhooks.len() >= self.config.max_subscriptions {
             return Err(format!(
@@ -428,6 +431,83 @@ pub fn matches_pattern(event_type: &str, pattern: &str) -> bool {
 // ────────────────────────────────────────────────────────────────────
 //  Utility functions
 // ────────────────────────────────────────────────────────────────────
+
+/// Validate that a webhook URL is safe (no SSRF to internal services).
+fn validate_webhook_url(url: &str) -> Result<(), String> {
+    let parsed = url::Url::parse(url).map_err(|e| format!("invalid webhook URL: {e}"))?;
+
+    match parsed.scheme() {
+        "http" | "https" => {}
+        s => return Err(format!("webhook URL scheme '{s}' not allowed; use http or https")),
+    }
+
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| "webhook URL must have a host".to_string())?;
+
+    // Block well-known internal/metadata hostnames
+    let lower = host.to_ascii_lowercase();
+    const BLOCKED_HOSTS: &[&str] = &[
+        "localhost",
+        "metadata.google.internal",
+        "metadata.internal",
+    ];
+    for blocked in BLOCKED_HOSTS {
+        if lower == *blocked {
+            return Err(format!("webhook URL host '{host}' is not allowed"));
+        }
+    }
+
+    // Block loopback and private IP ranges
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        if ip.is_loopback() || is_private_ip(ip) {
+            return Err(format!(
+                "webhook URL must not target private/loopback address: {ip}"
+            ));
+        }
+    }
+
+    // Also check IPv6 bracket notation (e.g., [::1])
+    if host.starts_with('[') && host.ends_with(']') {
+        if let Ok(ip) = host[1..host.len() - 1].parse::<std::net::IpAddr>() {
+            if ip.is_loopback() || is_private_ip(ip) {
+                return Err(format!(
+                    "webhook URL must not target private/loopback address: {ip}"
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Check if an IP address is in a private/link-local range.
+fn is_private_ip(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            let octets = v4.octets();
+            // 10.0.0.0/8
+            octets[0] == 10
+            // 172.16.0.0/12
+            || (octets[0] == 172 && (16..=31).contains(&octets[1]))
+            // 192.168.0.0/16
+            || (octets[0] == 192 && octets[1] == 168)
+            // 169.254.0.0/16 (link-local / cloud metadata)
+            || (octets[0] == 169 && octets[1] == 254)
+            // 127.0.0.0/8 (covered by is_loopback, but defense in depth)
+            || octets[0] == 127
+        }
+        std::net::IpAddr::V6(v6) => {
+            let segments = v6.segments();
+            // ::1 loopback (covered by is_loopback)
+            v6.is_loopback()
+            // fc00::/7 (unique local)
+            || (segments[0] & 0xfe00) == 0xfc00
+            // fe80::/10 (link-local)
+            || (segments[0] & 0xffc0) == 0xfe80
+        }
+    }
+}
 
 /// Generate a unique event ID using timestamp + atomic counter.
 pub fn generate_id() -> String {

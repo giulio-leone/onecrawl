@@ -65,9 +65,18 @@ pub async fn save_project(
 ) -> ApiResult<SaveProjectResponse> {
     let ws = workspace()?;
 
-    // Validate the project ID
-    if req.id.contains('/') || req.id.contains('\\') || req.id.contains("..") {
-        return Err(api_err(StatusCode::BAD_REQUEST, "Invalid project ID"));
+    // Validate the project ID (alphanumeric, dash, underscore only)
+    if req.id.is_empty()
+        || req.id.len() > 128
+        || !req
+            .id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err(api_err(
+            StatusCode::BAD_REQUEST,
+            "Invalid project ID: only alphanumeric, dash, and underscore allowed",
+        ));
     }
 
     // Check if project exists to preserve created_at

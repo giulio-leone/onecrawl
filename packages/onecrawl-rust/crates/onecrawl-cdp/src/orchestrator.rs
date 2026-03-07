@@ -981,7 +981,7 @@ impl Orchestrator {
     fn interpolate(&self, text: &str) -> String {
         let mut result = String::with_capacity(text.len());
         let mut chars = text.char_indices().peekable();
-        while let Some((i, c)) = chars.next() {
+        while let Some((_i, c)) = chars.next() {
             if c == '$' {
                 if let Some(&(_, '{')) = chars.peek() {
                     chars.next(); // consume '{'
