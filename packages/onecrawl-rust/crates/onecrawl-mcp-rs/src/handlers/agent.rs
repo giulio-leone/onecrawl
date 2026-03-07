@@ -451,29 +451,18 @@ impl OneCrawlMcp {
     }
 
 
+    /// Deprecated: use `agent_recording_start` with `track_recording: false`.
+    /// Kept for backward compatibility — callers should migrate to `recording_start`.
+    #[allow(dead_code)]
     pub(crate) async fn agent_screencast_start(
         &self,
-        p: ScreencastStartParams,
+        _p: ScreencastStartParams,
     ) -> Result<CallToolResult, McpError> {
-        let page = ensure_page(&self.browser).await?;
-        let opts = onecrawl_cdp::screencast::ScreencastOptions {
-            format: p.format.unwrap_or_else(|| "jpeg".into()),
-            quality: p.quality.map(|q| q.min(100)).or(Some(60)),
-            max_width: p.max_width.or(Some(1280)),
-            max_height: p.max_height.or(Some(720)),
-            every_nth_frame: p.every_nth_frame.or(Some(1)),
-        };
-        onecrawl_cdp::screencast::start_screencast(&page, &opts)
-            .await
-            .mcp()?;
-        json_ok(&serde_json::json!({
-            "status": "started",
-            "format": opts.format,
-            "quality": opts.quality,
-            "max_width": opts.max_width,
-            "max_height": opts.max_height,
-            "every_nth_frame": opts.every_nth_frame
-        }))
+        self.agent_recording_start(
+            RecordingStartParams { output: None, fps: None },
+            false,
+        )
+        .await
     }
 
 
@@ -511,15 +500,19 @@ impl OneCrawlMcp {
     }
 
 
+    /// Consolidated screencast/recording handler.
+    /// When `track_recording` is true, initializes `RecordingState` for frame capture.
+    /// When false, starts raw CDP screencast without recording tracking.
     pub(crate) async fn agent_recording_start(
         &self,
         p: RecordingStartParams,
+        track_recording: bool,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let output = p.output.unwrap_or_else(|| "recording.webm".into());
         let fps = p.fps.unwrap_or(5);
 
-        {
+        if track_recording {
             let mut state = self.browser.lock().await;
             if state.recording.as_ref().is_some_and(|r| r.is_recording()) {
                 return Err(mcp_err("recording already in progress"));
@@ -543,11 +536,22 @@ impl OneCrawlMcp {
             .await
             .mcp()?;
 
-        json_ok(&serde_json::json!({
-            "status": "recording",
-            "output": output,
-            "fps": fps
-        }))
+        if track_recording {
+            json_ok(&serde_json::json!({
+                "status": "recording",
+                "output": output,
+                "fps": fps
+            }))
+        } else {
+            json_ok(&serde_json::json!({
+                "status": "started",
+                "format": opts.format,
+                "quality": opts.quality,
+                "max_width": opts.max_width,
+                "max_height": opts.max_height,
+                "every_nth_frame": opts.every_nth_frame
+            }))
+        }
     }
 
 

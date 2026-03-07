@@ -756,8 +756,9 @@ impl OneCrawlMcp {
                 self.agent_skills_list(params)
             }
             AgentAction::ScreencastStart => {
-                let params: ScreencastStartParams = parse_params(v, "screencast_start")?;
-                self.agent_screencast_start(params).await
+                // Alias: delegates to recording_start without tracking state
+                let params: RecordingStartParams = parse_params(v, "screencast_start")?;
+                self.agent_recording_start(params, false).await
             }
             AgentAction::ScreencastStop => {
                 let params: ScreencastStopParams = parse_params(v, "screencast_stop")?;
@@ -769,7 +770,7 @@ impl OneCrawlMcp {
             }
             AgentAction::RecordingStart => {
                 let params: RecordingStartParams = parse_params(v, "recording_start")?;
-                self.agent_recording_start(params).await
+                self.agent_recording_start(params, true).await
             }
             AgentAction::RecordingStop => {
                 let params: RecordingStopParams = parse_params(v, "recording_stop")?;
