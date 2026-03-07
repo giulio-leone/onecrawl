@@ -431,6 +431,8 @@ action_enum!(AutomateAction, "automate", [
     // Standalone workflow execution engine
     WorkflowExecute => "workflow_execute",
     WorkflowStatus => "workflow_status",
+    WorkflowResume => "workflow_resume",
+    AgentDecide => "agent_decide",
 ]);
 
 action_enum!(PerfAction, "perf", [

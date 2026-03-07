@@ -141,7 +141,7 @@ pub use websocket::WsRecorder;
 pub use skills::{SkillManifest, SkillRegistry, SkillTool};
 pub use workers::ServiceWorkerInfo;
 pub use vrt::{VrtComparisonResult, VrtStatus, VrtSuite, VrtSuiteResult, VrtTestCase};
-pub use workflow::{Workflow, WorkflowResult, Step, Action, StepResult, StepStatus};
+pub use workflow::{Workflow, WorkflowResult, Step, Action, StepResult, StepStatus, AgentStepContext, AgentDecision};
 pub use task_planner::{TaskPlan, PlannedStep, PlannedAction, TaskExecutionResult, TaskStatus, GoalCategory};
 pub use safety::{SafetyCheck, SafetyPolicy, SafetyState};
 

@@ -434,3 +434,38 @@ pub struct PixelDiffParams {
     #[schemars(description = "Generate a diff visualization image (default: true)")]
     pub generate_diff: Option<bool>,
 }
+
+
+// ──────────────────── Agent-in-the-loop params ─────────────────────
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct WorkflowResumeParams {
+    #[schemars(description = "Path to the workflow JSON file")]
+    pub file: String,
+    #[schemars(description = "Step index to resume from (from paused_at in workflow result)")]
+    pub resume_from: usize,
+    #[schemars(description = "Agent decision for the paused step")]
+    pub decision: AgentDecisionInput,
+    #[schemars(description = "Variables to merge before resuming")]
+    pub variables: Option<std::collections::HashMap<String, serde_json::Value>>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct AgentDecisionInput {
+    #[schemars(description = "The agent's chosen action or response")]
+    pub choice: String,
+    #[schemars(description = "Reasoning behind the decision")]
+    pub reasoning: Option<String>,
+    #[schemars(description = "Variable updates to apply")]
+    pub updates: Option<std::collections::HashMap<String, serde_json::Value>>,
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+pub struct AgentDecideParams {
+    #[schemars(description = "The prompt or question to present to the agent")]
+    pub prompt: String,
+    #[schemars(description = "Available options for the agent to choose from")]
+    pub options: Option<Vec<String>>,
+    #[schemars(description = "Additional context as JSON")]
+    pub context: Option<serde_json::Value>,
+}

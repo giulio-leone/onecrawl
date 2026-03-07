@@ -67,6 +67,7 @@ pub enum Action {
     SubWorkflow { path: String },
     HttpRequest { url: String, method: Option<String>, headers: Option<HashMap<String, String>>, body: Option<String> },
     Snapshot { #[serde(default)] compact: bool, #[serde(default)] interactive_only: bool },
+    Agent { prompt: String, options: Option<Vec<String>> },
 }
 
 fn default_timeout() -> u64 { 30000 }
@@ -112,6 +113,8 @@ pub struct StepResult {
     pub output: Option<serde_json::Value>,
     pub error: Option<String>,
     pub duration_ms: u64,
+    #[serde(default)]
+    pub paused: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -120,6 +123,7 @@ pub enum StepStatus {
     Success,
     Failed,
     Skipped,
+    Paused,
 }
 
 /// Complete workflow execution result.
@@ -133,6 +137,8 @@ pub struct WorkflowResult {
     pub steps_succeeded: usize,
     pub steps_failed: usize,
     pub steps_skipped: usize,
+    pub paused_at: Option<usize>,
+    pub agent_context: Option<serde_json::Value>,
 }
 
 /// Parse a workflow from YAML string.
@@ -156,6 +162,24 @@ pub fn load_from_file(path: &str) -> Result<Workflow> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| Error::Cdp(format!("failed to read workflow file: {e}")))?;
     parse_json(&content)
+}
+
+/// Context provided to an AI agent when a workflow pauses at an agent step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentStepContext {
+    pub step_index: usize,
+    pub prompt: String,
+    pub options: Vec<String>,
+    pub url: String,
+    pub variables: HashMap<String, serde_json::Value>,
+}
+
+/// Decision returned by an AI agent to resume a paused workflow.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentDecision {
+    pub choice: String,
+    pub reasoning: Option<String>,
+    pub updates: Option<HashMap<String, serde_json::Value>>,
 }
 
 /// Interpolate variables in a string template.
@@ -327,6 +351,7 @@ pub async fn execute_workflow(
                     step_id, step_name,
                     status: StepStatus::Skipped,
                     output: None, error: None, duration_ms: 0,
+                    paused: false,
                 });
                 skipped += 1;
                 continue;
@@ -344,11 +369,34 @@ pub async fn execute_workflow(
             }
 
             let step_start = std::time::Instant::now();
-            let result = execute_step(page, &step.action, &mut variables).await;
+            let result = execute_step(page, &step.action, &mut variables, i).await;
             let duration_ms = step_start.elapsed().as_millis() as u64;
 
             match result {
                 Ok(output) => {
+                    // Check if this is an agent step — pause workflow
+                    if matches!(&step.action, Action::Agent { .. }) {
+                        let agent_context = output.clone();
+                        results.push(StepResult {
+                            step_id, step_name,
+                            status: StepStatus::Paused,
+                            output, error: None, duration_ms,
+                            paused: true,
+                        });
+                        let total_duration_ms = start.elapsed().as_millis() as u64;
+                        return Ok(WorkflowResult {
+                            name: workflow.name.clone(),
+                            status: StepStatus::Paused,
+                            steps: results,
+                            variables,
+                            total_duration_ms,
+                            steps_succeeded: succeeded,
+                            steps_failed: failed,
+                            steps_skipped: skipped,
+                            paused_at: Some(i),
+                            agent_context,
+                        });
+                    }
                     if let Some(ref save_key) = step.save_as {
                         if let Some(ref out) = output {
                             variables.insert(save_key.clone(), out.clone());
@@ -358,6 +406,7 @@ pub async fn execute_workflow(
                         step_id: step_id.clone(), step_name: step_name.clone(),
                         status: StepStatus::Success,
                         output, error: None, duration_ms,
+                        paused: false,
                     });
                     succeeded += 1;
                     step_ok = true;
@@ -371,6 +420,7 @@ pub async fn execute_workflow(
                             step_id: step_id.clone(), step_name: step_name.clone(),
                             status: StepStatus::Failed,
                             output: None, error: last_err.clone(), duration_ms,
+                            paused: false,
                         });
                         failed += 1;
                     }
@@ -403,6 +453,8 @@ pub async fn execute_workflow(
         steps_succeeded: succeeded,
         steps_failed: failed,
         steps_skipped: skipped,
+        paused_at: None,
+        agent_context: None,
     })
 }
 
@@ -411,6 +463,7 @@ fn execute_step<'a>(
     page: &'a chromiumoxide::Page,
     action: &'a Action,
     variables: &'a mut HashMap<String, serde_json::Value>,
+    step_index: usize,
 ) -> Pin<Box<dyn std::future::Future<Output = Result<Option<serde_json::Value>>> + Send + 'a>> {
     Box::pin(async move {
         match action {
@@ -545,7 +598,7 @@ fn execute_step<'a>(
                                 continue;
                             }
                         }
-                        last_output = execute_step(page, &step.action, variables).await?;
+                        last_output = execute_step(page, &step.action, variables, 0).await?;
                         if let Some(ref save_key) = step.save_as {
                             if let Some(ref out) = last_output {
                                 variables.insert(save_key.clone(), out.clone());
@@ -571,7 +624,7 @@ fn execute_step<'a>(
                             continue;
                         }
                     }
-                    last_output = execute_step(page, &step.action, variables).await?;
+                    last_output = execute_step(page, &step.action, variables, 0).await?;
                     if let Some(ref save_key) = step.save_as {
                         if let Some(ref out) = last_output {
                             variables.insert(save_key.clone(), out.clone());
@@ -619,6 +672,17 @@ fn execute_step<'a>(
                 let body_val = serde_json::from_str::<serde_json::Value>(&body_text)
                     .unwrap_or(serde_json::Value::String(body_text));
                 Ok(Some(serde_json::json!({ "status": status, "body": body_val })))
+            }
+            Action::Agent { prompt, options } => {
+                let url = crate::navigation::get_url(page).await.unwrap_or_default();
+                let context = AgentStepContext {
+                    step_index,
+                    prompt: prompt.clone(),
+                    options: options.clone().unwrap_or_default(),
+                    url,
+                    variables: variables.iter().map(|(k,v)| (k.clone(), v.clone())).collect(),
+                };
+                Ok(Some(serde_json::to_value(&context).unwrap_or(serde_json::Value::Null)))
             }
             Action::Snapshot { compact, interactive_only } => {
                 let opts = crate::accessibility::AgentSnapshotOptions {

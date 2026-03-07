@@ -85,6 +85,7 @@ impl OneCrawlMcp {
                         step_id, step_name,
                         status: onecrawl_cdp::StepStatus::Skipped,
                         output: None, error: None, duration_ms: 0,
+                        paused: false,
                     });
                     skipped += 1;
                     continue;
@@ -106,6 +107,7 @@ impl OneCrawlMcp {
                         step_id, step_name,
                         status: onecrawl_cdp::StepStatus::Success,
                         output, error: None, duration_ms,
+                        paused: false,
                     });
                     succeeded += 1;
                 }
@@ -117,6 +119,7 @@ impl OneCrawlMcp {
                         step_id, step_name,
                         status: onecrawl_cdp::StepStatus::Failed,
                         output: None, error: Some(err_msg.clone()), duration_ms,
+                        paused: false,
                     });
                     failed += 1;
 
@@ -315,6 +318,17 @@ impl OneCrawlMcp {
                 let result = onecrawl_cdp::accessibility::agent_snapshot(page, &opts)
                     .await.mcp()?;
                 Ok(Some(serde_json::json!(result)))
+            }
+            Action::Agent { prompt, options } => {
+                let url = onecrawl_cdp::navigation::get_url(page).await.unwrap_or_default();
+                let context = onecrawl_cdp::AgentStepContext {
+                    step_index: 0,
+                    prompt: prompt.clone(),
+                    options: options.clone().unwrap_or_default(),
+                    url,
+                    variables: variables.iter().map(|(k,v)| (k.clone(), v.clone())).collect(),
+                };
+                Ok(Some(serde_json::to_value(&context).unwrap_or(serde_json::Value::Null)))
             }
         }
         })
@@ -1200,4 +1214,161 @@ impl OneCrawlMcp {
         let executed = results.len();
         json_ok(&serde_json::json!({"results": results, "total": p.commands.len(), "executed": executed}))
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Agent-in-the-Loop: workflow resume & agent decide
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn workflow_resume(
+        &self,
+        p: WorkflowResumeParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+
+        let data = std::fs::read_to_string(&p.file)
+            .map_err(|e| mcp_err(format!("failed to read workflow file: {e}")))?;
+        let workflow = onecrawl_cdp::workflow::parse_json(&data)
+            .map_err(|e| mcp_err(format!("workflow parse error: {e}")))?;
+
+        if p.resume_from >= workflow.steps.len() {
+            return Err(mcp_err(format!(
+                "resume_from index {} is out of range (workflow has {} steps)",
+                p.resume_from, workflow.steps.len()
+            )));
+        }
+
+        let mut variables = workflow.variables.clone();
+        if let Some(ref extra) = p.variables {
+            for (k, v) in extra {
+                variables.insert(k.clone(), v.clone());
+            }
+        }
+        if let Some(ref updates) = p.decision.updates {
+            for (k, v) in updates {
+                variables.insert(k.clone(), v.clone());
+            }
+        }
+        variables.insert("__agent_choice".into(), serde_json::json!(p.decision.choice));
+        if let Some(ref reasoning) = p.decision.reasoning {
+            variables.insert("__agent_reasoning".into(), serde_json::json!(reasoning));
+        }
+
+        let start = std::time::Instant::now();
+        let mut results: Vec<onecrawl_cdp::StepResult> = Vec::new();
+        let mut succeeded = 0usize;
+        let mut failed = 0usize;
+        let mut skipped = 0usize;
+        let mut overall_status = onecrawl_cdp::StepStatus::Success;
+
+        for (i, step) in workflow.steps.iter().enumerate().skip(p.resume_from + 1) {
+            let step_id = if step.id.is_empty() { format!("step_{i}") } else { step.id.clone() };
+            let step_name = if step.name.is_empty() { format!("Step {i}") } else { step.name.clone() };
+
+            if let Some(ref cond) = step.condition {
+                let interpolated = onecrawl_cdp::workflow::interpolate(cond, &variables);
+                if !onecrawl_cdp::workflow::evaluate_condition(&interpolated, &variables) {
+                    results.push(onecrawl_cdp::StepResult {
+                        step_id, step_name,
+                        status: onecrawl_cdp::StepStatus::Skipped,
+                        output: None, error: None, duration_ms: 0,
+                        paused: false,
+                    });
+                    skipped += 1;
+                    continue;
+                }
+            }
+
+            let step_start = std::time::Instant::now();
+            let result = self.execute_step(&page, &step.action, &mut variables).await;
+            let duration_ms = step_start.elapsed().as_millis() as u64;
+
+            match result {
+                Ok(output) => {
+                    if matches!(&step.action, onecrawl_cdp::Action::Agent { .. }) {
+                        let agent_context = output.clone();
+                        results.push(onecrawl_cdp::StepResult {
+                            step_id, step_name,
+                            status: onecrawl_cdp::StepStatus::Paused,
+                            output, error: None, duration_ms,
+                            paused: true,
+                        });
+                        let total_duration_ms = start.elapsed().as_millis() as u64;
+                        return json_ok(&serde_json::json!({
+                            "status": "paused",
+                            "paused_at": i,
+                            "agent_context": agent_context,
+                            "steps_completed": results,
+                            "variables": variables,
+                            "total_duration_ms": total_duration_ms,
+                        }));
+                    }
+                    if let Some(ref save_key) = step.save_as {
+                        if let Some(ref out) = output {
+                            variables.insert(save_key.clone(), out.clone());
+                        }
+                    }
+                    results.push(onecrawl_cdp::StepResult {
+                        step_id, step_name,
+                        status: onecrawl_cdp::StepStatus::Success,
+                        output, error: None, duration_ms,
+                        paused: false,
+                    });
+                    succeeded += 1;
+                }
+                Err(e) => {
+                    let err_msg = format!("{}", e.message);
+                    let error_action = step.on_error.as_ref()
+                        .unwrap_or(&workflow.on_error.action);
+                    results.push(onecrawl_cdp::StepResult {
+                        step_id, step_name,
+                        status: onecrawl_cdp::StepStatus::Failed,
+                        output: None, error: Some(err_msg.clone()), duration_ms,
+                        paused: false,
+                    });
+                    failed += 1;
+                    match error_action {
+                        onecrawl_cdp::workflow::StepErrorAction::Stop => {
+                            overall_status = onecrawl_cdp::StepStatus::Failed;
+                            break;
+                        }
+                        _ => continue,
+                    }
+                }
+            }
+        }
+
+        let total_duration_ms = start.elapsed().as_millis() as u64;
+        json_ok(&serde_json::json!({
+            "status": format!("{:?}", overall_status).to_lowercase(),
+            "resumed_from": p.resume_from,
+            "agent_decision": {
+                "choice": p.decision.choice,
+                "reasoning": p.decision.reasoning,
+            },
+            "steps": results,
+            "variables": variables,
+            "total_duration_ms": total_duration_ms,
+            "steps_succeeded": succeeded,
+            "steps_failed": failed,
+            "steps_skipped": skipped,
+        }))
+    }
+
+    pub(crate) async fn agent_decide(
+        &self,
+        p: AgentDecideParams,
+    ) -> Result<CallToolResult, McpError> {
+        let mut response = serde_json::json!({
+            "prompt": p.prompt,
+            "awaiting_decision": true,
+        });
+        if let Some(ref opts) = p.options {
+            response["options"] = serde_json::json!(opts);
+        }
+        if let Some(ref ctx) = p.context {
+            response["context"] = ctx.clone();
+        }
+        json_ok(&response)
+    }
+
 }

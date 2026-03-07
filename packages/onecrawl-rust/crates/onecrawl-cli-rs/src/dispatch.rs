@@ -1307,6 +1307,12 @@ pub(crate) async fn dispatch(command: Commands) {
         Commands::ElementDetail { selector } => commands::browser::element_detail_cli(&selector).await,
         Commands::WorkflowExec { file } => commands::browser::workflow_exec(&file).await,
         Commands::WorkflowValidate { file } => commands::browser::workflow_validate_cli(&file).await,
+        Commands::WorkflowResume { file, resume_from, choice, reasoning } => {
+            commands::browser::workflow_resume_cli(&file, resume_from, &choice, reasoning.as_deref()).await
+        }
+        Commands::AgentDecide { prompt, options } => {
+            commands::browser::agent_decide_cli(&prompt, options.as_deref()).await
+        }
 
         // ── Generic MCP Action Runner ──────────────────────────────
         Commands::Run { tool, action, json } => {

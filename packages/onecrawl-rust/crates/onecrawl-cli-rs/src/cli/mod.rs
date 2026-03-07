@@ -937,6 +937,28 @@ pub(crate) enum Commands {
         /// Path to workflow JSON file
         file: String,
     },
+    /// Resume a paused workflow after agent decision
+    WorkflowResume {
+        /// Path to workflow JSON file
+        file: String,
+        /// Step index to resume from
+        #[arg(long)]
+        resume_from: usize,
+        /// Agent's chosen action
+        #[arg(long)]
+        choice: String,
+        /// Reasoning behind the decision
+        #[arg(long)]
+        reasoning: Option<String>,
+    },
+    /// Present a decision prompt to an AI agent
+    AgentDecide {
+        /// The prompt or question for the agent
+        prompt: String,
+        /// Available options (comma-separated)
+        #[arg(long)]
+        options: Option<String>,
+    },
 
     // ── Generic MCP Action Runner ──────────────────────────────────
     /// Run any MCP action: onecrawl run <tool> <action> --json '{...}'

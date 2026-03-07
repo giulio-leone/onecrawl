@@ -394,4 +394,6 @@ pub use spa_harness::{
 pub use workflow_cli::{
     workflow_exec,
     workflow_validate_cli,
+    workflow_resume_cli,
+    agent_decide_cli,
 };

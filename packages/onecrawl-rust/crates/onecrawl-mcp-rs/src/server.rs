@@ -1674,6 +1674,14 @@ impl OneCrawlMcp {
                 let params: WorkflowStatusParams = parse_params(v, "workflow_status")?;
                 self.workflow_status(params).await
             }
+            AutomateAction::WorkflowResume => {
+                let params: WorkflowResumeParams = parse_params(v, "workflow_resume")?;
+                self.workflow_resume(params).await
+            }
+            AutomateAction::AgentDecide => {
+                let params: AgentDecideParams = parse_params(v, "agent_decide")?;
+                self.agent_decide(params).await
+            }
         }
     }
 
