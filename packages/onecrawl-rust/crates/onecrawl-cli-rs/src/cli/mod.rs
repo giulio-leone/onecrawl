@@ -929,6 +929,20 @@ pub(crate) enum Commands {
         file: String,
     },
 
+    // ── Generic MCP Action Runner ──────────────────────────────────
+    /// Run any MCP action: onecrawl run <tool> <action> --json '{...}'
+    Run {
+        /// Tool namespace (browser, crawl, agent, stealth, data, secure, computer, memory, automate, perf)
+        tool: String,
+        /// Action name within the tool
+        action: String,
+        /// JSON parameters (optional)
+        #[arg(long)]
+        json: Option<String>,
+    },
+    /// List all available MCP tools and actions
+    RunList,
+
     // ── Version ─────────────────────────────────────────────────
     /// Show version and build information
     Version,

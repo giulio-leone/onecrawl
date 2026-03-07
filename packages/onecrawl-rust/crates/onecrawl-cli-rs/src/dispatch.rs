@@ -1220,5 +1220,11 @@ pub(crate) async fn dispatch(command: Commands) {
         Commands::ElementDetail { selector } => commands::browser::element_detail_cli(&selector).await,
         Commands::WorkflowExec { file } => commands::browser::workflow_exec(&file).await,
         Commands::WorkflowValidate { file } => commands::browser::workflow_validate_cli(&file).await,
+
+        // ── Generic MCP Action Runner ──────────────────────────────
+        Commands::Run { tool, action, json } => {
+            commands::browser::run::run_action(&tool, &action, json.as_deref()).await
+        }
+        Commands::RunList => commands::browser::run::list_actions(),
         }
 }

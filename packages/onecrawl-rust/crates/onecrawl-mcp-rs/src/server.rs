@@ -1542,6 +1542,66 @@ impl OneCrawlMcp {
             }
         }
     }
+
+    // ── Public CLI bridge ────────────────────────────────────────────
+
+    /// Create an `OneCrawlMcp` reusing an existing browser session.
+    /// Used by the CLI `run` command to delegate to MCP handlers directly.
+    pub fn from_browser(
+        browser: SharedBrowser,
+        store_path: String,
+        store_password: String,
+    ) -> Self {
+        Self {
+            tool_router: Self::tool_router(),
+            store_path: Arc::new(store_path),
+            store_password: Arc::new(store_password),
+            browser,
+        }
+    }
+
+    /// Execute any MCP tool action and return the text output.
+    /// Bridges the CLI to the full MCP handler dispatch with zero duplication.
+    pub async fn run_tool(
+        &self,
+        tool: &str,
+        action: &str,
+        params: serde_json::Value,
+    ) -> Result<String, String> {
+        let ta = Parameters(ToolAction {
+            action: action.to_string(),
+            params,
+        });
+
+        let result = match tool {
+            "browser" => self.tool_browser(ta).await,
+            "crawl" => self.tool_crawl(ta).await,
+            "agent" => self.tool_agent(ta).await,
+            "stealth" => self.tool_stealth(ta).await,
+            "data" => self.tool_data(ta).await,
+            "secure" => self.tool_secure(ta).await,
+            "computer" => self.tool_computer(ta).await,
+            "memory" => self.tool_memory(ta).await,
+            "automate" => self.tool_automate(ta).await,
+            "perf" => self.tool_perf(ta).await,
+            _ => return Err(format!(
+                "unknown tool: '{tool}'. Available: browser, crawl, agent, stealth, data, secure, computer, memory, automate, perf"
+            )),
+        };
+
+        match result {
+            Ok(call_result) => {
+                let texts: Vec<String> = call_result
+                    .content
+                    .unwrap_or_default()
+                    .iter()
+                    .filter_map(|c| c.as_text().map(|t| t.text.clone()))
+                    .collect();
+                Ok(texts.join("\n"))
+            }
+            Err(e) => Err(e.message.to_string()),
+        }
+    }
 }
 
 impl rmcp::ServerHandler for OneCrawlMcp {
