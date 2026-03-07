@@ -89,8 +89,7 @@ pub async fn ensure_page(browser: &SharedBrowser) -> Result<chromiumoxide::Page,
 
         // Auto-inject session-level stealth (persists across all navigations)
         if !state.stealth_disabled {
-            let _ = onecrawl_cdp::inject_persistent_stealth(&page, None).await;
-            state.stealth_applied = true;
+            state.stealth_applied = onecrawl_cdp::inject_persistent_stealth(&page, None).await.is_ok();
         }
 
         state.session = Some(session);

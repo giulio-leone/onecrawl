@@ -134,12 +134,22 @@ pub async fn start_daemon(headless: bool) -> Result<(), Box<dyn std::error::Erro
     {
         let shutdown = Arc::clone(&shutdown);
         tokio::spawn(async move {
-            let mut sigterm =
-                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-                    .expect("failed to register SIGTERM");
-            let mut sigint =
-                tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
-                    .expect("failed to register SIGINT");
+            let mut sigterm = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("warning: failed to register SIGTERM: {e}");
+                    shutdown.notify_one();
+                    return;
+                }
+            };
+            let mut sigint = match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt()) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("warning: failed to register SIGINT: {e}");
+                    shutdown.notify_one();
+                    return;
+                }
+            };
             tokio::select! {
                 _ = sigterm.recv() => {},
                 _ = sigint.recv() => {},

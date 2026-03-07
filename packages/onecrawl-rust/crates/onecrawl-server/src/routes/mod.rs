@@ -31,11 +31,25 @@ pub(crate) fn api_err(status: StatusCode, msg: &str) -> (StatusCode, Json<ErrorB
     )
 }
 
-/// Helper: resolve tab, acquire locks, clone Page handle (cheap channel clone).
+/// Helper: resolve tab, check lock ownership, clone Page handle (cheap channel clone).
 pub(crate) async fn get_tab_page(
     state: &AppState,
     tab_id: &str,
+    owner: Option<&str>,
 ) -> Result<chromiumoxide::Page, (StatusCode, Json<ErrorBody>)> {
+    // Lock enforcement: if tab is locked by a different owner, reject with 409
+    if let Some(lock) = state.get_tab_lock(tab_id).await {
+        match owner {
+            Some(o) if o == lock.owner => {}
+            _ => {
+                return Err(api_err(
+                    StatusCode::CONFLICT,
+                    &format!("tab locked by {}", lock.owner),
+                ));
+            }
+        }
+    }
+
     let inst_id = state
         .instance_for_tab(tab_id)
         .await

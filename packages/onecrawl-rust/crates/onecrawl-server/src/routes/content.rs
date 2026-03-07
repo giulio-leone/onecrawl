@@ -1,5 +1,5 @@
 use axum::extract::{Json, Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -77,9 +77,11 @@ impl serde::Serialize for SnapshotResponse {
 pub async fn get_snapshot(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
+    headers: HeaderMap,
     Query(query): Query<SnapshotQuery>,
 ) -> ApiResult<SnapshotResponse> {
-    let page = get_tab_page(&state, &tab_id).await?;
+    let owner = headers.get("x-agent-owner").and_then(|v| v.to_str().ok());
+    let page = get_tab_page(&state, &tab_id, owner).await?;
 
     let result_str: String = page
         .evaluate(SNAPSHOT_JS)
@@ -109,8 +111,10 @@ pub async fn get_snapshot(
 pub async fn get_text(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
+    headers: HeaderMap,
 ) -> ApiResult<TextResponse> {
-    let page = get_tab_page(&state, &tab_id).await?;
+    let owner = headers.get("x-agent-owner").and_then(|v| v.to_str().ok());
+    let page = get_tab_page(&state, &tab_id, owner).await?;
     let text: String = page
         .evaluate(TEXT_EXTRACT_JS)
         .await
@@ -124,8 +128,10 @@ pub async fn get_text(
 pub async fn get_url(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
+    headers: HeaderMap,
 ) -> ApiResult<UrlResponse> {
-    let page = get_tab_page(&state, &tab_id).await?;
+    let owner = headers.get("x-agent-owner").and_then(|v| v.to_str().ok());
+    let page = get_tab_page(&state, &tab_id, owner).await?;
     let url = page.url().await.ok().flatten().unwrap_or_default();
     Ok(Json(UrlResponse { url }))
 }
@@ -133,8 +139,10 @@ pub async fn get_url(
 pub async fn get_title(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
+    headers: HeaderMap,
 ) -> ApiResult<TitleResponse> {
-    let page = get_tab_page(&state, &tab_id).await?;
+    let owner = headers.get("x-agent-owner").and_then(|v| v.to_str().ok());
+    let page = get_tab_page(&state, &tab_id, owner).await?;
     let title: String = page
         .evaluate("document.title")
         .await
@@ -147,8 +155,10 @@ pub async fn get_title(
 pub async fn get_html(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
+    headers: HeaderMap,
 ) -> ApiResult<HtmlResponse> {
-    let page = get_tab_page(&state, &tab_id).await?;
+    let owner = headers.get("x-agent-owner").and_then(|v| v.to_str().ok());
+    let page = get_tab_page(&state, &tab_id, owner).await?;
     let html: String = page
         .evaluate("document.documentElement.outerHTML")
         .await
@@ -167,9 +177,11 @@ pub(crate) struct EvalRequest {
 pub async fn evaluate_js(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
+    headers: HeaderMap,
     Json(req): Json<EvalRequest>,
 ) -> ApiResult<EvalResponse> {
-    let page = get_tab_page(&state, &tab_id).await?;
+    let owner = headers.get("x-agent-owner").and_then(|v| v.to_str().ok());
+    let page = get_tab_page(&state, &tab_id, owner).await?;
     let val = page
         .evaluate(req.expression.as_str())
         .await
@@ -183,8 +195,10 @@ pub async fn evaluate_js(
 pub async fn take_screenshot(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
+    headers: HeaderMap,
 ) -> ApiResult<ScreenshotResponse> {
-    let page = get_tab_page(&state, &tab_id).await?;
+    let owner = headers.get("x-agent-owner").and_then(|v| v.to_str().ok());
+    let page = get_tab_page(&state, &tab_id, owner).await?;
     let bytes = page
         .screenshot(
             chromiumoxide::page::ScreenshotParams::builder()
@@ -202,8 +216,10 @@ pub async fn take_screenshot(
 pub async fn export_pdf(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
+    headers: HeaderMap,
 ) -> ApiResult<PdfResponse> {
-    let page = get_tab_page(&state, &tab_id).await?;
+    let owner = headers.get("x-agent-owner").and_then(|v| v.to_str().ok());
+    let page = get_tab_page(&state, &tab_id, owner).await?;
     let params = chromiumoxide::cdp::browser_protocol::page::PrintToPdfParams::builder()
         .build();
     let response = page

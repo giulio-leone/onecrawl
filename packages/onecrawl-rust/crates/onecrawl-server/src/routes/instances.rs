@@ -4,7 +4,7 @@ use axum::response::IntoResponse;
 use serde::Serialize;
 
 use super::{ApiResult, api_err};
-use crate::instance::{CreateInstanceRequest, InstanceInfo};
+use crate::instance::{CreateInstanceRequest, InstanceInfo, TabSummary};
 use crate::state::AppState;
 
 #[derive(Serialize)]
@@ -52,10 +52,49 @@ pub async fn create_instance(
 }
 
 pub async fn list_instances(State(state): State<AppState>) -> impl IntoResponse {
-    let instances = state.instances.read().await;
-    let mut infos = Vec::with_capacity(instances.len());
-    for inst in instances.values() {
-        infos.push(inst.info().await);
+    // Collect instance data and page handles inside the lock, then drop it
+    let instance_data = {
+        let instances = state.instances.read().await;
+        let mut data = Vec::with_capacity(instances.len());
+        for inst in instances.values() {
+            let pages: Vec<_> = {
+                let tabs = inst.tabs.read().await;
+                tabs.iter().map(|(tid, p)| (tid.clone(), p.clone())).collect()
+            };
+            data.push((
+                inst.id.clone(),
+                inst.profile.clone(),
+                inst.headless,
+                inst.port,
+                inst.start_time.clone(),
+                pages,
+            ));
+        }
+        data
+    }; // instances lock dropped
+
+    let mut infos = Vec::with_capacity(instance_data.len());
+    for (id, profile, headless, port, start_time, pages) in instance_data {
+        let futs = pages.into_iter().map(|(tid, page)| async move {
+            let url = page.url().await.ok().flatten().unwrap_or_default();
+            let title: String = page
+                .evaluate("document.title")
+                .await
+                .ok()
+                .and_then(|v| v.into_value().ok())
+                .unwrap_or_default();
+            TabSummary { id: tid, url, title }
+        });
+        let tab_summaries = futures::future::join_all(futs).await;
+        infos.push(InstanceInfo {
+            id,
+            profile,
+            headless,
+            status: "running",
+            port,
+            start_time,
+            tabs: tab_summaries,
+        });
     }
     Json(InstancesResponse { instances: infos })
 }
@@ -76,16 +115,19 @@ pub async fn stop_instance(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> ApiResult<StoppedResponse> {
-    let mut instances = state.instances.write().await;
-    let inst = instances
-        .remove(&id)
-        .ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance not found"))?;
-    {
-        let tabs = inst.tabs.read().await;
-        let mut index = state.tab_index.write().await;
-        for tid in tabs.keys() {
-            index.remove(tid);
-        }
+    let tab_ids = {
+        let mut instances = state.instances.write().await;
+        let inst = instances
+            .remove(&id)
+            .ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance not found"))?;
+        let ids: Vec<String> = inst.tabs.read().await.keys().cloned().collect();
+        ids
+        // inst dropped here (browser closes)
+    }; // instances write lock dropped
+
+    for tid in &tab_ids {
+        state.unregister_tab(tid).await;
     }
+
     Ok(Json(StoppedResponse { stopped: id }))
 }

@@ -1,4 +1,5 @@
 use axum::extract::{Json, Path, State};
+use axum::http::HeaderMap;
 
 use super::{ApiResult, get_tab_page};
 use crate::action::{parse_ref_id, Action, ActionResult};
@@ -11,9 +12,11 @@ use crate::state::AppState;
 pub async fn execute_action(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
+    headers: HeaderMap,
     Json(action): Json<Action>,
 ) -> ApiResult<ActionResult> {
-    let page = get_tab_page(&state, &tab_id).await?;
+    let owner = headers.get("x-agent-owner").and_then(|v| v.to_str().ok());
+    let page = get_tab_page(&state, &tab_id, owner).await?;
     let result = execute_single_action(&page, &action).await;
     Ok(Json(result))
 }
@@ -21,9 +24,11 @@ pub async fn execute_action(
 pub async fn execute_actions(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
+    headers: HeaderMap,
     Json(actions): Json<Vec<Action>>,
 ) -> ApiResult<Vec<ActionResult>> {
-    let page = get_tab_page(&state, &tab_id).await?;
+    let owner = headers.get("x-agent-owner").and_then(|v| v.to_str().ok());
+    let page = get_tab_page(&state, &tab_id, owner).await?;
     let mut results = Vec::with_capacity(actions.len());
     for action in &actions {
         let r = execute_single_action(&page, action).await;

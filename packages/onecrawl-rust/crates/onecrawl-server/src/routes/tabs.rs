@@ -1,5 +1,5 @@
 use axum::extract::{Json, Path, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use serde::Serialize;
 
@@ -28,23 +28,31 @@ pub async fn open_tab(
     Path(id): Path<String>,
     Json(req): Json<OpenTabRequest>,
 ) -> ApiResult<TabResponse> {
-    let instances = state.instances.read().await;
-    let inst = instances
-        .get(&id)
-        .ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance not found"))?;
+    let url_str = req.url.as_deref().unwrap_or("about:blank");
 
-    let url = req.url.as_deref().unwrap_or("about:blank");
-    let page = inst
-        .browser
-        .new_page(url)
-        .await
-        .map_err(|e| api_err(StatusCode::INTERNAL_SERVER_ERROR, &format!("new_page: {e}")))?;
+    // Hold the lock only for new_page + tab insertion; drop before CDP I/O
+    let (page, tab_id) = {
+        let instances = state.instances.read().await;
+        let inst = instances
+            .get(&id)
+            .ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance not found"))?;
 
-    let mut counter = inst.tab_counter.write().await;
-    *counter += 1;
-    let tab_id = format!("tab_{}_{}", inst.id, counter);
-    drop(counter);
+        let page = inst
+            .browser
+            .new_page(url_str)
+            .await
+            .map_err(|e| api_err(StatusCode::INTERNAL_SERVER_ERROR, &format!("new_page: {e}")))?;
 
+        let mut counter = inst.tab_counter.write().await;
+        *counter += 1;
+        let tab_id = format!("tab_{}_{}", inst.id, counter);
+        drop(counter);
+
+        inst.tabs.write().await.insert(tab_id.clone(), page.clone());
+        (page, tab_id)
+    }; // instances read lock dropped
+
+    // CDP network I/O outside the lock
     let tab_url = page.url().await.ok().flatten().unwrap_or_default();
     let tab_title: String = page
         .evaluate("document.title")
@@ -60,7 +68,6 @@ pub async fn open_tab(
         instance_id: id.clone(),
     };
 
-    inst.tabs.write().await.insert(tab_id.clone(), page);
     state.register_tab(&tab_id, &id).await;
 
     Ok(Json(TabResponse { tab: info }))
@@ -129,9 +136,11 @@ pub async fn list_all_tabs(State(state): State<AppState>) -> impl IntoResponse {
 pub async fn navigate_tab(
     State(state): State<AppState>,
     Path(tab_id): Path<String>,
+    headers: HeaderMap,
     Json(req): Json<NavigateRequest>,
 ) -> ApiResult<NavigateResponse> {
-    let page = super::get_tab_page(&state, &tab_id).await?;
+    let owner = headers.get("x-agent-owner").and_then(|v| v.to_str().ok());
+    let page = super::get_tab_page(&state, &tab_id, owner).await?;
     page.goto(&req.url)
         .await
         .map_err(|e| api_err(StatusCode::INTERNAL_SERVER_ERROR, &format!("navigate: {e}")))?;
