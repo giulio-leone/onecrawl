@@ -746,6 +746,18 @@ impl OneCrawlMcp {
                 let params: ScreenReaderSimParams = parse_params(v, "screen_reader_sim")?;
                 self.screen_reader_sim(params).await
             }
+            AgentAction::AgentLoop => {
+                let params: AgentLoopParams = parse_params(v, "agent_loop")?;
+                self.agent_loop(params).await
+            }
+            AgentAction::GoalAssert => {
+                let params: GoalAssertParams = parse_params(v, "goal_assert")?;
+                self.goal_assert(params).await
+            }
+            AgentAction::AnnotatedObserve => {
+                let params: AnnotatedObserveParams = parse_params(v, "annotated_observe")?;
+                self.annotated_observe(params).await
+            }
         }
     }
 
@@ -1149,6 +1161,14 @@ impl OneCrawlMcp {
                 let params: AutoRecoverParams = parse_params(v, "auto_recover")?;
                 self.auto_recover(params).await
             }
+            ComputerAction::AnnotatedScreenshot => {
+                let params: AnnotatedScreenshotParams = parse_params(v, "annotated_screenshot")?;
+                self.annotated_screenshot(params).await
+            }
+            ComputerAction::AdaptiveRetry => {
+                let params: AdaptiveRetryParams = parse_params(v, "adaptive_retry")?;
+                self.adaptive_retry(params).await
+            }
         }
     }
 
@@ -1193,7 +1213,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "automate",
-        description = "Workflow automation, AI task planning, and execution control.\n\nActions:\n- workflow_validate {workflow} — Validate a workflow definition\n- workflow_run {workflow} — Execute a workflow\n- plan {goal, context?} — Generate automation plan from goal\n- execute {plan, max_retries?} — Execute a generated plan\n- patterns — List available automation patterns\n- rate_limit {action?, max_per_minute?} — Check/configure rate limiter\n- retry {url?, operation?, reason?} — Enqueue retry with backoff\n- retry_adapt {action, params, max_retries?, strategy?} — Smart retry with adaptive strategy\n- error_classify {error_message} — Classify error into categories\n- recovery_suggest {error_type, context?} — Suggest recovery steps\n- error_history — List recent error history\n- checkpoint_save {name, include_cookies?, include_storage?, include_context?} — Save browser state checkpoint\n- checkpoint_restore {name, restore_url?, restore_cookies?} — Restore from checkpoint\n- checkpoint_list — List all checkpoints\n- checkpoint_delete {name} — Delete a checkpoint\n- workflow_while {condition, actions, max_iterations?} — Loop while condition is true\n- workflow_for_each {collection, variable_name?, actions} — Iterate over collection\n- workflow_if {condition, then_actions, else_actions?} — Conditional execution\n- workflow_variable {name, value?} — Get or set workflow variable"
+        description = "Workflow automation, AI task planning, and execution control.\n\nActions:\n- workflow_validate {workflow} — Validate a workflow definition\n- workflow_run {workflow} — Execute a workflow\n- plan {goal, context?} — Generate automation plan from goal\n- execute {plan, max_retries?} — Execute a generated plan\n- patterns — List available automation patterns\n- rate_limit {action?, max_per_minute?} — Check/configure rate limiter\n- retry {url?, operation?, reason?} — Enqueue retry with backoff\n- retry_adapt {action, params, max_retries?, strategy?} — Smart retry with adaptive strategy\n- error_classify {error_message} — Classify error into categories\n- recovery_suggest {error_type, context?} — Suggest recovery steps\n- error_history — List recent error history\n- checkpoint_save {name, include_cookies?, include_storage?, include_context?} — Save browser state checkpoint\n- checkpoint_restore {name, restore_url?, restore_cookies?} — Restore from checkpoint\n- checkpoint_list — List all checkpoints\n- checkpoint_delete {name} — Delete a checkpoint\n- workflow_while {condition, actions, max_iterations?} — Loop while condition is true\n- workflow_for_each {collection, variable_name?, actions} — Iterate over collection\n- workflow_if {condition, then_actions, else_actions?} — Conditional execution\n- workflow_variable {name, value?} — Get or set workflow variable\n- reconnect_cdp {max_retries?} — Auto-reconnect CDP with exponential backoff\n- gc_tabs {max_count?} — Garbage collect tabs / report tab info"
     )]
     async fn tool_automate(
         &self,
@@ -1275,6 +1295,15 @@ impl OneCrawlMcp {
             AutomateAction::WorkflowVariable => {
                 let params: WorkflowVariableParams = parse_params(v, "workflow_variable")?;
                 self.workflow_variable(params).await
+            }
+            // Long-running harness
+            AutomateAction::ReconnectCdp => {
+                let params: ReconnectCdpParams = parse_params(v, "reconnect_cdp")?;
+                self.reconnect_cdp(params).await
+            }
+            AutomateAction::GcTabs => {
+                let params: GcTabsParams = parse_params(v, "gc_tabs")?;
+                self.gc_tabs(params).await
             }
         }
     }

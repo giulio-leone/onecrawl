@@ -1371,4 +1371,52 @@ impl OneCrawlMcp {
         let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
         json_ok(&serde_json::json!({ "action": "screen_reader_sim", "simulation": val }))
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Autonomous agent loop
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn agent_loop(
+        &self,
+        p: AgentLoopParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let max_steps = p.max_steps.unwrap_or(10);
+        let result = onecrawl_cdp::agent::agent_loop(
+            &page,
+            &p.goal,
+            max_steps,
+            p.verify_js.as_deref(),
+        )
+        .await
+        .mcp()?;
+        json_ok(&result)
+    }
+
+    pub(crate) async fn goal_assert(
+        &self,
+        p: GoalAssertParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let assertions: Vec<(&str, &str)> = p
+            .assertions
+            .iter()
+            .map(|a| (a.assertion_type.as_str(), a.value.as_str()))
+            .collect();
+        let result = onecrawl_cdp::agent::goal_assert(&page, &assertions)
+            .await
+            .mcp()?;
+        json_ok(&result)
+    }
+
+    pub(crate) async fn annotated_observe(
+        &self,
+        _p: AnnotatedObserveParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let result = onecrawl_cdp::agent::annotated_observe(&page)
+            .await
+            .mcp()?;
+        json_ok(&result)
+    }
 }

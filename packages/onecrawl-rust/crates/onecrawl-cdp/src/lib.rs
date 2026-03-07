@@ -4,7 +4,9 @@
 
 pub mod accessibility;
 pub mod adaptive;
+pub mod agent;
 pub mod agent_memory;
+pub mod annotated;
 pub mod browser_pool;
 pub mod computer_use;
 pub mod adaptive_fetch;

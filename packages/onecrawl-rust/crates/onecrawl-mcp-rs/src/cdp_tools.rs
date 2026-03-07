@@ -2328,3 +2328,67 @@ pub struct CircuitBreakerParams {
     /// Failure threshold before circuit opens (default: 5)
     pub threshold: Option<u32>,
 }
+
+// ──────────────── Agent loop params ─────────────────
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct AgentLoopParams {
+    /// The goal to achieve (natural language description)
+    pub goal: String,
+    /// Maximum observation steps before stopping (default: 10)
+    pub max_steps: Option<usize>,
+    /// Optional JavaScript expression that returns "true" when goal is met
+    pub verify_js: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct GoalAssertParams {
+    /// List of assertions to check. Each has a "type" and "value".
+    /// Types: url_contains, url_equals, title_contains, title_equals, element_exists, text_contains, element_visible
+    pub assertions: Vec<GoalAssertion>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct GoalAssertion {
+    /// Assertion type: url_contains, url_equals, title_contains, title_equals, element_exists, text_contains, element_visible
+    #[serde(rename = "type")]
+    pub assertion_type: String,
+    /// Value to check against
+    pub value: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct AnnotatedObserveParams {
+    /// Optional CSS selector to scope observation (default: full page)
+    pub scope: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct AnnotatedScreenshotParams {
+    /// Whether to include full page (default: false, viewport only)
+    pub full_page: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct AdaptiveRetryParams {
+    /// Primary JavaScript action to try
+    pub action_js: String,
+    /// Alternative JavaScript strategies to try if primary fails
+    pub alternatives: Vec<String>,
+    /// Maximum retries (default: 3)
+    pub max_retries: Option<usize>,
+}
+
+// ──────────────── Long-running harness params ─────────────────
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ReconnectCdpParams {
+    /// Max reconnection attempts (default: 5)
+    pub max_retries: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct GcTabsParams {
+    /// Maximum number of tabs to keep (default: 10)
+    pub max_count: Option<usize>,
+}

@@ -1093,4 +1093,27 @@ impl OneCrawlMcp {
             }))
         }
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Long-running harness
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn reconnect_cdp(
+        &self,
+        p: ReconnectCdpParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let max_retries = p.max_retries.unwrap_or(5);
+        let result = onecrawl_cdp::harness::reconnect_cdp(&page, max_retries).await.mcp()?;
+        json_ok(&result)
+    }
+
+    pub(crate) async fn gc_tabs(
+        &self,
+        _p: GcTabsParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let result = onecrawl_cdp::harness::gc_tabs_info(&page).await.mcp()?;
+        json_ok(&result)
+    }
 }

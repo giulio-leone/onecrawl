@@ -689,4 +689,28 @@ impl OneCrawlMcp {
         }))
     }
 
+    pub(crate) async fn annotated_screenshot(
+        &self,
+        _p: AnnotatedScreenshotParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let result = onecrawl_cdp::annotated::annotated_screenshot(&page).await.mcp()?;
+        json_ok(&result)
+    }
+
+    pub(crate) async fn adaptive_retry(
+        &self,
+        p: AdaptiveRetryParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let max_retries = p.max_retries.unwrap_or(3);
+        let result = onecrawl_cdp::annotated::adaptive_retry(
+            &page,
+            &p.action_js,
+            max_retries,
+            &p.alternatives,
+        ).await.mcp()?;
+        json_ok(&result)
+    }
+
 }

@@ -119,3 +119,214 @@ impl CircuitBreaker {
         })
     }
 }
+
+// ──────────────── Long-running harness helpers ────────────────
+
+use serde_json::Value;
+
+/// Auto-reconnect to CDP with exponential backoff.
+pub async fn reconnect_cdp(page: &Page, max_retries: usize) -> Result<Value> {
+    let mut last_error = String::new();
+    for attempt in 0..max_retries {
+        let backoff_ms = (100 * 2u64.pow(attempt as u32)).min(10000);
+
+        match page.evaluate("document.readyState".to_string()).await {
+            Ok(val) => {
+                let state: String = val.into_value().unwrap_or_default();
+                return Ok(serde_json::json!({
+                    "status": "connected",
+                    "ready_state": state,
+                    "attempts": attempt + 1,
+                    "reconnected": attempt > 0
+                }));
+            }
+            Err(e) => {
+                last_error = e.to_string();
+                tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+            }
+        }
+    }
+
+    Ok(serde_json::json!({
+        "status": "failed",
+        "attempts": max_retries,
+        "last_error": last_error
+    }))
+}
+
+/// Save checkpoint to disk: cookies, localStorage, sessionStorage, URL, scroll position.
+pub async fn checkpoint_save(page: &Page, checkpoint_path: &str, name: &str) -> Result<Value> {
+    let url = page
+        .url()
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+
+    let state_js = r#"
+        (() => {
+            const data = {
+                url: window.location.href,
+                title: document.title,
+                scroll: { x: window.scrollX, y: window.scrollY },
+                localStorage: {},
+                sessionStorage: {},
+                timestamp: Date.now()
+            };
+            try {
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    data.localStorage[key] = localStorage.getItem(key);
+                }
+            } catch(e) {}
+            try {
+                for (let i = 0; i < sessionStorage.length; i++) {
+                    const key = sessionStorage.key(i);
+                    data.sessionStorage[key] = sessionStorage.getItem(key);
+                }
+            } catch(e) {}
+            return JSON.stringify(data);
+        })()
+    "#
+    .to_string();
+
+    let result = page
+        .evaluate(state_js)
+        .await
+        .map_err(|e| Error::Cdp(format!("checkpoint_save state: {e}")))?;
+    let state_str: String = result.into_value().unwrap_or_else(|_| "{}".to_string());
+
+    let cookies_js = r#"
+        (() => {
+            return JSON.stringify(document.cookie.split(';').map(c => c.trim()).filter(c => c.length > 0));
+        })()
+    "#
+    .to_string();
+    let cookies_result = page
+        .evaluate(cookies_js)
+        .await
+        .map_err(|e| Error::Cdp(format!("checkpoint_save cookies: {e}")))?;
+    let cookies_str: String = cookies_result
+        .into_value()
+        .unwrap_or_else(|_| "[]".to_string());
+
+    let now_ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let checkpoint = serde_json::json!({
+        "name": name,
+        "state": serde_json::from_str::<Value>(&state_str).unwrap_or(serde_json::json!({})),
+        "cookies": serde_json::from_str::<Value>(&cookies_str).unwrap_or(serde_json::json!([])),
+        "saved_at": format!("{}", now_ts),
+    });
+
+    let dir = std::path::Path::new(checkpoint_path);
+    std::fs::create_dir_all(dir).map_err(|e| Error::Cdp(format!("checkpoint dir: {e}")))?;
+    let file_path = dir.join(format!("{}.json", name));
+    std::fs::write(
+        &file_path,
+        serde_json::to_string_pretty(&checkpoint)
+            .map_err(|e| Error::Cdp(format!("checkpoint serialize: {e}")))?,
+    )
+    .map_err(|e| Error::Cdp(format!("checkpoint write: {e}")))?;
+
+    let size = std::fs::metadata(&file_path)
+        .map(|m| m.len())
+        .unwrap_or(0);
+
+    Ok(serde_json::json!({
+        "action": "checkpoint_save",
+        "name": name,
+        "path": file_path.to_string_lossy(),
+        "url": url,
+        "size_bytes": size
+    }))
+}
+
+/// Restore checkpoint from disk: navigate, set storage, set cookies, restore scroll.
+pub async fn checkpoint_restore(page: &Page, checkpoint_path: &str, name: &str) -> Result<Value> {
+    let file_path = std::path::Path::new(checkpoint_path).join(format!("{}.json", name));
+    let content =
+        std::fs::read_to_string(&file_path).map_err(|e| Error::Cdp(format!("checkpoint read: {e}")))?;
+    let checkpoint: Value =
+        serde_json::from_str(&content).map_err(|e| Error::Cdp(format!("checkpoint parse: {e}")))?;
+
+    // Navigate to saved URL
+    if let Some(url) = checkpoint["state"]["url"].as_str() {
+        let _ = page.goto(url).await;
+        let _ = page.evaluate("document.readyState".to_string()).await;
+    }
+
+    // Restore localStorage
+    if let Some(ls) = checkpoint["state"]["localStorage"].as_object() {
+        for (key, value) in ls {
+            if let Some(v) = value.as_str() {
+                let js = format!(
+                    "localStorage.setItem('{}', '{}')",
+                    key.replace('\'', "\\'"),
+                    v.replace('\'', "\\'")
+                );
+                let _ = page.evaluate(js).await;
+            }
+        }
+    }
+
+    // Restore sessionStorage
+    if let Some(ss) = checkpoint["state"]["sessionStorage"].as_object() {
+        for (key, value) in ss {
+            if let Some(v) = value.as_str() {
+                let js = format!(
+                    "sessionStorage.setItem('{}', '{}')",
+                    key.replace('\'', "\\'"),
+                    v.replace('\'', "\\'")
+                );
+                let _ = page.evaluate(js).await;
+            }
+        }
+    }
+
+    // Restore scroll position
+    if let (Some(x), Some(y)) = (
+        checkpoint["state"]["scroll"]["x"].as_f64(),
+        checkpoint["state"]["scroll"]["y"].as_f64(),
+    ) {
+        let js = format!("window.scrollTo({}, {})", x, y);
+        let _ = page.evaluate(js).await;
+    }
+
+    Ok(serde_json::json!({
+        "action": "checkpoint_restore",
+        "name": name,
+        "restored_url": checkpoint["state"]["url"],
+        "saved_at": checkpoint["saved_at"]
+    }))
+}
+
+/// Garbage-collect tabs: report current tab info for session pool management.
+pub async fn gc_tabs_info(page: &Page) -> Result<Value> {
+    let js = r#"
+        (() => {
+            return JSON.stringify({
+                current_url: window.location.href,
+                current_title: document.title,
+                timestamp: Date.now()
+            });
+        })()
+    "#
+    .to_string();
+
+    let result = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Cdp(format!("gc_tabs: {e}")))?;
+    let info: String = result.into_value().unwrap_or_else(|_| "{}".to_string());
+    let parsed: Value = serde_json::from_str(&info).unwrap_or(serde_json::json!({}));
+
+    Ok(serde_json::json!({
+        "action": "gc_tabs",
+        "current_page": parsed,
+        "note": "Tab GC requires browser-level access. Use session pool management for multi-tab cleanup."
+    }))
+}

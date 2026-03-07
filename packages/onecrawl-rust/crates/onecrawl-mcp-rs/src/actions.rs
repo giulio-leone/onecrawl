@@ -198,6 +198,10 @@ action_enum!(AgentAction, "agent", [
     RoleValidate => "role_validate",
     KeyboardTrapDetect => "keyboard_trap_detect",
     ScreenReaderSim => "screen_reader_sim",
+    // Autonomous agent loop
+    AgentLoop => "agent_loop",
+    GoalAssert => "goal_assert",
+    AnnotatedObserve => "annotated_observe",
 ]);
 
 action_enum!(StealthAction, "stealth", [
@@ -305,6 +309,9 @@ action_enum!(ComputerAction, "computer", [
     GoalExecute => "goal_execute",
     StepVerify => "step_verify",
     AutoRecover => "auto_recover",
+    // Annotated screenshot & adaptive retry
+    AnnotatedScreenshot => "annotated_screenshot",
+    AdaptiveRetry => "adaptive_retry",
 ]);
 
 action_enum!(MemoryAction, "memory", [
@@ -339,6 +346,9 @@ action_enum!(AutomateAction, "automate", [
     WorkflowForEach => "workflow_for_each",
     WorkflowIf => "workflow_if",
     WorkflowVariable => "workflow_variable",
+    // Long-running harness
+    ReconnectCdp => "reconnect_cdp",
+    GcTabs => "gc_tabs",
 ]);
 
 action_enum!(PerfAction, "perf", [
