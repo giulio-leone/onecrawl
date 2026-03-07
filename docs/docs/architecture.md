@@ -7,7 +7,7 @@ title: Architecture
 
 ## Overview
 
-OneCrawl is a Rust monorepo containing **8 core crates** and **2 binding crates** that compile into a single CLI binary, an MCP server, an HTTP API server, and native libraries for Node.js and Python.
+OneCrawl is a Rust monorepo containing **12 core crates** and **2 binding crates** that compile into a single CLI binary, an MCP server, an HTTP API server, and native libraries for Node.js and Python.
 
 All crates live under `packages/onecrawl-rust/crates/`:
 
@@ -15,6 +15,10 @@ All crates live under `packages/onecrawl-rust/crates/`:
 packages/onecrawl-rust/
 ├── crates/
 │   ├── onecrawl-core/          # Shared types, traits, errors
+│   ├── onecrawl-browser/       # Browser automation engine (internalized chromiumoxide)
+│   ├── onecrawl-protocol/      # CDP protocol types (internalized chromiumoxide_cdp)
+│   ├── onecrawl-protocol-gen/  # Protocol code generator (internalized chromiumoxide_pdl)
+│   ├── onecrawl-browser-types/ # Core browser types (internalized chromiumoxide_types)
 │   ├── onecrawl-crypto/        # AES-256-GCM, PKCE, TOTP, hashing
 │   ├── onecrawl-parser/        # HTML parsing, accessibility tree
 │   ├── onecrawl-storage/       # Encrypted key-value store (sled)
@@ -53,6 +57,23 @@ packages/onecrawl-rust/
               │  (axum)   │ │ (clap)  │ │ (rmcp)  │
               │ 43 routes │ │ 409+cmd │ │17 tools │
               └───────────┘ └─────────┘ └─────────┘
+                    │           │           │
+                    └───────────┼───────────┘
+                                │
+               ┌────────────────▼────────────────┐
+               │       onecrawl-browser          │
+               │  (first-party browser engine)   │
+               │                                 │
+               │  ┌───────────┐ ┌──────────────┐ │
+               │  │ protocol  │ │ browser-types│ │
+               │  │(CDP types)│ │ (core types) │ │
+               │  └───────────┘ └──────────────┘ │
+               └────────────────┬────────────────┘
+                                │
+                           ┌────▼────┐
+                           │ Chrome  │
+                           │ (CDP)   │
+                           └─────────┘
                     │           │           │
                     └───────────┼───────────┘
                                 │
@@ -168,9 +189,22 @@ let keys = store.list_prefix("session_")?;
 store.delete("session_token")?;
 ```
 
+### `onecrawl-browser`
+
+The first-party browser automation engine, internalized from chromiumoxide 0.8.0 and rebranded under the OneCrawl namespace. Eliminates the external chromiumoxide dependency entirely. All browser automation imports use `onecrawl_browser::*` instead of `chromiumoxide::*`.
+
+Comprises four internal crates:
+
+| Crate | Origin | Purpose |
+|---|---|---|
+| `onecrawl-browser` | chromiumoxide | High-level browser/page API |
+| `onecrawl-protocol` | chromiumoxide_cdp | CDP protocol type definitions |
+| `onecrawl-protocol-gen` | chromiumoxide_pdl | Protocol description language code generator |
+| `onecrawl-browser-types` | chromiumoxide_types | Core shared types (`Method`, `Command`, `Event`) |
+
 ### `onecrawl-cdp`
 
-The browser automation engine. Built on [chromiumoxide](https://github.com/nickolasfisher/chromiumoxide) with **97 CDP modules** and **662 functions**:
+The CDP integration layer with **97 CDP modules** and **662 functions**, built on `onecrawl-browser`:
 
 | Module Category | Modules | Functions | Description |
 |---|---|---|---|

@@ -150,17 +150,21 @@ browser.close()
 ```
 onecrawl (Rust workspace)
 │
-├─ onecrawl-core        Shared types, traits, error handling
-├─ onecrawl-cdp         Chrome DevTools Protocol — 97 modules, 662 functions
-├─ onecrawl-cli-rs      CLI — 409+ subcommands across 30+ groups (clap v4)
-├─ onecrawl-mcp-rs      MCP server — 17 super-tools, 421 actions (rmcp)
-├─ onecrawl-server      HTTP REST API — 43 endpoints (axum)
-├─ onecrawl-crypto      AES-256-GCM, PKCE, TOTP, PBKDF2 (ring)
-├─ onecrawl-parser      HTML parsing & accessibility tree (lol_html + scraper)
-├─ onecrawl-storage     Encrypted key-value store (sled)
+├─ onecrawl-core            Shared types, traits, error handling
+├─ onecrawl-browser         Browser automation engine (internalized chromiumoxide)
+├─ onecrawl-protocol        CDP protocol types (internalized chromiumoxide_cdp)
+├─ onecrawl-protocol-gen    Protocol code generator (internalized chromiumoxide_pdl)
+├─ onecrawl-browser-types   Core browser types (internalized chromiumoxide_types)
+├─ onecrawl-cdp             Chrome DevTools Protocol — 97 modules, 662 functions
+├─ onecrawl-cli-rs          CLI — 409+ subcommands across 30+ groups (clap v4)
+├─ onecrawl-mcp-rs          MCP server — 17 super-tools, 421 actions (rmcp)
+├─ onecrawl-server          HTTP REST API — 43 endpoints (axum)
+├─ onecrawl-crypto          AES-256-GCM, PKCE, TOTP, PBKDF2 (ring)
+├─ onecrawl-parser          HTML parsing & accessibility tree (lol_html + scraper)
+├─ onecrawl-storage         Encrypted key-value store (sled)
 │
-├─ bindings/napi        Node.js SDK — 391 methods via NAPI-RS
-└─ bindings/python      Python SDK — 509 methods via PyO3
+├─ bindings/napi            Node.js SDK — 391 methods via NAPI-RS
+└─ bindings/python          Python SDK — 509 methods via PyO3
 ```
 
 ```
@@ -180,6 +184,16 @@ onecrawl (Rust workspace)
    │  cdp (97)  │  │  crypto   │  │  storage   │
    │  modules   │  │  (ring)   │  │  (sled)    │
    └─────┬─────┘  └───────────┘  └────────────┘
+         │
+   ┌─────▼──────────────────────────────────┐
+   │         onecrawl-browser               │
+   │  (first-party browser automation)      │
+   │                                        │
+   │  ┌──────────────┐ ┌─────────────────┐  │
+   │  │  protocol    │ │  browser-types  │  │
+   │  │  (CDP types) │ │  (core types)   │  │
+   │  └──────────────┘ └─────────────────┘  │
+   └─────┬──────────────────────────────────┘
          │
     ┌────▼────┐
     │ Chrome  │

@@ -5,6 +5,23 @@ All notable changes to OneCrawl will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0-alpha.1] - 2026-03-08
+
+### Breaking Changes
+
+- Internalized chromiumoxide as first-party crates under OneCrawl namespace
+- `chromiumoxide::Page` → `onecrawl_browser::Page`
+- `chromiumoxide::Browser` → `onecrawl_browser::Browser`
+- All CDP types now under `onecrawl_protocol::*`
+
+### Architecture
+
+- New crate: `onecrawl-browser` (browser automation engine, from chromiumoxide)
+- New crate: `onecrawl-protocol` (CDP protocol types, from chromiumoxide_cdp)
+- New crate: `onecrawl-protocol-gen` (protocol code generator, from chromiumoxide_pdl)
+- New crate: `onecrawl-browser-types` (core types, from chromiumoxide_types)
+- Eliminated external chromiumoxide dependency (was coupling 9/10)
+
 ## [3.9.2] - 2025-03-07
 
 ### Security
@@ -42,5 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Streaming AI Vision** — Continuous page understanding via streaming visual analysis, enabling real-time interpretation of page content and layout changes.
 - **Visual Workflow Builder (Studio)** — Drag-and-drop UI for composing crawl workflows visually, with live preview and export to CLI-compatible configurations.
 
+[4.0.0-alpha.1]: https://github.com/giulio-leone/onecrawl/compare/v3.9.2...v4.0.0-alpha.1
 [3.9.2]: https://github.com/giulio-leone/onecrawl/compare/v3.9.0...v3.9.2
 [3.9.0]: https://github.com/giulio-leone/onecrawl/releases/tag/v3.9.0
