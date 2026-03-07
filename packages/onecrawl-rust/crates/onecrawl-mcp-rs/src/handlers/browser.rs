@@ -2201,9 +2201,14 @@ impl OneCrawlMcp {
         let raw = result.into_value::<String>().unwrap_or_else(|_| "{}".into());
         let val: serde_json::Value = serde_json::from_str(&raw).unwrap_or_default();
 
+        const MAX_EVENT_BUFFER: usize = 10_000;
         if let Some(events) = val.get("events").and_then(|e| e.as_array()) {
             let mut state = self.browser.lock().await;
             state.event_buffer.extend(events.iter().cloned());
+            let len = state.event_buffer.len();
+            if len > MAX_EVENT_BUFFER {
+                state.event_buffer.drain(..len - MAX_EVENT_BUFFER);
+            }
         }
         json_ok(&val)
     }
@@ -2240,7 +2245,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let scope = p.scope.as_deref().unwrap_or("/");
         let js = format!(r#"(async () => {{
-            const reg = await navigator.serviceWorker.register("{}", {{ scope: "{}" }});
+            const reg = await navigator.serviceWorker.register({}, {{ scope: {} }});
             return {{
                 scope: reg.scope,
                 active: reg.active ? {{ state: reg.active.state, scriptURL: reg.active.scriptURL }} : null,
@@ -2255,12 +2260,13 @@ impl OneCrawlMcp {
 
     pub(crate) async fn sw_unregister(&self, p: SwUnregisterParams) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
-        let scope_filter = p.scope.as_deref().unwrap_or("");
+        let scope_filter = json_escape(p.scope.as_deref().unwrap_or(""));
         let js = format!(r#"(async () => {{
             const regs = await navigator.serviceWorker.getRegistrations();
             let unregistered = 0;
+            const scopeFilter = {scope_filter};
             for (const reg of regs) {{
-                if (!"{scope_filter}" || reg.scope.includes("{scope_filter}")) {{
+                if (!scopeFilter || reg.scope.includes(scopeFilter)) {{
                     await reg.unregister();
                     unregistered++;
                 }}
@@ -2290,12 +2296,13 @@ impl OneCrawlMcp {
 
     pub(crate) async fn sw_update(&self, p: SwUpdateParams) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
-        let scope_filter = p.scope.as_deref().unwrap_or("");
+        let scope_filter = json_escape(p.scope.as_deref().unwrap_or(""));
         let js = format!(r#"(async () => {{
             const regs = await navigator.serviceWorker.getRegistrations();
             let updated = 0;
+            const scopeFilter = {scope_filter};
             for (const reg of regs) {{
-                if (!"{scope_filter}" || reg.scope.includes("{scope_filter}")) {{
+                if (!scopeFilter || reg.scope.includes(scopeFilter)) {{
                     await reg.update();
                     updated++;
                 }}
@@ -2340,13 +2347,14 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let body = json_escape(p.body.as_deref().unwrap_or(""));
         let tag = json_escape(p.tag.as_deref().unwrap_or("onecrawl-push"));
+        let title = json_escape(&p.title);
         let js = format!(r#"(async () => {{
             if (!('Notification' in window)) return {{ error: 'Notifications not supported' }};
             const perm = await Notification.requestPermission();
             if (perm !== 'granted') return {{ error: 'Permission denied', permission: perm }};
-            const n = new Notification("{}", {{ body: "{body}", tag: "{tag}" }});
-            return {{ simulated: true, title: "{}", permission: perm }};
-        }})()"#, json_escape(&p.title), json_escape(&p.title));
+            const n = new Notification({title}, {{ body: {body}, tag: {tag} }});
+            return {{ simulated: true, title: {title}, permission: perm }};
+        }})()"#);
         let result = page.evaluate(js).await.mcp()?;
         let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
         json_ok(&serde_json::json!({ "action": "push_simulate", "result": val }))
@@ -2696,11 +2704,11 @@ impl OneCrawlMcp {
                 "#.to_string()
             }
             "record_failure" => {
-                let err = p.error.as_deref().unwrap_or("unknown");
+                let err = json_escape(p.error.as_deref().unwrap_or("unknown"));
                 format!(r#"
                     if (!window.__cb) window.__cb = {{ failures: 0, open: false, threshold: {threshold}, last_error: null }};
                     window.__cb.failures++;
-                    window.__cb.last_error = '{err}';
+                    window.__cb.last_error = {err};
                     if (window.__cb.failures >= window.__cb.threshold) window.__cb.open = true;
                     JSON.stringify(window.__cb)
                 "#)
@@ -2781,9 +2789,10 @@ impl OneCrawlMcp {
         let content = result.content;
         let max_chars = p.max_tokens.unwrap_or(4000) * 4;
         let truncated = if content.len() > max_chars {
+            let safe: String = content.chars().take(max_chars).collect();
             format!(
                 "{}...[truncated, {} total chars]",
-                &content[..max_chars],
+                safe,
                 content.len()
             )
         } else {

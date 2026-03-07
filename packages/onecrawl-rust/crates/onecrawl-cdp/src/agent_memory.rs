@@ -248,7 +248,7 @@ impl AgentMemory {
     pub fn store_domain_strategy(&mut self, strategy: DomainStrategy) -> Result<()> {
         let key = format!("domain_strategy:{}", strategy.domain);
         let domain = strategy.domain.clone();
-        self.store(key, serde_json::to_value(&strategy).unwrap(), MemoryCategory::DomainStrategy, Some(domain))
+        self.store(key, serde_json::to_value(&strategy)?, MemoryCategory::DomainStrategy, Some(domain))
     }
 
     pub fn recall_domain_strategy(&mut self, domain: &str) -> Option<DomainStrategy> {
@@ -259,13 +259,13 @@ impl AgentMemory {
     pub fn record_page_visit(&mut self, visit: PageVisit) -> Result<()> {
         let key = format!("visit:{}:{}", visit.url, visit.timestamp);
         let domain = url_domain(&visit.url);
-        self.store(key, serde_json::to_value(&visit).unwrap(), MemoryCategory::PageVisit, domain)
+        self.store(key, serde_json::to_value(&visit)?, MemoryCategory::PageVisit, domain)
     }
 
     pub fn store_element_pattern(&mut self, pattern: ElementPattern) -> Result<()> {
         let key = format!("pattern:{}:{}", pattern.domain, pattern.description);
         let domain = Some(pattern.domain.clone());
-        self.store(key, serde_json::to_value(&pattern).unwrap(), MemoryCategory::ElementPattern, domain)
+        self.store(key, serde_json::to_value(&pattern)?, MemoryCategory::ElementPattern, domain)
     }
 
     pub fn recall_element_patterns(&self, domain: &str) -> Vec<ElementPattern> {
