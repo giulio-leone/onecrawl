@@ -97,7 +97,13 @@ pub fn handle(action: CryptoAction) {
             println!("{}", onecrawl_crypto::totp::generate_secret());
         }
         CryptoAction::DeriveKey { passphrase, salt } => {
-            let salt_bytes = hex::decode(&salt).unwrap_or_else(|_| salt.as_bytes().to_vec());
+            let salt_bytes = match hex::decode(&salt) {
+                Ok(b) => b,
+                Err(e) => {
+                    eprintln!("Error: invalid hex salt: {e}");
+                    std::process::exit(1);
+                }
+            };
             match onecrawl_crypto::derive_key(&passphrase, &salt_bytes) {
                 Ok(key) => println!("{}", hex::encode(key)),
                 Err(e) => {

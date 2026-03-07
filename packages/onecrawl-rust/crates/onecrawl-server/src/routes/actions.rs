@@ -115,7 +115,8 @@ fn execute_single_action<'a>(
             }
         }
         Action::Wait { time } => {
-            tokio::time::sleep(tokio::time::Duration::from_millis(*time)).await;
+            let capped = (*time).min(60_000); // 60 second max
+            tokio::time::sleep(tokio::time::Duration::from_millis(capped)).await;
             ActionResult::ok()
         }
         Action::Batch { actions } => {

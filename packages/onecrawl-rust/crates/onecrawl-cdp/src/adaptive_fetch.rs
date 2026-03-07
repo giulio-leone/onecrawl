@@ -294,7 +294,7 @@ pub async fn adaptive_get(
 
                     // For rate limiting (429), wait with backoff
                     if status == 429 {
-                        let delay = cfg.base_delay_ms * 2u64.pow(attempt);
+                        let delay = cfg.base_delay_ms.saturating_mul(2u64.saturating_pow(attempt)).min(300_000);
                         let jitter = rand::random::<u64>() % (delay / 2 + 1);
                         tokio::time::sleep(Duration::from_millis(delay + jitter)).await;
                         continue;
@@ -302,7 +302,7 @@ pub async fn adaptive_get(
 
                     // For 403/503 without CF markers, retry with different UA
                     if attempt < cfg.max_retries {
-                        let delay = cfg.base_delay_ms * 2u64.pow(attempt);
+                        let delay = cfg.base_delay_ms.saturating_mul(2u64.saturating_pow(attempt)).min(300_000);
                         tokio::time::sleep(Duration::from_millis(delay)).await;
                         continue;
                     }
@@ -323,7 +323,7 @@ pub async fn adaptive_get(
             Err(e) => {
                 last_error = e;
                 if attempt < cfg.max_retries {
-                    let delay = cfg.base_delay_ms * 2u64.pow(attempt);
+                    let delay = cfg.base_delay_ms.saturating_mul(2u64.saturating_pow(attempt)).min(300_000);
                     tokio::time::sleep(Duration::from_millis(delay)).await;
                 }
             }
@@ -380,7 +380,7 @@ pub async fn standalone_get(
         match http_get(url, &cfg, attempt, proxy.as_ref()).await {
             Ok((status, headers, body, final_url)) => {
                 if status == 429 && attempt < cfg.max_retries {
-                    let delay = cfg.base_delay_ms * 2u64.pow(attempt);
+                    let delay = cfg.base_delay_ms.saturating_mul(2u64.saturating_pow(attempt)).min(300_000);
                     let jitter = rand::random::<u64>() % (delay / 2 + 1);
                     tokio::time::sleep(Duration::from_millis(delay + jitter)).await;
                     continue;
@@ -398,7 +398,7 @@ pub async fn standalone_get(
             }
             Err(e) => {
                 if attempt < cfg.max_retries {
-                    let delay = cfg.base_delay_ms * 2u64.pow(attempt);
+                    let delay = cfg.base_delay_ms.saturating_mul(2u64.saturating_pow(attempt)).min(300_000);
                     tokio::time::sleep(Duration::from_millis(delay)).await;
                     continue;
                 }
