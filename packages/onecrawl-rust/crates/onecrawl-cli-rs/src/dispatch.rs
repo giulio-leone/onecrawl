@@ -1439,5 +1439,8 @@ pub(crate) async fn dispatch(command: Commands) {
 
         // ── Streaming AI Vision ─────────────────────────────────────
         Commands::Vision { action } => commands::vision::handle(action).await,
+
+        // ── Visual Workflow Builder ────────────────────────────────
+        Commands::Studio { action } => commands::studio::handle(action).await,
     }
 }

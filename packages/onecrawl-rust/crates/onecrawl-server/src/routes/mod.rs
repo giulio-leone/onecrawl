@@ -6,6 +6,7 @@ mod events;
 mod instances;
 mod locking;
 mod profiles;
+mod studio;
 mod tabs;
 
 use axum::extract::Json;
@@ -124,6 +125,17 @@ pub fn create_router(state: AppState) -> Router {
         .route("/events/stats", get(events::event_stats))
         .route("/events/stream", get(events::event_stream))
         .route("/events/journal", delete(events::clear_journal))
+        // Studio
+        .route("/studio", get(studio::studio_page))
+        .route("/studio/api/templates", get(studio::list_templates))
+        .route("/studio/api/templates/{id}", get(studio::get_template))
+        .route("/studio/api/projects", get(studio::list_projects))
+        .route("/studio/api/projects", post(studio::save_project))
+        .route("/studio/api/projects/{id}", get(studio::get_project))
+        .route("/studio/api/projects/{id}", delete(studio::delete_project))
+        .route("/studio/api/validate", post(studio::validate_workflow))
+        .route("/studio/api/export/{id}", post(studio::export_project))
+        .route("/studio/api/import", post(studio::import_workflow))
         .layer(cors)
         .layer(CompressionLayer::new())
         .with_state(state)

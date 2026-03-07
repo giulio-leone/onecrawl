@@ -28,6 +28,7 @@ mod skills;
 mod spa;
 mod storage;
 mod streaming_video;
+mod studio;
 mod tabs;
 mod utility;
 mod vault;
@@ -55,6 +56,7 @@ pub(crate) use skills::SkillsAction;
 pub(crate) use spa::SpaAction;
 pub(crate) use storage::{CookieJarAction, CookieAction, WebStorageAction};
 pub(crate) use streaming_video::{StreamAction, RecordAction};
+pub(crate) use studio::StudioAction;
 pub(crate) use tabs::{TabAction, DownloadAction};
 pub(crate) use utility::{RateLimitAction, RetryAction, ScheduleAction, PoolAction, BenchAction, GeoAction, RequestAction};
 pub(crate) use vault::VaultAction;
@@ -1038,5 +1040,12 @@ pub(crate) enum Commands {
     // ── Version ─────────────────────────────────────────────────
     /// Show version and build information
     Version,
+
+    // ── Visual Workflow Builder ────────────────────────────────
+    /// Visual workflow builder UI and project management
+    Studio {
+        #[command(subcommand)]
+        action: StudioAction,
+    },
 }
 

@@ -2072,6 +2072,54 @@ impl OneCrawlMcp {
         }
     }
 
+    #[tool(
+        name = "studio",
+        description = "Visual Workflow Builder — create, edit, and manage workflow projects.\n\nActions:\n- templates — List available workflow templates\n- projects — List saved projects\n- save {id, name, workflow} — Save a workflow project\n- load {id} — Load a workflow project\n- delete {id} — Delete a project\n- validate {workflow} — Validate a workflow JSON\n- export {id} — Export project as workflow JSON\n- import {name, workflow} — Import workflow JSON as new project"
+    )]
+    async fn tool_studio(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        self.enforce_safety("studio", &action).await?;
+        let action = StudioAction::parse(&action)?;
+        match action {
+            StudioAction::Templates => {
+                let params: StudioTemplatesParams = parse_params(v, "studio_templates")?;
+                self.studio_templates(params).await
+            }
+            StudioAction::Projects => {
+                let params: StudioProjectsParams = parse_params(v, "studio_projects")?;
+                self.studio_projects(params).await
+            }
+            StudioAction::Save => {
+                let params: StudioSaveParams = parse_params(v, "studio_save")?;
+                self.studio_save(params).await
+            }
+            StudioAction::Load => {
+                let params: StudioLoadParams = parse_params(v, "studio_load")?;
+                self.studio_load(params).await
+            }
+            StudioAction::Delete => {
+                let params: StudioDeleteParams = parse_params(v, "studio_delete")?;
+                self.studio_delete(params).await
+            }
+            StudioAction::Validate => {
+                let params: StudioValidateParams = parse_params(v, "studio_validate")?;
+                self.studio_validate(params).await
+            }
+            StudioAction::Export => {
+                let params: StudioExportParams = parse_params(v, "studio_export")?;
+                self.studio_export(params).await
+            }
+            StudioAction::Import => {
+                let params: StudioImportParams = parse_params(v, "studio_import")?;
+                self.studio_import(params).await
+            }
+        }
+    }
+
     /// Create an `OneCrawlMcp` reusing an existing browser session.
     /// Used by the CLI `run` command to delegate to MCP handlers directly.
     pub fn from_browser(
@@ -2116,8 +2164,9 @@ impl OneCrawlMcp {
             "vault" => self.tool_vault(ta).await,
             "events" => self.tool_events(ta).await,
             "plugins" => self.tool_plugins(ta).await,
+            "studio" => self.tool_studio(ta).await,
             _ => return Err(format!(
-                "unknown tool: '{tool}'. Available: browser, crawl, agent, stealth, data, secure, computer, memory, automate, perf, reactor, orchestrator, vault, events, plugins"
+                "unknown tool: '{tool}'. Available: browser, crawl, agent, stealth, data, secure, computer, memory, automate, perf, reactor, orchestrator, vault, events, plugins, studio"
             )),
         };
 

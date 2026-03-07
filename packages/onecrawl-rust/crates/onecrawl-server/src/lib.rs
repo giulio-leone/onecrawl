@@ -9,4 +9,5 @@ pub mod routes;
 pub mod serve;
 pub mod snapshot;
 pub mod state;
+pub mod studio_html;
 pub mod tab;

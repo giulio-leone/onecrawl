@@ -17,3 +17,4 @@ mod events;
 mod vault;
 mod plugin;
 mod vision;
+mod studio;

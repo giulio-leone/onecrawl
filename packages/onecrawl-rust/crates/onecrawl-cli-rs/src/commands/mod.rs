@@ -11,5 +11,6 @@ pub mod proxy;
 pub mod session;
 pub mod skills;
 pub mod storage;
+pub mod studio;
 pub mod vault;
 pub mod vision;

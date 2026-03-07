@@ -99,6 +99,7 @@ pub mod pixel_diff;
 pub mod plugin;
 pub mod vision;
 pub mod workflow;
+pub mod studio;
 
 pub use browser_pool::{BrowserInstance, BrowserPool, BrowserStatus, SharedPool, new_shared_pool};
 pub use smart_actions::SmartMatch;

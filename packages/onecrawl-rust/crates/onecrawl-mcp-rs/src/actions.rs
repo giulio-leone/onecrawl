@@ -526,6 +526,17 @@ action_enum!(PluginMcpAction, "plugins", [
     Configure => "configure",
 ]);
 
+action_enum!(StudioAction, "studio", [
+    Templates => "templates",
+    Projects => "projects",
+    Save => "save",
+    Load => "load",
+    Delete => "delete",
+    Validate => "validate",
+    Export => "export",
+    Import => "import",
+]);
+
 // ──────────────── Tests ─────────────────
 
 #[cfg(test)]

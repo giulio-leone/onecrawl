@@ -3421,3 +3421,55 @@ pub struct PluginConfigureParams {
     #[schemars(description = "Configuration JSON object")]
     pub config: serde_json::Value,
 }
+
+// ── Studio params ──────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct StudioTemplatesParams {}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct StudioProjectsParams {}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct StudioSaveParams {
+    #[schemars(description = "Project ID")]
+    pub id: String,
+    #[schemars(description = "Project name")]
+    pub name: String,
+    #[schemars(description = "Project description")]
+    pub description: Option<String>,
+    #[schemars(description = "Workflow JSON object")]
+    pub workflow: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct StudioLoadParams {
+    #[schemars(description = "Project ID to load")]
+    pub id: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct StudioDeleteParams {
+    #[schemars(description = "Project ID to delete")]
+    pub id: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct StudioValidateParams {
+    #[schemars(description = "Workflow JSON object to validate")]
+    pub workflow: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct StudioExportParams {
+    #[schemars(description = "Project ID to export")]
+    pub id: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct StudioImportParams {
+    #[schemars(description = "Name for the imported project")]
+    pub name: String,
+    #[schemars(description = "Workflow JSON to import")]
+    pub workflow: serde_json::Value,
+}
