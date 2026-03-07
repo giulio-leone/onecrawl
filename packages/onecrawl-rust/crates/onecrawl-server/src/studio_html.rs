@@ -156,7 +156,7 @@ pub fn studio_html() -> &'static str {
         log: { icon: '\u{1f4dd}', label: 'Log', fields: [{name:'message',type:'text',label:'Message',required:true}] }
     };
 
-    function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
     function renderSteps() {
         var container = document.getElementById('workflow-steps');

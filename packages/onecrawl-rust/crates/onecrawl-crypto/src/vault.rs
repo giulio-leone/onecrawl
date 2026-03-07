@@ -7,6 +7,7 @@ use onecrawl_core::{EncryptedPayload, Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 // ──────────────────────────── Types ────────────────────────────
 
@@ -50,10 +51,14 @@ struct VaultFile {
 // ──────────────────────────── Vault ────────────────────────────
 
 /// Encrypted credential vault backed by AES-256-GCM.
+#[derive(ZeroizeOnDrop)]
 pub struct Vault {
+    #[zeroize(skip)]
     path: PathBuf,
+    #[zeroize(skip)]
     entries: HashMap<String, VaultEntry>,
     passphrase: String,
+    #[zeroize(skip)]
     dirty: bool,
 }
 
@@ -149,11 +154,13 @@ impl Vault {
 
     /// Delete a secret by key.
     pub fn delete(&mut self, key: &str) -> Result<()> {
-        if self.entries.remove(key).is_none() {
-            return Err(Error::Crypto(format!("key '{key}' not found in vault")));
+        if let Some(mut entry) = self.entries.remove(key) {
+            entry.value.zeroize();
+            self.dirty = true;
+            self.save()
+        } else {
+            Err(Error::Crypto(format!("key '{key}' not found in vault")))
         }
-        self.dirty = true;
-        self.save()
     }
 
     /// List all entries as summaries (no secret values).
@@ -198,6 +205,7 @@ impl Vault {
         if new_password.is_empty() {
             return Err(Error::Config("new password cannot be empty".into()));
         }
+        self.passphrase.zeroize();
         self.passphrase = new_password.to_string();
         self.dirty = true;
         self.save()

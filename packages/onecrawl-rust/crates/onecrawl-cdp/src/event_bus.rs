@@ -5,6 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::{broadcast, RwLock};
@@ -422,16 +423,14 @@ pub fn matches_pattern(event_type: &str, pattern: &str) -> bool {
 //  Utility functions
 // ────────────────────────────────────────────────────────────────────
 
-/// Generate a timestamp-based unique ID.
+/// Generate a unique event ID using timestamp + atomic counter.
 pub fn generate_id() -> String {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default();
-    format!(
-        "evt-{}-{}",
-        ts.as_millis(),
-        ts.subsec_nanos() % 100_000
-    )
+    let seq = COUNTER.fetch_add(1, Ordering::Relaxed);
+    format!("evt-{}-{}", ts.as_millis(), seq)
 }
 
 /// ISO 8601 timestamp (UTC).
