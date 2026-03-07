@@ -198,7 +198,7 @@ impl Page {
     ///     element.click().await?;
     ///
     ///     // Using the `ElementHandle` to click at specific point
-    ///     let point = element.clickable_point().await?.expect("Failed to get point");
+    ///     let point = element.clickable_point().await?;
     ///     page.click(point).await?;
     ///
     ///     // Dispatching a `click` at a position with custom options using `DispatchMouseEventParams`
