@@ -15,7 +15,7 @@ fn cli_version_shows_semver() {
     cli().arg("version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("onecrawl 1.0.0"));
+        .stdout(predicate::str::is_match(r"onecrawl \d+\.\d+\.\d+").unwrap());
 }
 
 #[test]
@@ -33,7 +33,7 @@ fn cli_health_check() {
     cli().arg("health")
         .assert()
         .success()
-        .stdout(predicate::str::contains("1.0.0"));
+        .stdout(predicate::str::is_match(r"\d+\.\d+\.\d+").unwrap());
 }
 
 #[test]

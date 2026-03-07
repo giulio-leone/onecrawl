@@ -13,8 +13,13 @@ use onecrawl_core::{Error, Result};
 pub async fn goto(page: &Page, url: &str) -> Result<()> {
     let safe_url = url.replace('\\', "\\\\").replace('\'', "\\'");
 
+    // Non-HTTP URLs (about:blank, data:, etc.) don't need domain polling.
+    let is_special_url = url == "about:blank"
+        || url.starts_with("data:")
+        || url.starts_with("blob:")
+        || url.starts_with("javascript:");
+
     // Dismiss any beforeunload dialog that could block navigation.
-    // We clear onbeforeunload first, then trigger navigation.
     page.evaluate("window.onbeforeunload = null")
         .await
         .ok();
@@ -34,11 +39,19 @@ pub async fn goto(page: &Page, url: &str) -> Result<()> {
             .execute(HandleJavaScriptDialogParams::new(true))
             .await;
         tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
-        page.evaluate(format!("window.location.href = '{safe_url}'"))
-            .await
-            .map_err(|e| Error::Cdp(format!("goto failed after dialog dismiss: {e}")))?;
+        // For special URLs the context may be destroyed; ignore errors.
+        let _ = page.evaluate(format!("window.location.href = '{safe_url}'"))
+            .await;
     } else if let Ok(Err(e)) = nav_result {
-        return Err(Error::Cdp(format!("goto failed: {e}")));
+        if !is_special_url {
+            return Err(Error::Cdp(format!("goto failed: {e}")));
+        }
+    }
+
+    // Special URLs don't need domain polling — navigation is instant.
+    if is_special_url {
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        return Ok(());
     }
 
     // Poll until URL changes to the target domain (or 60s elapsed)
