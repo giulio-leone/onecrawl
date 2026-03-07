@@ -473,6 +473,7 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let selector = p.selector.as_deref().unwrap_or("document.body");
+        let selector_js = json_escape(selector);
         let child_list = p.child_list.unwrap_or(true);
         let attributes = p.attributes.unwrap_or(true);
         let character_data = p.character_data.unwrap_or(false);
@@ -480,7 +481,7 @@ impl OneCrawlMcp {
         let js = format!(
             r#"(() => {{
                 window.__ocMutations = window.__ocMutations || [];
-                const target = document.querySelector('{selector}') || document.body;
+                const target = document.querySelector({selector_js}) || document.body;
                 if (window.__ocObserver) window.__ocObserver.disconnect();
                 window.__ocObserver = new MutationObserver(mutations => {{
                     for (const m of mutations) {{
@@ -894,7 +895,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let resource_types = p.resource_types.unwrap_or_default();
         let patterns_js = p.patterns.iter()
-            .map(|p| format!("new RegExp('{}')", p.replace('*', ".*").replace('\\', "\\\\").replace('\'', "\\'")))
+            .map(|p| format!("new RegExp({})", json_escape(&p.replace('*', ".*"))))
             .collect::<Vec<_>>()
             .join(",");
         let types_js = if resource_types.is_empty() {

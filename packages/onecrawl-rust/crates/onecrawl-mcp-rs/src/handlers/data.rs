@@ -498,12 +498,13 @@ impl OneCrawlMcp {
         let scope = p.selector.as_deref().unwrap_or("body");
         let scope_js = json_escape(scope);
         let types = p.types.as_ref().map(|t| t.join(",")).unwrap_or_else(|| "emails,phones,urls,dates,prices".to_string());
+        let types_js = json_escape(&types);
 
         let js = format!(r#"(() => {{
             const el = document.querySelector({scope_js}) || document.body;
             const text = el.innerText || el.textContent || '';
             const result = {{}};
-            const types = '{types}'.split(',');
+            const types = {types_js}.split(',');
 
             if (types.includes('emails')) {{
                 result.emails = [...new Set(text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{{2,}}/g) || [])];
@@ -718,10 +719,11 @@ impl OneCrawlMcp {
     pub(crate) async fn extract_feeds(&self, p: ExtractFeedsParams) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let feed_type = p.feed_type.as_deref().unwrap_or("all");
+        let feed_type_js = json_escape(feed_type);
 
         let js = format!(r#"(() => {{
             const feeds = [];
-            const feedType = '{feed_type}';
+            const feedType = {feed_type_js};
 
             if (feedType === 'all' || feedType === 'rss' || feedType === 'atom') {{
                 document.querySelectorAll('link[type="application/rss+xml"], link[type="application/atom+xml"]').forEach(link => {{
