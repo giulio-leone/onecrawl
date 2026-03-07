@@ -1426,5 +1426,8 @@ pub(crate) async fn dispatch(command: Commands) {
             commands::browser::run::run_action(&tool, &action, json.as_deref()).await
         }
         Commands::RunList => commands::browser::run::list_actions(),
+
+        // ── Multi-Device Orchestration ──────────────────────────────
+        Commands::Orchestrate { action } => commands::orchestrator::handle(action).await,
         }
 }

@@ -50,6 +50,7 @@ pub mod link_graph;
 pub mod navigation;
 pub mod network;
 pub mod network_intel;
+pub mod orchestrator;
 pub mod network_log;
 pub mod page;
 pub mod page_watcher;
@@ -185,6 +186,13 @@ pub use tls_fingerprint::BrowserFingerprint;
 
 pub use durable::{CrashPolicy, DurableConfig, DurableSession, DurableState, DurableStatus, parse_duration};
 pub use reactor::{EventFilter, Reactor, ReactorConfig, ReactorEvent, ReactorEventType, ReactorHandler, ReactorRule, ReactorStatus, RuleStatus};
+
+pub use orchestrator::{
+    Orchestrator, Orchestration, OrchestrationResult, DeviceType, DeviceConfig,
+    DeviceAction, OrchAction, OrchStep, ErrorPolicy,
+    StepResult as OrchStepResult, DeviceActionResult,
+    StepResultStatus, DeviceHandle,
+};
 
 // Re-export chromiumoxide::Page for downstream consumers
 pub use chromiumoxide::Page;

@@ -3105,3 +3105,30 @@ pub struct AgentAutoResumeParams {
 
 #[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
 pub struct AgentAutoResultParams {}
+
+// ──────────────── Orchestrator params ─────────────────
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct OrchestratorRunParams {
+    #[schemars(description = "Path to orchestration JSON file")]
+    pub file: Option<String>,
+    #[schemars(description = "Inline orchestration JSON config")]
+    pub config: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct OrchestratorValidateParams {
+    #[schemars(description = "Path to orchestration JSON file")]
+    pub file: Option<String>,
+    #[schemars(description = "Inline orchestration JSON config")]
+    pub config: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct OrchestratorStatusParams {}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct OrchestratorStopParams {}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct OrchestratorDevicesParams {}

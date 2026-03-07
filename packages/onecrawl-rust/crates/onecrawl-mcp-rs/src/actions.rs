@@ -475,6 +475,14 @@ action_enum!(ReactorAction, "reactor", [
     Clear => "clear",
 ]);
 
+action_enum!(OrchestratorAction, "orchestrator", [
+    Run => "run",
+    Validate => "validate",
+    Status => "status",
+    Stop => "stop",
+    Devices => "devices",
+]);
+
 // ──────────────── Tests ─────────────────
 
 #[cfg(test)]

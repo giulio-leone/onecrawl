@@ -20,6 +20,7 @@ mod ios;
 mod media;
 mod monitoring;
 mod network;
+mod orchestrator;
 mod react;
 mod skills;
 mod spa;
@@ -43,6 +44,7 @@ pub(crate) use ios::IosAction;
 pub(crate) use media::{SnapshotAction, ScreenshotDiffAction, PrintAction, ExtractAction, DiffAction};
 pub(crate) use monitoring::{CoverageAction, AccessibilityAction, PerfAction, ConsoleAction, DialogAction, WorkerAction, PageWatcherAction};
 pub(crate) use network::{DomainAction, HttpAction, NetworkAction, HarAction, WsAction, ThrottleAction, NetworkLogAction, ProxyAction, ProxyHealthAction, InterceptCommandAction};
+pub(crate) use orchestrator::OrchestrateAction;
 pub(crate) use skills::SkillsAction;
 pub(crate) use spa::SpaAction;
 pub(crate) use storage::{CookieJarAction, CookieAction, WebStorageAction};
@@ -976,6 +978,13 @@ pub(crate) enum Commands {
         /// Available options (comma-separated)
         #[arg(long)]
         options: Option<String>,
+    },
+
+    // ── Multi-Device Orchestration ─────────────────────────────────
+    /// Multi-device orchestration (browser + Android + iOS)
+    Orchestrate {
+        #[command(subcommand)]
+        action: OrchestrateAction,
     },
 
     // ── Generic MCP Action Runner ──────────────────────────────────

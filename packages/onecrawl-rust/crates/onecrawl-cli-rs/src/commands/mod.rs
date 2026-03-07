@@ -3,6 +3,7 @@ pub mod browser;
 pub mod crypto;
 pub mod daemon;
 pub mod ios;
+pub mod orchestrator;
 pub mod parse;
 pub mod proxy;
 pub mod session;

@@ -1855,6 +1855,42 @@ impl OneCrawlMcp {
         }
     }
 
+    #[tool(
+        name = "orchestrator",
+        description = "Multi-device orchestration — coordinate browser + Android + iOS from a single workflow.\n\nActions:\n- run {file?, config?} — Execute a multi-device orchestration from JSON file or inline config\n- validate {file?, config?} — Validate orchestration config without executing\n- status — Get status of a running orchestration\n- stop — Stop a running orchestration\n- devices — List connected devices and their status"
+    )]
+    async fn tool_orchestrator(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        self.enforce_safety("orchestrator", &action).await?;
+        let action = OrchestratorAction::parse(&action)?;
+        match action {
+            OrchestratorAction::Run => {
+                let params: OrchestratorRunParams = parse_params(v, "orchestrate_run")?;
+                self.orchestrator_run(params).await
+            }
+            OrchestratorAction::Validate => {
+                let params: OrchestratorValidateParams = parse_params(v, "orchestrate_validate")?;
+                self.orchestrator_validate(params).await
+            }
+            OrchestratorAction::Status => {
+                let params: OrchestratorStatusParams = parse_params(v, "orchestrate_status")?;
+                self.orchestrator_status(params).await
+            }
+            OrchestratorAction::Stop => {
+                let params: OrchestratorStopParams = parse_params(v, "orchestrate_stop")?;
+                self.orchestrator_stop(params).await
+            }
+            OrchestratorAction::Devices => {
+                let params: OrchestratorDevicesParams = parse_params(v, "orchestrate_devices")?;
+                self.orchestrator_devices(params).await
+            }
+        }
+    }
+
     /// Create an `OneCrawlMcp` reusing an existing browser session.
     /// Used by the CLI `run` command to delegate to MCP handlers directly.
     pub fn from_browser(
@@ -1895,8 +1931,9 @@ impl OneCrawlMcp {
             "automate" => self.tool_automate(ta).await,
             "perf" => self.tool_perf(ta).await,
             "reactor" => self.tool_reactor(ta).await,
+            "orchestrator" => self.tool_orchestrator(ta).await,
             _ => return Err(format!(
-                "unknown tool: '{tool}'. Available: browser, crawl, agent, stealth, data, secure, computer, memory, automate, perf, reactor"
+                "unknown tool: '{tool}'. Available: browser, crawl, agent, stealth, data, secure, computer, memory, automate, perf, reactor, orchestrator"
             )),
         };
 
