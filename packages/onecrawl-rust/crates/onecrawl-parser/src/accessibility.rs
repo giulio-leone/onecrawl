@@ -105,7 +105,8 @@ fn infer_role_and_name(el: scraper::ElementRef, tag: &str) -> (String, String) {
         // Use direct text content for interactive elements
         let text: String = el.text().collect::<Vec<_>>().join(" ").trim().to_string();
         if text.len() > 100 {
-            format!("{}…", &text[..97])
+            let truncated: String = text.chars().take(97).collect();
+            format!("{truncated}…")
         } else {
             text
         }

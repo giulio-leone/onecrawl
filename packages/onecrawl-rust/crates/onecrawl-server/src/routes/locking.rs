@@ -22,15 +22,23 @@ pub async fn lock_tab(
 ) -> impl IntoResponse {
     match state.lock_tab(&tab_id, &req.owner, req.ttl_secs).await {
         Ok(()) => {
-            let lock = state.get_tab_lock(&tab_id).await.unwrap();
-            (
-                StatusCode::OK,
-                Json(serde_json::json!({
-                    "locked": true,
-                    "owner": lock.owner,
-                    "ttl_secs": lock.ttl_secs
-                })),
-            )
+            match state.get_tab_lock(&tab_id).await {
+                Some(lock) => (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "locked": true,
+                        "owner": lock.owner,
+                        "ttl_secs": lock.ttl_secs
+                    })),
+                ),
+                None => (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "locked": false,
+                        "reason": "lock expired immediately"
+                    })),
+                ),
+            }
         }
         Err(current_owner) => (
             StatusCode::CONFLICT,

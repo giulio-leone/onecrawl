@@ -6,11 +6,17 @@ use ring::hmac;
 ///
 /// Default: SHA-1, 6 digits, 30-second period (LinkedIn-compatible).
 pub fn generate_totp(config: &TotpConfig) -> Result<String> {
+    if config.period == 0 {
+        return Err(Error::Crypto("TOTP period must be > 0".into()));
+    }
     generate_totp_at(config, current_time_step(config.period))
 }
 
 /// Generate TOTP at a specific time step (for testing).
 pub fn generate_totp_at(config: &TotpConfig, time_step: u64) -> Result<String> {
+    if config.digits == 0 || config.digits > 9 {
+        return Err(Error::Crypto("TOTP digits must be 1-9".into()));
+    }
     let secret = BASE32_NOPAD
         .decode(config.secret.to_uppercase().as_bytes())
         .map_err(|e| Error::Crypto(format!("invalid base32 secret: {e}")))?;
@@ -42,6 +48,9 @@ pub fn generate_totp_at(config: &TotpConfig, time_step: u64) -> Result<String> {
 
 /// Verify a TOTP code with a ±1 step window.
 pub fn verify_totp(config: &TotpConfig, code: &str) -> Result<bool> {
+    if config.period == 0 {
+        return Err(Error::Crypto("TOTP period must be > 0".into()));
+    }
     let current = current_time_step(config.period);
 
     for offset in [0i64, -1, 1] {

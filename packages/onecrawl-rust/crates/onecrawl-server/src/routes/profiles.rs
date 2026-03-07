@@ -26,7 +26,8 @@ pub async fn create_profile(
     State(state): State<AppState>,
     Json(req): Json<CreateProfileRequest>,
 ) -> ApiResult<ProfileResponse> {
-    let profile = Profile::new(&req.name);
+    let profile = Profile::new(&req.name)
+        .map_err(|e| super::api_err(axum::http::StatusCode::BAD_REQUEST, &e))?;
     let resp = ProfileResponse { profile: profile.clone() };
     state
         .profiles

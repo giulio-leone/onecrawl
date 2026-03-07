@@ -17,7 +17,10 @@ pub struct CreateProfileRequest {
 }
 
 impl Profile {
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: &str) -> Result<Self, String> {
+        if name.is_empty() || name.contains('/') || name.contains('\\') || name.contains("..") {
+            return Err("invalid profile name: must not be empty or contain path separators or '..'".into());
+        }
         let id = format!("prof_{:08x}", hash_str(name));
         let path = home_dir()
             .join(".onecrawl")
@@ -29,12 +32,12 @@ impl Profile {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        Self {
+        Ok(Self {
             id,
             name: name.to_string(),
             path,
             created_at: format!("{now}"),
-        }
+        })
     }
 
     pub fn user_data_dir(&self) -> PathBuf {

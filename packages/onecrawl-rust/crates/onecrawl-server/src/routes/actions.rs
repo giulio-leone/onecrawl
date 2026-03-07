@@ -74,7 +74,7 @@ fn execute_single_action<'a>(
                     return ActionResult::err(format!("focus for press failed: {e}"));
                 }
             }
-            let escaped = key.replace('\'', "\\'");
+            let escaped = key.replace('\\', "\\\\").replace('\'', "\\'").replace('\n', "\\n");
             let js = format!(
                 "document.activeElement.dispatchEvent(new KeyboardEvent('keydown', {{ key: '{escaped}', bubbles: true }})); \
                  document.activeElement.dispatchEvent(new KeyboardEvent('keyup', {{ key: '{escaped}', bubbles: true }}))"
