@@ -1,6 +1,7 @@
 // browser/ module — split from monolithic browser.rs (4512 lines)
 // Each submodule handles a specific domain of browser commands.
 
+mod agent_computer;
 mod auth;
 mod content;
 mod cookies;
@@ -14,10 +15,24 @@ mod monitoring;
 mod nav;
 mod network;
 mod shell;
+mod spa_harness;
 mod tabs;
 mod web_storage;
 
 // Re-export all public functions so callers can use commands::browser::function_name
+pub use agent_computer::{
+    agent_loop,
+    goal_assert,
+    annotated_observe,
+    session_context,
+    auto_chain,
+    think,
+    annotated_screenshot,
+    adaptive_retry,
+    click_at_coords,
+    multi_page_sync,
+    input_replay_file,
+};
 pub use auth::{
     passkey_enable,
     passkey_add,
@@ -28,6 +43,17 @@ pub use auth::{
     passkey_register,
     passkey_set_file,
     stealth_inject,
+    stealth_tls_apply,
+    stealth_webrtc_block,
+    stealth_battery_spoof,
+    stealth_sensor_block,
+    stealth_canvas_advanced,
+    stealth_timezone_sync,
+    stealth_font_protect,
+    stealth_behavior_sim,
+    stealth_behavior_stop,
+    stealth_rotate,
+    stealth_detection_audit,
     antibot_inject,
     antibot_test,
     antibot_profiles,
@@ -335,4 +361,23 @@ pub use web_storage::{
     web_storage_session_clear,
     web_storage_indexeddb_list,
     web_storage_clear_all,
+};
+pub use spa_harness::{
+    spa_nav_watch,
+    framework_detect,
+    virtual_scroll_detect,
+    virtual_scroll_extract,
+    wait_hydration,
+    wait_animation,
+    trigger_lazy_load,
+    wait_network_idle,
+    state_inspect,
+    form_wizard_track,
+    dynamic_import_wait,
+    parallel_exec,
+    health_check,
+    circuit_breaker,
+    reconnect_cdp,
+    gc_tabs,
+    watchdog,
 };

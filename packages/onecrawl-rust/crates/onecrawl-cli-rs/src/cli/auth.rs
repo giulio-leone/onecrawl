@@ -184,6 +184,45 @@ pub(crate) enum AuthAction {
 pub(crate) enum StealthAction {
     /// Inject stealth anti-detection patches
     Inject,
+    /// Apply a TLS fingerprint profile (chrome, firefox, safari, edge)
+    TlsApply {
+        /// Profile name: chrome, firefox, safari, edge
+        profile: String,
+    },
+    /// Block WebRTC to prevent IP address leaks
+    WebrtcBlock,
+    /// Spoof the BatteryManager API
+    BatterySpoof {
+        /// Battery level 0.0-1.0 (default: random)
+        #[arg(long, default_value = "0.85")]
+        level: f64,
+        /// Whether charging (default: true)
+        #[arg(long, default_value = "true")]
+        charging: bool,
+    },
+    /// Block device sensors (DeviceMotion, Orientation, AmbientLight)
+    SensorBlock,
+    /// Apply advanced canvas noise (Gaussian instead of 1-bit XOR)
+    CanvasAdvanced {
+        /// Noise intensity 0.0-1.0 (default: 0.03)
+        #[arg(long, default_value = "0.03")]
+        intensity: f64,
+    },
+    /// Synchronize timezone across Date, Intl, and navigator APIs
+    TimezoneSync {
+        /// IANA timezone (e.g., "America/New_York")
+        timezone: String,
+    },
+    /// Protect against font fingerprinting
+    FontProtect,
+    /// Start continuous human-like behavior simulation
+    BehaviorSim,
+    /// Stop behavior simulation
+    BehaviorStop,
+    /// Auto-rotate fingerprint + UA on domain change
+    StealthRotate,
+    /// Run comprehensive bot detection audit
+    DetectionAudit,
 }
 
 

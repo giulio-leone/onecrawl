@@ -352,6 +352,39 @@ pub(crate) async fn dispatch(command: Commands) {
         // ── Stealth ─────────────────────────────────────────────────
         Commands::Stealth { action } => match action {
             StealthAction::Inject => commands::browser::stealth_inject().await,
+            StealthAction::TlsApply { profile } => {
+                commands::browser::stealth_tls_apply(&profile).await
+            }
+            StealthAction::WebrtcBlock => {
+                commands::browser::stealth_webrtc_block().await
+            }
+            StealthAction::BatterySpoof { level, charging } => {
+                commands::browser::stealth_battery_spoof(level, charging).await
+            }
+            StealthAction::SensorBlock => {
+                commands::browser::stealth_sensor_block().await
+            }
+            StealthAction::CanvasAdvanced { intensity } => {
+                commands::browser::stealth_canvas_advanced(intensity).await
+            }
+            StealthAction::TimezoneSync { timezone } => {
+                commands::browser::stealth_timezone_sync(&timezone).await
+            }
+            StealthAction::FontProtect => {
+                commands::browser::stealth_font_protect().await
+            }
+            StealthAction::BehaviorSim => {
+                commands::browser::stealth_behavior_sim().await
+            }
+            StealthAction::BehaviorStop => {
+                commands::browser::stealth_behavior_stop().await
+            }
+            StealthAction::StealthRotate => {
+                commands::browser::stealth_rotate().await
+            }
+            StealthAction::DetectionAudit => {
+                commands::browser::stealth_detection_audit().await
+            }
         },
 
         // ── Anti-Bot ────────────────────────────────────────────────
@@ -1090,6 +1123,84 @@ pub(crate) async fn dispatch(command: Commands) {
             IosAction::Tap { x, y } => commands::ios::tap(x, y).await,
             IosAction::Screenshot { output } => commands::ios::screenshot(&output).await,
             IosAction::Disconnect => commands::ios::disconnect().await,
+        },
+
+        // ── SPA Interaction ─────────────────────────────────────────
+        Commands::Spa { action } => match action {
+            SpaAction::NavWatch => commands::browser::spa_nav_watch().await,
+            SpaAction::FrameworkDetect => commands::browser::framework_detect().await,
+            SpaAction::VirtualScrollDetect => commands::browser::virtual_scroll_detect().await,
+            SpaAction::VirtualScrollExtract { container, item, max } => {
+                commands::browser::virtual_scroll_extract(&container, &item, max).await
+            }
+            SpaAction::WaitHydration { timeout } => commands::browser::wait_hydration(timeout).await,
+            SpaAction::WaitAnimation { selector, timeout } => {
+                commands::browser::wait_animation(&selector, timeout).await
+            }
+            SpaAction::TriggerLazyLoad { selector } => {
+                commands::browser::trigger_lazy_load(selector.as_deref()).await
+            }
+            SpaAction::WaitNetworkIdle { idle_ms, timeout } => {
+                commands::browser::wait_network_idle(idle_ms, timeout).await
+            }
+            SpaAction::StateInspect { path } => {
+                commands::browser::state_inspect(path.as_deref()).await
+            }
+            SpaAction::FormWizardTrack => commands::browser::form_wizard_track().await,
+            SpaAction::DynamicImportWait { pattern, timeout } => {
+                commands::browser::dynamic_import_wait(&pattern, timeout).await
+            }
+            SpaAction::ParallelExec { actions } => {
+                commands::browser::parallel_exec(&actions).await
+            }
+        },
+
+        // ── Harness ─────────────────────────────────────────────────
+        Commands::Harness { action } => match action {
+            HarnessAction::HealthCheck => commands::browser::health_check().await,
+            HarnessAction::CircuitBreaker { command, error } => {
+                commands::browser::circuit_breaker(&command, error.as_deref()).await
+            }
+            HarnessAction::ReconnectCdp { retries } => {
+                commands::browser::reconnect_cdp(retries).await
+            }
+            HarnessAction::GcTabs => commands::browser::gc_tabs().await,
+            HarnessAction::Watchdog => commands::browser::watchdog().await,
+        },
+
+        // ── Agentic AI ──────────────────────────────────────────────
+        Commands::Agent(action) => match action {
+            AgentCliAction::Loop { goal, max_steps, verify } => {
+                commands::browser::agent_loop(&goal, max_steps, verify.as_deref()).await
+            }
+            AgentCliAction::GoalAssert { assertion_type, value } => {
+                commands::browser::goal_assert(&assertion_type, &value).await
+            }
+            AgentCliAction::Observe => commands::browser::annotated_observe().await,
+            AgentCliAction::Context { command, key, value } => {
+                commands::browser::session_context(&command, key.as_deref(), value.as_deref()).await
+            }
+            AgentCliAction::Chain { actions, on_error, retries } => {
+                commands::browser::auto_chain(&actions, &on_error, retries).await
+            }
+            AgentCliAction::Think => commands::browser::think().await,
+        },
+
+        // ── Computer Use ────────────────────────────────────────────
+        Commands::Computer(action) => match action {
+            ComputerCliAction::AnnotatedScreenshot { output } => {
+                commands::browser::annotated_screenshot(&output).await
+            }
+            ComputerCliAction::AdaptiveRetry { action, alt, retries } => {
+                commands::browser::adaptive_retry(&action, &alt, retries).await
+            }
+            ComputerCliAction::ClickAt { x, y } => {
+                commands::browser::click_at_coords(x, y).await
+            }
+            ComputerCliAction::MultiPageSync => commands::browser::multi_page_sync().await,
+            ComputerCliAction::InputReplay { events_file } => {
+                commands::browser::input_replay_file(&events_file).await
+            }
         },
         }
 }

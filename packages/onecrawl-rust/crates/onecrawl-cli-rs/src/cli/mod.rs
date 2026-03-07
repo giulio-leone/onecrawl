@@ -6,31 +6,39 @@ pub(crate) struct Cli {
     #[command(subcommand)]
     pub command: Commands,
 }
+mod agent;
 mod auth;
+mod computer;
 mod crawl;
 mod daemon;
 mod dom;
+mod harness;
 mod interaction;
 mod ios;
 mod media;
 mod monitoring;
 mod network;
 mod skills;
+mod spa;
 mod storage;
 mod streaming_video;
 mod tabs;
 mod utility;
 
+pub(crate) use agent::AgentCliAction;
 pub(crate) use auth::{CaptchaAction, AuthAction, StealthAction, AntibotAction, AuthStateAction};
+pub(crate) use computer::ComputerCliAction;
 pub(crate) use crawl::{PipelineAction, StructuredAction, AdaptiveAction, SpiderAction, RobotsAction, GraphAction};
 pub(crate) use daemon::DaemonAction;
 pub(crate) use dom::{FingerprintAction, EmulateAction, DomAction, IframeAction, AdvancedEmulationAction, WindowAction, SetAction};
+pub(crate) use harness::HarnessAction;
 pub(crate) use interaction::{SelectAction, NavAction, KeyboardAction, MouseAction, FindAction};
 pub(crate) use ios::IosAction;
 pub(crate) use media::{SnapshotAction, ScreenshotDiffAction, PrintAction, ExtractAction, DiffAction};
 pub(crate) use monitoring::{CoverageAction, AccessibilityAction, PerfAction, ConsoleAction, DialogAction, WorkerAction, PageWatcherAction};
 pub(crate) use network::{DomainAction, HttpAction, NetworkAction, HarAction, WsAction, ThrottleAction, NetworkLogAction, ProxyAction, ProxyHealthAction, InterceptCommandAction};
 pub(crate) use skills::SkillsAction;
+pub(crate) use spa::SpaAction;
 pub(crate) use storage::{CookieJarAction, CookieAction, WebStorageAction};
 pub(crate) use streaming_video::{StreamAction, RecordAction};
 pub(crate) use tabs::{TabAction, DownloadAction};
@@ -862,6 +870,30 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: IosAction,
     },
+
+    // ── SPA Interaction ─────────────────────────────────────────
+    /// SPA interaction commands (hydration, virtual scroll, state)
+    Spa {
+        #[command(subcommand)]
+        action: SpaAction,
+    },
+
+    // ── Harness ─────────────────────────────────────────────────
+    /// Long-running harness commands (health, circuit breaker, watchdog)
+    Harness {
+        #[command(subcommand)]
+        action: HarnessAction,
+    },
+
+    // ── Agentic AI ──────────────────────────────────────────────
+    /// Agentic AI commands (loop, goals, reasoning)
+    #[command(subcommand)]
+    Agent(AgentCliAction),
+
+    // ── Computer Use ────────────────────────────────────────────
+    /// Computer use commands (screenshots, clicks, replay)
+    #[command(subcommand)]
+    Computer(ComputerCliAction),
 
     // ── Version ─────────────────────────────────────────────────
     /// Show version and build information
