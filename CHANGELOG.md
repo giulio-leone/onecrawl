@@ -16,11 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Architecture
 
-- New crate: `onecrawl-browser` (browser automation engine, from chromiumoxide)
-- New crate: `onecrawl-protocol` (CDP protocol types, from chromiumoxide_cdp)
-- New crate: `onecrawl-protocol-gen` (protocol code generator, from chromiumoxide_pdl)
-- New crate: `onecrawl-browser-types` (core types, from chromiumoxide_types)
-- Eliminated external chromiumoxide dependency (was coupling 9/10)
+- **M1 — Internalization**: Vendored chromiumoxide as four first-party crates (`onecrawl-browser`, `onecrawl-protocol`, `onecrawl-protocol-gen`, `onecrawl-browser-types`), eliminating external dependency (coupling 9/10 → 0/10)
+- **M2 — Hexagonal port traits**: Introduced 6 async port traits (`BrowserPort`, `PagePort`, `ElementPort`, `NetworkPort`, `EmulationPort`, `InputPort`) with `create_browser()` / `connect_browser()` factory functions for dependency injection
+- **M3 — KISS/DRY/SOLID refactor**: Split monolithic `Page` (3,700 LOC) and `Browser` modules into focused sub-modules; extracted shared utilities
+- **M4 — Port trait re-exports**: Re-exported all port traits and factory functions from `onecrawl-cdp` public API for ergonomic consumer access
+- **M5 — Validation & release prep**: Full test suite validation (364 pass, 1 pre-existing), release build benchmarking (~53s), documentation updates, version bump to 4.0.0-alpha.1
 
 ## [3.9.2] - 2025-03-07
 

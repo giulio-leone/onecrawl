@@ -201,6 +201,31 @@ onecrawl (Rust workspace)
     └─────────┘
 ```
 
+### Port Traits
+
+OneCrawl v4.0 introduces hexagonal port traits that decouple business logic from browser internals:
+
+| Trait | Abstraction |
+|---|---|
+| `BrowserPort` | Browser lifecycle — launch, connect, new page, close |
+| `PagePort` | Page operations — navigation, DOM queries, JS execution, screenshots |
+| `ElementPort` | DOM element interaction — click, type, attributes, geometry |
+| `NetworkPort` | Network control — headers, cookies, interception, stealth |
+| `EmulationPort` | Device emulation — viewport, geolocation, timezone, locale |
+| `InputPort` | Low-level input dispatch — mouse, keyboard events |
+
+Factory functions return trait objects for dependency injection:
+
+```rust
+use onecrawl_browser::{create_browser, connect_browser, BrowserConfig};
+
+// Launch a new browser
+let (browser, handler) = create_browser(BrowserConfig::default()).await?;
+
+// Or connect to an existing one
+let (browser, handler) = connect_browser("ws://127.0.0.1:9222").await?;
+```
+
 ## MCP Integration
 
 17 super-tools with 421 actions, designed for AI agent orchestration via action-based dispatch:

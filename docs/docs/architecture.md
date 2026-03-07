@@ -348,6 +348,53 @@ fn validate_url(url: &str) -> OneCrawlResult<Url> {
 
 ---
 
+## Hexagonal Architecture
+
+OneCrawl v4.0 follows the **ports & adapters** (hexagonal) pattern: core business logic depends on abstract trait interfaces (ports), while concrete implementations (adapters) are injected at runtime.
+
+### Port Traits
+
+Six async port traits define the boundary between consumers and the browser engine:
+
+| Port Trait | Responsibility |
+|---|---|
+| **`BrowserPort`** | Browser lifecycle — launch, connect, create pages, close, version info |
+| **`PagePort`** | Page operations — navigation, DOM queries, JS execution, screenshots, PDF |
+| **`ElementPort`** | DOM element interaction — click, type, hover, attributes, bounding box |
+| **`NetworkPort`** | Network control — headers, cookies, request interception, user agent, stealth |
+| **`EmulationPort`** | Device emulation — viewport, geolocation, timezone, locale, media type |
+| **`InputPort`** | Low-level input — mouse clicks/moves, keyboard typing/key presses |
+
+All traits are defined in `onecrawl-browser` and re-exported from `onecrawl-cdp`.
+
+### Factory Functions
+
+Two factory functions return `Box<dyn BrowserPort>` trait objects, enabling dependency injection:
+
+```rust
+use onecrawl_browser::{create_browser, connect_browser, BrowserConfig};
+
+// Launch a new Chrome instance
+let (browser, handler) = create_browser(BrowserConfig::default()).await?;
+tokio::spawn(handler); // drive the CDP event loop
+
+// Navigate via the port trait
+let page = browser.new_page("https://example.com").await?;
+let title = page.page_title().await?;
+page.close_page().await?;
+browser.close_browser().await?;
+```
+
+```rust
+// Or connect to an already-running browser
+let (browser, handler) = connect_browser("ws://127.0.0.1:9222").await?;
+tokio::spawn(handler);
+```
+
+Callers depend only on `BrowserPort` / `PagePort` — never on the concrete `Browser` or `Page` structs — making the browser engine swappable for testing or alternative backends.
+
+---
+
 ## Design Principles
 
 | Principle | Application |
@@ -355,7 +402,7 @@ fn validate_url(url: &str) -> OneCrawlResult<Url> {
 | **KISS** | Each crate has a single, clear responsibility. |
 | **DRY** | Shared types in `onecrawl-core` prevent duplication across crates. |
 | **SOLID** | Traits define behavior (`Browser`, `Scraper`); implementations are swappable. |
-| **Hexagonal Architecture** | Core logic has no I/O dependencies. CDP, HTTP, and storage are adapters. |
+| **Hexagonal Architecture** | Port traits decouple consumers from browser internals. CDP, HTTP, and storage are adapters. |
 | **Error as Values** | All functions return `OneCrawlResult<T>`. No panics in library code. |
 | **Zero Unsafe** | No `unsafe` blocks in core crates. `unsafe` only in binding FFI layers. |
 
