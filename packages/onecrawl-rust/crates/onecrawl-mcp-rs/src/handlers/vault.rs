@@ -177,8 +177,11 @@ impl OneCrawlMcp {
 
 /// Open an existing vault or create a new one if it doesn't exist.
 fn open_or_create(path: &str, password: &str) -> onecrawl_core::Result<onecrawl_crypto::vault::Vault> {
-    match onecrawl_crypto::vault::Vault::open(path, password) {
-        Ok(v) => Ok(v),
-        Err(_) => onecrawl_crypto::vault::Vault::create(path, password),
+    if std::path::Path::new(path).exists() {
+        onecrawl_crypto::vault::Vault::open(path, password)
+            .map_err(|e| onecrawl_core::Error::Crypto(format!("Failed to open vault (wrong password?): {}", e)))
+    } else {
+        onecrawl_crypto::vault::Vault::create(path, password)
+            .map_err(|e| onecrawl_core::Error::Crypto(format!("Failed to create vault: {}", e)))
     }
 }

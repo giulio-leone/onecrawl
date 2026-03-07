@@ -4,6 +4,10 @@ use rmcp::{ErrorData as McpError, model::*};
 use crate::cdp_tools::*;
 use crate::helpers::{mcp_err, ensure_page, json_ok};
 use crate::OneCrawlMcp;
+use std::sync::{Arc, OnceLock};
+use tokio::sync::RwLock;
+
+static REACTOR_RUNNING: OnceLock<Arc<RwLock<bool>>> = OnceLock::new();
 
 impl OneCrawlMcp {
     // ════════════════════════════════════════════════════════════════
@@ -51,6 +55,10 @@ impl OneCrawlMcp {
         let name = p.name.clone().unwrap_or_else(|| "default".into());
         let rules_count = rules.len();
 
+        // Store the reactor's running flag so reactor_stop can signal shutdown
+        let running_flag = reactor.running_flag();
+        let _ = REACTOR_RUNNING.set(running_flag);
+
         // Start reactor in a background task
         let page_clone = page.clone();
         tokio::spawn(async move {
@@ -71,22 +79,35 @@ impl OneCrawlMcp {
         &self,
         _p: ReactorStopParams,
     ) -> Result<CallToolResult, McpError> {
-        // The reactor runs in a background task; stopping requires shared state.
-        // For the MCP interface, we acknowledge the stop request.
-        json_ok(&serde_json::json!({
-            "action": "reactor_stop",
-            "status": "stop_requested",
-            "message": "Reactor stop signal sent"
-        }))
+        if let Some(running) = REACTOR_RUNNING.get() {
+            let mut flag = running.write().await;
+            *flag = false;
+            json_ok(&serde_json::json!({
+                "action": "reactor_stop",
+                "status": "stopped",
+                "message": "Reactor shutdown signal sent"
+            }))
+        } else {
+            json_ok(&serde_json::json!({
+                "action": "reactor_stop",
+                "status": "not_running",
+                "message": "No reactor is currently running"
+            }))
+        }
     }
 
     pub(crate) async fn reactor_status(
         &self,
         _p: ReactorStatusParams,
     ) -> Result<CallToolResult, McpError> {
+        let is_running = if let Some(running) = REACTOR_RUNNING.get() {
+            *running.read().await
+        } else {
+            false
+        };
         json_ok(&serde_json::json!({
             "action": "reactor_status",
-            "message": "Use reactor_start to create a reactor, then query its status"
+            "running": is_running,
         }))
     }
 

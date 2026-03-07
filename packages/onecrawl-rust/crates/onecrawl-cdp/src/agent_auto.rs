@@ -520,12 +520,11 @@ impl AgentAuto {
             }
             "assert" => {
                 let condition = target.unwrap_or_default();
+                let expected_value = value.unwrap_or_default();
+                let safe_cond = serde_json::to_string(&condition).unwrap_or_default();
+                let safe_val = serde_json::to_string(&expected_value).unwrap_or_default();
                 let js = format!(
-                    r#"(() => {{
-                        try {{ return Boolean({cond}); }}
-                        catch(e) {{ return false; }}
-                    }})()"#,
-                    cond = condition
+                    r#"(() => {{ try {{ const cond = {safe_cond}; const val = {safe_val}; if (cond === "url_contains") return window.location.href.includes(val); if (cond === "title_contains") return document.title.includes(val); if (cond === "element_exists") return !!document.querySelector(val); if (cond === "text_contains") return document.body.innerText.includes(val); return false; }} catch(e) {{ return false; }} }})()"#
                 );
                 let result = evaluate_js(page, &js).await?;
                 let passed = result.as_bool().unwrap_or(false);

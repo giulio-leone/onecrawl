@@ -193,6 +193,11 @@ impl Reactor {
         }
     }
 
+    /// Returns a clone of the shared running flag so callers can signal shutdown.
+    pub fn running_flag(&self) -> Arc<RwLock<bool>> {
+        Arc::clone(&self.running)
+    }
+
     /// Start the reactor loop — polls all event sources and dispatches handlers.
     pub async fn start(&self, page: &Page) -> Result<()> {
         {

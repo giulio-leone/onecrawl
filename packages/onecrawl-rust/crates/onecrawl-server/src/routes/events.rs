@@ -183,6 +183,15 @@ pub async fn clear_journal(
 struct BusEventStream {
     rx: tokio::sync::broadcast::Receiver<onecrawl_cdp::BusEvent>,
     pattern: String,
+    pending_waker: Option<tokio::task::JoinHandle<()>>,
+}
+
+impl Drop for BusEventStream {
+    fn drop(&mut self) {
+        if let Some(handle) = self.pending_waker.take() {
+            handle.abort();
+        }
+    }
 }
 
 impl Stream for BusEventStream {
@@ -202,13 +211,17 @@ impl Stream for BusEventStream {
                     // Skip events that don't match — loop to next
                 }
                 Err(tokio::sync::broadcast::error::TryRecvError::Empty) => {
-                    // Register waker — wake on next message via a spawned task
+                    // Abort previous waker task to prevent accumulation
+                    if let Some(handle) = self.pending_waker.take() {
+                        handle.abort();
+                    }
                     let waker = cx.waker().clone();
                     let mut rx2 = self.rx.resubscribe();
-                    tokio::spawn(async move {
+                    let handle = tokio::spawn(async move {
                         let _ = rx2.recv().await;
                         waker.wake();
                     });
+                    self.pending_waker = Some(handle);
                     return Poll::Pending;
                 }
                 Err(tokio::sync::broadcast::error::TryRecvError::Lagged(n)) => {
@@ -232,5 +245,5 @@ pub async fn event_stream(
     let rx = state.event_bus.subscribe_stream();
     let pattern = q.pattern.unwrap_or_else(|| "**".to_string());
 
-    Sse::new(BusEventStream { rx, pattern }).keep_alive(KeepAlive::default())
+    Sse::new(BusEventStream { rx, pattern, pending_waker: None }).keep_alive(KeepAlive::default())
 }

@@ -515,7 +515,7 @@ impl Orchestrator {
                     let txt = self.interpolate(txt);
                     let escaped = serde_json::to_string(&txt).unwrap_or_default();
                     let js = format!(
-                        r#"(() => {{ const el = [...document.querySelectorAll('*')].find(e => (e.textContent||'').trim() === JSON.parse('{escaped}')); if(el) el.click(); else throw new Error('not found'); }})()"#
+                        r#"(() => {{ const el = [...document.querySelectorAll('*')].find(e => (e.textContent||'').trim() === {escaped}); if(el) el.click(); else throw new Error('not found'); }})()"#
                     );
                     page.evaluate(js)
                         .await

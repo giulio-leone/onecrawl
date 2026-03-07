@@ -423,6 +423,12 @@ impl DurableSession {
     // ── Persistence helpers ─────────────────────────────────────────
 
     fn state_file_path(&self) -> PathBuf {
+        assert!(
+            !self.config.name.contains('/')
+                && !self.config.name.contains('\\')
+                && !self.config.name.contains(".."),
+            "Invalid session name"
+        );
         self.config
             .state_path
             .join(format!("{}.state", self.config.name))
@@ -481,6 +487,9 @@ impl DurableSession {
 
     /// Delete a saved session state file.
     pub fn delete_session(state_dir: &Path, name: &str) -> Result<()> {
+        if name.contains('/') || name.contains('\\') || name.contains("..") {
+            return Err(Error::Cdp("Invalid session name".into()));
+        }
         let path = state_dir.join(format!("{}.state", name));
         if path.exists() {
             std::fs::remove_file(&path)
@@ -491,6 +500,9 @@ impl DurableSession {
 
     /// Get the status of a named session from disk.
     pub fn get_status(state_dir: &Path, name: &str) -> Result<DurableState> {
+        if name.contains('/') || name.contains('\\') || name.contains("..") {
+            return Err(Error::Cdp("Invalid session name".into()));
+        }
         let path = state_dir.join(format!("{}.state", name));
         let content = std::fs::read_to_string(&path)
             .map_err(|e| Error::Cdp(format!("get status {}: {e}", name)))?;

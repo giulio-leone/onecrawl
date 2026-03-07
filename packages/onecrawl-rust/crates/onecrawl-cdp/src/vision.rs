@@ -243,6 +243,12 @@ impl VisionStream {
         page: &chromiumoxide::Page,
     ) -> Result<(), String> {
         {
+            let cfg = self.config.read().await;
+            if cfg.fps <= 0.0 || cfg.fps.is_nan() || cfg.fps.is_infinite() {
+                return Err("FPS must be a positive finite number".into());
+            }
+        }
+        {
             let mut running = self.running.write().await;
             if *running {
                 return Err("vision stream is already running".into());
