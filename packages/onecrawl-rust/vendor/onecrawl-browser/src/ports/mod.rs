@@ -125,6 +125,8 @@ pub trait ElementPort: Send + Sync {
 pub trait NetworkPort: Send + Sync {
     async fn set_extra_headers(&self, headers: HashMap<String, String>) -> Result<()>;
     async fn set_request_interception(&self, patterns: &[String]) -> Result<()>;
+    /// Set user-agent for network requests (protocol-level header override).
+    /// See also [`EmulationPort::set_user_agent_override`] for device-emulation context.
     async fn set_user_agent(&self, ua: &str) -> Result<()>;
     async fn authenticate(&self, username: &str, password: &str) -> Result<()>;
     async fn get_cookies(&self) -> Result<Vec<CookieInfo>>;
@@ -143,6 +145,9 @@ pub trait EmulationPort: Send + Sync {
         height: u32,
         device_scale_factor: f64,
     ) -> Result<()>;
+    /// Set user-agent as part of device emulation (pairs with viewport, geolocation, etc.).
+    /// Functionally identical to [`NetworkPort::set_user_agent`] at the CDP level;
+    /// separated for semantic clarity when emulating a full device profile.
     async fn set_user_agent_override(&self, ua: &str) -> Result<()>;
     async fn set_geolocation(
         &self,
