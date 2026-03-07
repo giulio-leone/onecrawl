@@ -619,7 +619,7 @@ impl OneCrawlMcp {
             parts.push(format!("max-age={}", exp as i64));
         }
         let cookie_str = parts.join("; ");
-        page.evaluate(format!("document.cookie = '{cookie_str}'")).await.mcp()?;
+        page.evaluate(format!("document.cookie = {}", json_escape(&cookie_str))).await.mcp()?;
         text_ok(format!("set cookie: {}={}", p.name, p.value))
     }
 
@@ -628,15 +628,16 @@ impl OneCrawlMcp {
         p: CookiesClearParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
-        let domain_filter = p.domain.as_deref().unwrap_or("");
+        let domain_filter = json_escape(p.domain.as_deref().unwrap_or(""));
         let js = format!(
             r#"(() => {{
+                const domain = {domain_filter};
                 const cookies = document.cookie.split('; ');
                 let cleared = 0;
                 for (const c of cookies) {{
                     const name = c.split('=')[0];
                     if (name) {{
-                        document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain={domain_filter}';
+                        document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/;domain=' + domain;
                         document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
                         cleared++;
                     }}
@@ -659,7 +660,7 @@ impl OneCrawlMcp {
         } else {
             "localStorage"
         };
-        let js = format!("{storage}.getItem('{}')", p.key);
+        let js = format!("{storage}.getItem({})", json_escape(&p.key));
         let val: serde_json::Value = page.evaluate(js).await.mcp()?
             .into_value().unwrap_or(serde_json::Value::Null);
         json_ok(&serde_json::json!({
@@ -680,7 +681,7 @@ impl OneCrawlMcp {
             "localStorage"
         };
         let value_json = serde_json::to_string(&p.value).mcp()?;
-        let js = format!("{storage}.setItem('{}', {})", p.key, value_json);
+        let js = format!("{storage}.setItem({}, {})", json_escape(&p.key), value_json);
         page.evaluate(js).await.mcp()?;
         text_ok(format!("stored {}[{}] = {}", storage, p.key, p.value))
     }
@@ -739,7 +740,8 @@ impl OneCrawlMcp {
             for c in cookies {
                 let name = c.get("name").and_then(|v| v.as_str()).unwrap_or("");
                 let value = c.get("value").and_then(|v| v.as_str()).unwrap_or("");
-                page.evaluate(format!("document.cookie = '{name}={value};path=/'")).await.mcp()?;
+                let cookie_str = format!("{name}={value};path=/");
+                page.evaluate(format!("document.cookie = {}", json_escape(&cookie_str))).await.mcp()?;
             }
             restored.push(format!("{} cookies", cookies.len()));
         }
@@ -747,7 +749,7 @@ impl OneCrawlMcp {
             for (k, v) in local {
                 let val = v.as_str().unwrap_or("");
                 let val_json = serde_json::to_string(val).mcp()?;
-                page.evaluate(format!("localStorage.setItem('{}', {})", k, val_json)).await.mcp()?;
+                page.evaluate(format!("localStorage.setItem({}, {})", json_escape(k), val_json)).await.mcp()?;
             }
             restored.push(format!("{} localStorage items", local.len()));
         }
@@ -755,7 +757,7 @@ impl OneCrawlMcp {
             for (k, v) in session {
                 let val = v.as_str().unwrap_or("");
                 let val_json = serde_json::to_string(val).mcp()?;
-                page.evaluate(format!("sessionStorage.setItem('{}', {})", k, val_json)).await.mcp()?;
+                page.evaluate(format!("sessionStorage.setItem({}, {})", json_escape(k), val_json)).await.mcp()?;
             }
             restored.push(format!("{} sessionStorage items", session.len()));
         }
@@ -1015,9 +1017,10 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let accept = p.accept;
         let prompt_text = p.prompt_text.clone().unwrap_or_default();
+        let escaped_prompt = json_escape(&prompt_text);
         let js = format!(
             r#"(() => {{
-                window.__ocDialogHandler = {{accept: {accept}, promptText: "{prompt_text}"}};
+                window.__ocDialogHandler = {{accept: {accept}, promptText: {escaped_prompt}}};
                 if (!window.__ocDialogPatched) {{
                     window.__ocLastDialog = null;
                     const origAlert = window.alert;
@@ -1041,7 +1044,7 @@ impl OneCrawlMcp {
                 return 'dialog handler set: ' + (window.__ocDialogHandler.accept ? 'accept' : 'dismiss');
             }})()"#,
             accept = accept,
-            prompt_text = prompt_text.replace('"', "\\\"")
+            escaped_prompt = escaped_prompt
         );
         let result = page.evaluate(js).await.mcp()?;
         let msg = result.into_value::<String>().unwrap_or_else(|_| "handler set".into());

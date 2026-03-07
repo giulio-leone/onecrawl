@@ -141,12 +141,13 @@ pub struct WorkflowResult {
     pub agent_context: Option<serde_json::Value>,
 }
 
-/// Parse a workflow from YAML string.
-pub fn parse_yaml(yaml: &str) -> Result<Workflow> {
-    serde_json::from_str::<Workflow>(yaml)
+/// Parse a workflow from a JSON-compatible string.
+///
+/// Despite the former name (`parse_yaml`), this only parses JSON.
+/// Use `parse_json` for new code; this wrapper exists for backward compatibility.
+pub fn parse_json_compat(input: &str) -> Result<Workflow> {
+    serde_json::from_str::<Workflow>(input)
         .or_else(|_| {
-            // Try YAML parsing via JSON conversion (serde_json handles subset)
-            // For full YAML we'd need serde_yaml, but JSON covers most use cases
             Err(Error::Cdp("workflow parse failed: use JSON format or ensure valid JSON".into()))
         })
 }
@@ -359,7 +360,7 @@ pub async fn execute_workflow(
         }
 
         // Retry loop
-        let max_attempts = step.retries.max(1);
+        let max_attempts = 1 + step.retries;
         let mut last_err: Option<String>;
         let mut step_ok = false;
 
@@ -635,7 +636,20 @@ fn execute_step<'a>(
             }
             Action::SubWorkflow { path } => {
                 let p = interpolate(path, variables);
-                let sub = load_from_file(&p)?;
+                let resolved = std::path::Path::new(&p)
+                    .canonicalize()
+                    .map_err(|e| Error::Cdp(format!("invalid sub-workflow path: {e}")))?;
+                let allowed = std::env::current_dir()
+                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
+                    .canonicalize()
+                    .unwrap_or_else(|_| std::path::PathBuf::from("/"));
+                if !resolved.starts_with(&allowed) {
+                    return Err(Error::Cdp(format!(
+                        "sub-workflow path escapes allowed directory: {}",
+                        resolved.display()
+                    )));
+                }
+                let sub = load_from_file(resolved.to_str().unwrap_or(&p))?;
                 let sub_result = Box::pin(execute_workflow(page, &sub)).await?;
                 // Merge sub-workflow variables back
                 for (k, v) in &sub_result.variables {

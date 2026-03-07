@@ -4275,7 +4275,7 @@ impl Browser {
         let wf = if workflow.trim_start().starts_with('{') {
             onecrawl_cdp::workflow::parse_json(workflow).map_err(py_err)?
         } else {
-            onecrawl_cdp::workflow::parse_yaml(workflow).map_err(py_err)?
+            onecrawl_cdp::workflow::parse_json_compat(workflow).map_err(py_err)?
         };
         let errors = onecrawl_cdp::workflow::validate(&wf);
         serde_json::to_string(&errors).map_err(py_err)
@@ -4286,7 +4286,7 @@ impl Browser {
         let wf = if workflow.trim_start().starts_with('{') {
             onecrawl_cdp::workflow::parse_json(workflow).map_err(py_err)?
         } else {
-            onecrawl_cdp::workflow::parse_yaml(workflow).map_err(py_err)?
+            onecrawl_cdp::workflow::parse_json_compat(workflow).map_err(py_err)?
         };
         let guard = self.page.lock().map_err(py_err)?;
         let page = guard.as_ref().ok_or_else(|| py_err("browser closed"))?;

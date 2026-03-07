@@ -40,6 +40,8 @@ impl OneCrawlMcp {
                 Ok(policy) => {
                     if let Ok(mut state) = browser.try_lock() {
                         state.safety = Some(onecrawl_cdp::SafetyState::new(policy));
+                    } else {
+                        eprintln!("warning: could not apply safety policy: mutex contested");
                     }
                 }
                 Err(e) => {

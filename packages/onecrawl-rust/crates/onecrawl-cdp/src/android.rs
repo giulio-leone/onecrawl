@@ -130,6 +130,9 @@ impl AndroidClient {
             .as_str()
             .unwrap_or("")
             .to_string();
+        if session_id.is_empty() {
+            return Err(onecrawl_core::Error::Cdp("Appium session creation returned empty session ID".into()));
+        }
         self.session_id = Some(session_id.clone());
         Ok(session_id)
     }
@@ -523,7 +526,14 @@ impl AndroidClient {
     }
 
     /// Run a shell command on a device via `adb -s <serial> shell`.
+    ///
+    /// **Safety:** This is an intentional escape hatch for device-side commands.
+    /// The MCP handler layer is responsible for enforcing safety policy on `command`.
+    /// `serial` is validated here to prevent injection into the adb argument list.
     pub async fn shell(serial: &str, command: &str) -> Result<String> {
+        if serial.contains(|c: char| c == ';' || c == '|' || c == '&' || c == '$' || c == '`' || c == '\n' || c == '\r') {
+            return Err(onecrawl_core::Error::Cdp("invalid device serial: contains shell meta-characters".into()));
+        }
         let out = tokio::process::Command::new("adb")
             .args(["-s", serial, "shell", command])
             .output()

@@ -566,30 +566,25 @@ impl OneCrawlMcp {
         let rec = state.recording.as_mut()
             .ok_or_else(|| mcp_err("no recording in progress"))?;
 
-        // If no frames were captured via events, grab one snapshot
-        if rec.is_recording() && rec.frame_count() == 0 {
-            drop(state);
-            let opts = onecrawl_cdp::screencast::ScreencastOptions::default();
-            if let Ok(bytes) = onecrawl_cdp::screencast::capture_frame(&page, &opts).await {
-                let mut state = self.browser.lock().await;
-                if let Some(rec) = state.recording.as_mut() {
-                    rec.add_frame(bytes);
-                }
-            }
-            let mut state = self.browser.lock().await;
-            let rec = state.recording.as_mut()
-                .ok_or_else(|| mcp_err("no recording in progress"))?;
-            rec.stop();
-            let frame_count = rec.frame_count();
-            let result = rec.save_frames().mcp()?;
-            state.recording = None;
-            return json_ok(&serde_json::json!({
-                "status": "saved",
-                "frames": frame_count,
-                "path": result.display().to_string()
-            }));
-        }
+        // Capture whether we need a snapshot before releasing the lock
+        let needs_snapshot = rec.is_recording() && rec.frame_count() == 0;
+        drop(state);
 
+        // Capture frame outside lock scope (async I/O)
+        let snapshot = if needs_snapshot {
+            let opts = onecrawl_cdp::screencast::ScreencastOptions::default();
+            onecrawl_cdp::screencast::capture_frame(&page, &opts).await.ok()
+        } else {
+            None
+        };
+
+        // All state mutations in a single lock scope
+        let mut state = self.browser.lock().await;
+        let rec = state.recording.as_mut()
+            .ok_or_else(|| mcp_err("no recording in progress"))?;
+        if let Some(bytes) = snapshot {
+            rec.add_frame(bytes);
+        }
         rec.stop();
         let frame_count = rec.frame_count();
         let result = rec.save_frames().mcp()?;

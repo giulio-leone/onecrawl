@@ -79,6 +79,9 @@ impl IosClient {
             .as_str()
             .unwrap_or("")
             .to_string();
+        if session_id.is_empty() {
+            return Err(onecrawl_core::Error::Cdp("WDA session creation returned empty session ID".into()));
+        }
         self.session_id = Some(session_id.clone());
         Ok(session_id)
     }
