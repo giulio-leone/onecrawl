@@ -656,7 +656,7 @@ mod tests {
         let sub = WebhookSubscription {
             id: String::new(),
             event_pattern: "**".into(),
-            url: "http://localhost:9999/hook".into(),
+            url: "https://example.com/hook".into(),
             method: None,
             headers: None,
             secret: None,
