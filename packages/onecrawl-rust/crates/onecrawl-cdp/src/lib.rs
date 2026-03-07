@@ -97,6 +97,7 @@ pub mod workers;
 pub mod vrt;
 pub mod pixel_diff;
 pub mod plugin;
+pub mod vision;
 pub mod workflow;
 
 pub use browser_pool::{BrowserInstance, BrowserPool, BrowserStatus, SharedPool, new_shared_pool};
@@ -196,6 +197,12 @@ pub use orchestrator::{
     DeviceAction, OrchAction, OrchStep, ErrorPolicy,
     StepResult as OrchStepResult, DeviceActionResult,
     StepResultStatus, DeviceHandle,
+};
+
+pub use vision::{
+    VisionConfig, VisionStream, VisionObservation, VisionStatus,
+    VisionRequest, VisionMessage, VisionContent, ImageUrl,
+    Detection, BoundingBox, SuggestedAction, ScreenshotFormat,
 };
 
 // Re-export chromiumoxide::Page for downstream consumers

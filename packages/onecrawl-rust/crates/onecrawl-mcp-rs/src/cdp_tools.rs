@@ -65,6 +65,8 @@ pub struct BrowserState {
     pub headed: bool,
     // Event bus for webhook pub/sub
     pub event_bus: Option<Arc<onecrawl_cdp::EventBus>>,
+    // Streaming AI Vision
+    pub vision_stream: Option<Arc<onecrawl_cdp::VisionStream>>,
 }
 
 pub type SharedBrowser = Arc<Mutex<BrowserState>>;
@@ -1436,6 +1438,70 @@ pub struct VisionCompareParams {
     pub current: Option<String>,
     #[schemars(description = "Similarity threshold 0.0–1.0 (default: 0.9)")]
     pub threshold: Option<f64>,
+}
+
+// ──────────────── Streaming AI Vision params ─────────────────
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct VisionStreamStartParams {
+    #[schemars(description = "Vision model to use (e.g. gpt-4o, gemini-2.5-pro)")]
+    pub model: Option<String>,
+    #[schemars(description = "Frames per second to capture (default 0.5)")]
+    pub fps: Option<f32>,
+    #[schemars(description = "Maximum FPS cap (default 2.0)")]
+    pub max_fps: Option<f32>,
+    #[schemars(description = "Continuously describe what's on screen")]
+    pub describe: Option<bool>,
+    #[schemars(description = "What to react to: errors, popups, captchas, changes")]
+    pub react_to: Option<Vec<String>>,
+    #[schemars(description = "Path to log descriptions")]
+    pub output: Option<String>,
+    #[schemars(description = "Custom system prompt for the model")]
+    pub prompt: Option<String>,
+    #[schemars(description = "Max tokens per response")]
+    pub max_tokens: Option<u32>,
+    #[schemars(description = "Cost cap in cents")]
+    pub max_cost_cents: Option<u32>,
+    #[schemars(description = "Screenshot format: jpeg or png")]
+    pub format: Option<String>,
+    #[schemars(description = "JPEG quality (1-100, default 70)")]
+    pub quality: Option<u8>,
+    #[schemars(description = "Downscale width")]
+    pub width: Option<u32>,
+    #[schemars(description = "Downscale height")]
+    pub height: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct VisionStreamStopParams {}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct VisionStreamStatusParams {}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct VisionStreamDescribeParams {
+    #[schemars(description = "Optional custom prompt for the description")]
+    pub prompt: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct VisionStreamObservationsParams {
+    #[schemars(description = "Maximum number of observations to return (default 10)")]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct VisionStreamSetFpsParams {
+    #[schemars(description = "New frames per second rate")]
+    pub fps: f32,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct VisionStreamReactParams {
+    #[schemars(description = "Model response text to parse")]
+    pub response_text: String,
+    #[schemars(description = "Frame index from which the response was generated")]
+    pub frame_index: Option<u64>,
 }
 
 // ──────────────── Self-Healing Selector Recovery params ─────────────────

@@ -237,6 +237,15 @@ pub fn list_actions() {
                 ("vision_locate",      "Locate element using visual description"),
                 ("vision_compare",     "Compare visual states"),
             ]),
+            ("Streaming AI Vision", &[
+                ("vision_stream_start",        "Start streaming AI vision"),
+                ("vision_stream_stop",         "Stop streaming AI vision"),
+                ("vision_stream_status",       "Get vision stream status"),
+                ("vision_stream_describe",     "One-shot describe current page"),
+                ("vision_stream_observations", "Get recent observations"),
+                ("vision_stream_set_fps",      "Change capture frame rate"),
+                ("vision_stream_react",        "Parse model response into observation"),
+            ]),
             ("API Capture", &[
                 ("api_capture_start",   "Start capturing API requests"),
                 ("api_capture_summary", "Get API capture summary"),

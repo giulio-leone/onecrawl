@@ -16,3 +16,4 @@ mod reactor;
 mod events;
 mod vault;
 mod plugin;
+mod vision;

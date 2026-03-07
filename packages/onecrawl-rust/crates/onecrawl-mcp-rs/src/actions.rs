@@ -245,6 +245,14 @@ action_enum!(AgentAction, "agent", [
     VisionDescribe => "vision_describe",
     VisionLocate => "vision_locate",
     VisionCompare => "vision_compare",
+    // Streaming AI Vision
+    VisionStreamStart => "vision_stream_start",
+    VisionStreamStop => "vision_stream_stop",
+    VisionStreamStatus => "vision_stream_status",
+    VisionStreamDescribe => "vision_stream_describe",
+    VisionStreamObservations => "vision_stream_observations",
+    VisionStreamSetFps => "vision_stream_set_fps",
+    VisionStreamReact => "vision_stream_react",
     // Accessibility & WCAG
     WcagAudit => "wcag_audit",
     AriaTree => "aria_tree",
