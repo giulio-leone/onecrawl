@@ -13,8 +13,8 @@ packages/onecrawl-rust/
 │   ├── onecrawl-storage/    # Encrypted key-value store (sled)
 │   ├── onecrawl-cdp/        # Chrome DevTools Protocol — 63 modules (chromiumoxide)
 │   ├── onecrawl-server/     # HTTP REST API with multi-instance management (axum)
-│   ├── onecrawl-cli-rs/     # Native CLI — ~143 commands (clap v4)
-│   └── onecrawl-mcp-rs/     # MCP server — 10 super-tools, ~355 actions (rmcp)
+│   ├── onecrawl-cli-rs/     # Native CLI — ~143 commands + durable, react, agent auto, orchestrate, vault, events, plugin, vision, studio (clap v4)
+│   └── onecrawl-mcp-rs/     # MCP server — 10 super-tools, ~400+ actions (rmcp)
 ├── bindings/
 │   ├── napi/                # Node.js via NAPI-RS → @onecrawl/native (614+ exports)
 │   └── python/              # Python via PyO3 → onecrawl (full MCP parity)
@@ -41,8 +41,34 @@ packages/onecrawl-rust/
 | **Human Simulation** | Bézier mouse curves, natural typing with typos, human-like scrolling, behavior profiles |
 | **Service Workers** | SW register/unregister/update, Cache Storage management, push simulation, offline mode |
 | **Server** | Multi-instance Chrome, profiles, tabs, accessibility snapshots, action API |
-| **MCP** | 10 super-tools with ~355 actions for AI agent orchestration |
+| **MCP** | 10 super-tools with ~400+ actions for AI agent orchestration |
 | **Mobile** | Android automation (26 actions via ADB/UIAutomator2), iOS automation (19 actions via WebDriverAgent) |
+| **Durable Sessions** | Crash-resilient browser sessions with auto-checkpoint, state persistence, and configurable crash policies |
+| **Event Reactor** | Persistent observer pattern — react to DOM mutations, network, console, and navigation events with AI-powered handlers |
+| **AI Agent Auto** | Autonomous LLM-driven browser automation with goal-based planning, self-healing execution, cost tracking, and resume |
+| **Multi-Device** | Orchestrate desktop + Android + iOS from a single workflow JSON with parallel execution across devices |
+| **Encrypted Vault** | AES-256-GCM encrypted credential management with PBKDF2 key derivation, service templates, and workflow injection |
+| **Webhook & Event Bus** | Pub/sub with HMAC-signed webhooks, SSE streaming, event journal with replay (n8n/Make/Zapier ready) |
+| **Plugin System** | Extensible plugin architecture with JSON manifests, command/action registration, and scaffold generation |
+| **Streaming AI Vision** | Feed browser screencast frames to vision-language models for continuous page understanding and reactive automation |
+| **Visual Workflow Builder** | Local web UI with drag-and-drop workflow creation, template library, project management, and JSON export |
+
+### New in v3.9.0
+
+**Tier 1 — Game Changers:**
+
+- **Durable Sessions** (`onecrawl durable`): Browser sessions that survive crashes with auto-checkpoint, state persistence (cookies, localStorage, scroll), and configurable crash policies
+- **Event Reactor** (`onecrawl react`): Persistent observer pattern — react to browser events (DOM mutations, network, console, navigation) with handlers including AI-powered responses
+- **AI Agent Auto** (`onecrawl agent auto`): Autonomous LLM-driven browser automation with goal-based planning, self-healing execution, cost tracking, and resume support
+- **Multi-Device Orchestration** (`onecrawl orchestrate`): Control desktop + Android + iOS from a single workflow JSON with parallel execution across devices
+
+**Tier 2 — Moat Builders:**
+
+- **Encrypted Vault** (`onecrawl vault`): AES-256-GCM encrypted credential management with PBKDF2 key derivation, service templates, and workflow variable injection
+- **Webhook & Event Bus** (`onecrawl events`): Pub/sub system with HMAC-signed webhook delivery, SSE streaming, event journal with replay, for integration with n8n/Make/Zapier
+- **Plugin System** (`onecrawl plugin`): Extensible plugin architecture with JSON manifests, command/action registration, and scaffold generation
+- **Streaming AI Vision** (`onecrawl vision`): Feed browser screencast frames to vision-language models for continuous page understanding and reactive automation
+- **Visual Workflow Builder** (`onecrawl studio`): Local web UI with drag-and-drop workflow creation, template library, project management, and JSON export
 
 ## Installation
 
@@ -159,7 +185,7 @@ curl http://localhost:9867/instances/{id}/tabs/{tab}/text
 
 ## MCP Integration
 
-10 super-tools with ~355 total actions, using action-based dispatch:
+10 super-tools with ~400+ total actions, using action-based dispatch:
 
 ```json
 {"action": "goto", "params": {"url": "https://example.com"}}
@@ -239,13 +265,13 @@ cargo build --release -p onecrawl-cli-rs
 | Node.js test suite | 33 files, 3,995 lines |
 | CDP modules | 63 |
 | CLI commands | ~143 |
-| MCP super-tools | 10 (~355 actions) |
+| MCP super-tools | 10 (~400+ actions) |
 | NAPI exports | 614+ (full MCP parity) |
 | PyO3 bindings | Full MCP parity |
 | Android actions | 26 (ADB/UIAutomator2) |
 | iOS actions | 19 (WebDriverAgent) |
 | Handler modules | 10 (split architecture) |
-| Enum-dispatched actions | ~355 (compile-time exhaustive) |
+| Enum-dispatched actions | ~400+ (compile-time exhaustive) |
 | Security fixes | 54 issues across 14 review cycles |
 
 ## License
