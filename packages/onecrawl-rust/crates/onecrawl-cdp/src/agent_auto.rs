@@ -174,6 +174,13 @@ impl AgentAuto {
 
     /// Decompose the goal into executable steps.
     pub fn plan(&mut self) -> Result<Vec<AutoStep>> {
+        self.plan_with_url(None)
+    }
+
+    /// Decompose the goal into executable steps, using the current page URL
+    /// to avoid a spurious `navigate → about:blank` when the browser already
+    /// has a page open.
+    pub fn plan_with_url(&mut self, current_url: Option<String>) -> Result<Vec<AutoStep>> {
         // If resuming, load previous state
         if let Some(ref path) = self.config.resume_from {
             let state = Self::load_state(path)?;
@@ -183,7 +190,17 @@ impl AgentAuto {
             return Ok(self.steps.clone());
         }
 
-        let context = task_planner::extract_context(&self.config.goal);
+        let mut context = task_planner::extract_context(&self.config.goal);
+
+        // Inject current page URL so the planner doesn't default to about:blank
+        if !context.contains_key("url") {
+            if let Some(url) = current_url {
+                if !url.is_empty() && url != "about:blank" {
+                    context.insert("url".into(), url);
+                }
+            }
+        }
+
         let plan = task_planner::plan_from_goal(&self.config.goal, &context);
 
         self.steps = plan
@@ -843,7 +860,8 @@ fn chrono_timestamp() -> String {
 /// Plan and execute a goal in one call.
 pub async fn agent_auto_run(page: &Page, config: AgentAutoConfig) -> Result<AgentAutoResult> {
     let mut agent = AgentAuto::new(config);
-    agent.plan()?;
+    let current_url = page.url().await.ok().flatten().unwrap_or_default();
+    agent.plan_with_url(Some(current_url))?;
     agent.execute(page).await
 }
 

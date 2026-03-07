@@ -465,4 +465,34 @@ mod tests {
         let (category, _) = match_goal("fill out the registration form and submit");
         assert_eq!(category, GoalCategory::FormFilling);
     }
+
+    #[test]
+    fn navigate_uses_context_url_not_about_blank() {
+        let mut ctx = HashMap::new();
+        ctx.insert("url".into(), "https://example.com/dashboard".into());
+        let plan = plan_from_goal("login to my account", &ctx);
+        let nav_steps: Vec<_> = plan.steps.iter().filter(|s| {
+            matches!(s.action, PlannedAction::Navigate { .. })
+        }).collect();
+        for step in &nav_steps {
+            if let PlannedAction::Navigate { ref url } = step.action {
+                assert_ne!(url, "about:blank", "navigate should not default to about:blank when context URL is available");
+                assert_eq!(url, "https://example.com/dashboard");
+            }
+        }
+    }
+
+    #[test]
+    fn navigate_defaults_to_about_blank_without_context() {
+        let ctx = HashMap::new();
+        let plan = plan_from_goal("login to my account", &ctx);
+        let nav_steps: Vec<_> = plan.steps.iter().filter(|s| {
+            matches!(s.action, PlannedAction::Navigate { .. })
+        }).collect();
+        for step in &nav_steps {
+            if let PlannedAction::Navigate { ref url } = step.action {
+                assert_eq!(url, "about:blank");
+            }
+        }
+    }
 }
