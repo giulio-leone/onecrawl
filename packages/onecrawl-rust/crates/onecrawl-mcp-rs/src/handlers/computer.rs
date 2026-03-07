@@ -782,7 +782,7 @@ impl OneCrawlMcp {
                     interactive: el.matches('a,button,input,select,textarea,[tabindex],[role="button"],[role="link"]')
                 }});
             }})()"#,
-            selector.replace('`', r"\`").replace('\\', r"\\")
+            selector.replace('\\', r"\\").replace('`', r"\`").replace("${", r"\${")
         );
         let result = page.evaluate(js).await.mcp()?;
         let text = result

@@ -2889,7 +2889,7 @@ impl OneCrawlMcp {
                 "element_exists" => {
                     let js = format!(
                         "!!document.querySelector(`{}`)",
-                        assertion.expected.replace('`', r"\`")
+                        assertion.expected.replace('\\', r"\\").replace('`', r"\`").replace("${", r"\${")
                     );
                     page.evaluate(js)
                         .await
@@ -2900,7 +2900,7 @@ impl OneCrawlMcp {
                 "element_visible" => {
                     let js = format!(
                         "(() => {{ const el = document.querySelector(`{}`); if (!el) return false; const s = getComputedStyle(el); return s.display !== 'none' && s.visibility !== 'hidden'; }})()",
-                        assertion.expected.replace('`', r"\`")
+                        assertion.expected.replace('\\', r"\\").replace('`', r"\`").replace("${", r"\${")
                     );
                     page.evaluate(js)
                         .await

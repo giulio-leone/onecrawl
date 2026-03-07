@@ -17,7 +17,7 @@ pub async fn click(page: &Page, selector: &str) -> Result<()> {
         .await
         .map_err(|e| Error::Cdp(format!("click failed: {e}")))?;
     // Also dispatch a synthetic click so React / SPA synthetic event handlers fire.
-    let esc = selector.replace('\\', "\\\\").replace('`', "\\`");
+    let esc = selector.replace('\\', "\\\\").replace('`', "\\`").replace("${", "\\${");
     page.evaluate(format!(
         "document.querySelector(`{esc}`)?.dispatchEvent(new MouseEvent('click', {{bubbles:true, cancelable:true, view:window}}))"
     ))

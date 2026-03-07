@@ -359,7 +359,7 @@ pub async fn element_detail_cli(selector: &str) {
                     aria: {{role: el.getAttribute('role'), label: el.getAttribute('aria-label')}}
                 }});
             }})()"#,
-            selector.replace('`', r"\`").replace('\\', r"\\")
+            selector.replace('\\', r"\\").replace('`', r"\`").replace("${", r"\${")
         );
         let result = page.evaluate(js).await.map_err(|e| e.to_string())?;
         let text: String = result.into_value().unwrap_or_default();

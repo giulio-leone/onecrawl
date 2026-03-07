@@ -117,6 +117,7 @@ pub async fn video_encode(frames_dir: &str, output: &str, fps: u32, format: &str
 
 pub async fn video_record(duration: u64, output: &str, fps: u32, format: &str) {
     with_page(|page| async move {
+        let fps = fps.max(1);
         let total_frames = (fps as u64 * duration) as usize;
         let interval_ms = 1000 / fps as u64;
         let dir = "/tmp/onecrawl-recording";

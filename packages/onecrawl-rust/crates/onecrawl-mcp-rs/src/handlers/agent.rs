@@ -687,7 +687,7 @@ impl OneCrawlMcp {
         p: RecordingCaptureParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
-        let fps = p.fps.unwrap_or(5);
+        let fps = p.fps.unwrap_or(5).max(1);
         let duration = p.duration_secs.unwrap_or(5);
         let total_frames = (fps as u64 * duration) as usize;
         let interval_ms = 1000 / fps as u64;
