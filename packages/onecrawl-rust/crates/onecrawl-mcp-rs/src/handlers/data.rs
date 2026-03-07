@@ -959,7 +959,7 @@ impl OneCrawlMcp {
         let content = result.content;
         let max_chars = p.max_tokens.unwrap_or(8000) * 4;
         let truncated = if content.len() > max_chars {
-            content[..max_chars].to_string()
+            content.chars().take(max_chars).collect::<String>()
         } else {
             content.clone()
         };

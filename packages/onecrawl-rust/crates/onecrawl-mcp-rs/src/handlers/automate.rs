@@ -622,7 +622,7 @@ impl OneCrawlMcp {
         let delays: Vec<u64> = match strategy {
             "linear" => (1..=max_retries).map(|i| i as u64 * 1000).collect(),
             "immediate" => vec![0; max_retries as usize],
-            _ => (0..max_retries).map(|i| 2u64.pow(i) * 1000).collect(),
+            _ => (0..max_retries).map(|i| 2u64.saturating_pow(i).saturating_mul(1000).min(300_000)).collect(),
         };
 
         json_ok(&serde_json::json!({

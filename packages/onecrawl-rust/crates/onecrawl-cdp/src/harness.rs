@@ -128,7 +128,7 @@ use serde_json::Value;
 pub async fn reconnect_cdp(page: &Page, max_retries: usize) -> Result<Value> {
     let mut last_error = String::new();
     for attempt in 0..max_retries {
-        let backoff_ms = (100 * 2u64.pow(attempt as u32)).min(10000);
+        let backoff_ms = 100u64.saturating_mul(2u64.saturating_pow(attempt as u32)).min(10000);
 
         match page.evaluate("document.readyState".to_string()).await {
             Ok(val) => {
