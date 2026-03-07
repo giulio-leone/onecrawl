@@ -47,7 +47,7 @@ impl OneCrawlMcp {
             config.persist_auth = pa;
         }
 
-        let mut session = onecrawl_cdp::DurableSession::new(config.clone());
+        let mut session = onecrawl_cdp::DurableSession::new(config.clone()).mcp()?;
 
         // Perform an initial checkpoint
         let state = session.checkpoint(&page).await.mcp()?;
@@ -78,7 +78,7 @@ impl OneCrawlMcp {
                 state_path: state_dir.clone(),
                 ..onecrawl_cdp::DurableConfig::default()
             };
-            let mut durable = onecrawl_cdp::DurableSession::new(config);
+            let mut durable = onecrawl_cdp::DurableSession::new(config).mcp()?;
             let _ = durable.checkpoint(&page).await;
             state = durable.state.clone();
         }
@@ -104,7 +104,7 @@ impl OneCrawlMcp {
             state_path: state_dir,
             ..onecrawl_cdp::DurableConfig::default()
         };
-        let mut session = onecrawl_cdp::DurableSession::new(config);
+        let mut session = onecrawl_cdp::DurableSession::new(config).mcp()?;
         let state = session.checkpoint(&page).await.mcp()?;
 
         json_ok(&serde_json::json!({
@@ -130,7 +130,7 @@ impl OneCrawlMcp {
             state_path: state_dir,
             ..onecrawl_cdp::DurableConfig::default()
         };
-        let mut session = onecrawl_cdp::DurableSession::new(config);
+        let mut session = onecrawl_cdp::DurableSession::new(config).mcp()?;
         session.restore(&page).await.mcp()?;
 
         json_ok(&serde_json::json!({

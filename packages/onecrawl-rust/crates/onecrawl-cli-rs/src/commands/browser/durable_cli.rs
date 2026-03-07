@@ -42,7 +42,8 @@ pub async fn durable_start(
             ..onecrawl_cdp::DurableConfig::default()
         };
 
-        let mut session = onecrawl_cdp::DurableSession::new(config);
+        let mut session = onecrawl_cdp::DurableSession::new(config)
+            .map_err(|e| e.to_string())?;
         let state = session
             .checkpoint(&page)
             .await
@@ -69,7 +70,8 @@ pub async fn durable_stop(name: &str) {
             state_path: state_dir.clone(),
             ..onecrawl_cdp::DurableConfig::default()
         };
-        let mut session = onecrawl_cdp::DurableSession::new(config);
+        let mut session = onecrawl_cdp::DurableSession::new(config)
+            .map_err(|e| e.to_string())?;
 
         // Final checkpoint
         let _ = session.checkpoint(&page).await;
@@ -95,7 +97,8 @@ pub async fn durable_checkpoint(name: &str) {
             state_path: state_dir,
             ..onecrawl_cdp::DurableConfig::default()
         };
-        let mut session = onecrawl_cdp::DurableSession::new(config);
+        let mut session = onecrawl_cdp::DurableSession::new(config)
+            .map_err(|e| e.to_string())?;
         let state = session
             .checkpoint(&page)
             .await
@@ -122,7 +125,8 @@ pub async fn durable_restore(name: &str) {
             state_path: state_dir,
             ..onecrawl_cdp::DurableConfig::default()
         };
-        let mut session = onecrawl_cdp::DurableSession::new(config);
+        let mut session = onecrawl_cdp::DurableSession::new(config)
+            .map_err(|e| e.to_string())?;
         session.restore(&page).await.map_err(|e| e.to_string())?;
 
         println!("{} Session '{}' restored", "✓".green(), name);

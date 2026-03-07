@@ -561,8 +561,8 @@ impl VisionStream {
     /// Update FPS at runtime.
     pub async fn set_fps(&self, fps: f32) -> Result<(), String> {
         let max_fps = self.config.read().await.max_fps;
-        if fps <= 0.0 || fps > max_fps {
-            return Err(format!("FPS must be between 0 and {max_fps}"));
+        if fps <= 0.0 || fps > max_fps || fps.is_nan() || fps.is_infinite() {
+            return Err(format!("FPS must be a positive finite number between 0 and {max_fps}"));
         }
         self.config.write().await.fps = fps;
         Ok(())

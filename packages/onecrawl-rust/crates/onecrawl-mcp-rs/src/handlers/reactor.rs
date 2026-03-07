@@ -4,10 +4,10 @@ use rmcp::{ErrorData as McpError, model::*};
 use crate::cdp_tools::*;
 use crate::helpers::{mcp_err, ensure_page, json_ok};
 use crate::OneCrawlMcp;
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 
-static REACTOR_RUNNING: OnceLock<Arc<RwLock<bool>>> = OnceLock::new();
+static REACTOR_RUNNING: Mutex<Option<Arc<RwLock<bool>>>> = Mutex::new(None);
 
 impl OneCrawlMcp {
     // ════════════════════════════════════════════════════════════════
@@ -57,7 +57,16 @@ impl OneCrawlMcp {
 
         // Store the reactor's running flag so reactor_stop can signal shutdown
         let running_flag = reactor.running_flag();
-        let _ = REACTOR_RUNNING.set(running_flag);
+        {
+            let mut guard = REACTOR_RUNNING.lock().unwrap_or_else(|e| e.into_inner());
+            // If there's an existing reactor, stop it first
+            if let Some(old_flag) = guard.take() {
+                if let Ok(mut w) = old_flag.try_write() {
+                    *w = false;
+                }
+            }
+            *guard = Some(running_flag);
+        }
 
         // Start reactor in a background task
         let page_clone = page.clone();
@@ -79,9 +88,12 @@ impl OneCrawlMcp {
         &self,
         _p: ReactorStopParams,
     ) -> Result<CallToolResult, McpError> {
-        if let Some(running) = REACTOR_RUNNING.get() {
-            let mut flag = running.write().await;
-            *flag = false;
+        let flag = {
+            let guard = REACTOR_RUNNING.lock().unwrap_or_else(|e| e.into_inner());
+            guard.clone()
+        };
+        if let Some(running) = flag {
+            *running.write().await = false;
             json_ok(&serde_json::json!({
                 "action": "reactor_stop",
                 "status": "stopped",
@@ -100,7 +112,11 @@ impl OneCrawlMcp {
         &self,
         _p: ReactorStatusParams,
     ) -> Result<CallToolResult, McpError> {
-        let is_running = if let Some(running) = REACTOR_RUNNING.get() {
+        let flag = {
+            let guard = REACTOR_RUNNING.lock().unwrap_or_else(|e| e.into_inner());
+            guard.clone()
+        };
+        let is_running = if let Some(running) = flag {
             *running.read().await
         } else {
             false

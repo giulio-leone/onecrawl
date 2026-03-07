@@ -134,13 +134,16 @@ pub struct DurableSession {
 
 impl DurableSession {
     /// Create a new durable session with the given configuration.
-    pub fn new(config: DurableConfig) -> Self {
+    pub fn new(config: DurableConfig) -> Result<Self> {
+        if config.name.contains('/') || config.name.contains('\\') || config.name.contains("..") {
+            return Err(Error::Cdp("Invalid session name".into()));
+        }
         let state = DurableState::new(&config.name);
-        Self {
+        Ok(Self {
             config,
             state,
             started_at: None,
-        }
+        })
     }
 
     /// Save current browser state to disk.
@@ -422,16 +425,13 @@ impl DurableSession {
 
     // ── Persistence helpers ─────────────────────────────────────────
 
-    fn state_file_path(&self) -> PathBuf {
-        assert!(
-            !self.config.name.contains('/')
-                && !self.config.name.contains('\\')
-                && !self.config.name.contains(".."),
-            "Invalid session name"
-        );
-        self.config
+    fn state_file_path(&self) -> Result<PathBuf> {
+        if self.config.name.contains('/') || self.config.name.contains('\\') || self.config.name.contains("..") {
+            return Err(Error::Cdp("Invalid session name: contains path traversal characters".into()));
+        }
+        Ok(self.config
             .state_path
-            .join(format!("{}.state", self.config.name))
+            .join(format!("{}.state", self.config.name)))
     }
 
     fn save_state(&self) -> Result<()> {
@@ -439,13 +439,13 @@ impl DurableSession {
             .map_err(|e| Error::Cdp(format!("durable state dir: {e}")))?;
         let json = serde_json::to_string_pretty(&self.state)
             .map_err(|e| Error::Cdp(format!("durable serialize: {e}")))?;
-        std::fs::write(self.state_file_path(), json)
+        std::fs::write(self.state_file_path()?, json)
             .map_err(|e| Error::Cdp(format!("durable write: {e}")))?;
         Ok(())
     }
 
     fn load_state(&mut self) -> Result<()> {
-        let path = self.state_file_path();
+        let path = self.state_file_path()?;
         let content = std::fs::read_to_string(&path)
             .map_err(|e| Error::Cdp(format!("durable read {}: {e}", path.display())))?;
         self.state = serde_json::from_str(&content)
@@ -634,7 +634,7 @@ mod tests {
             state_path: dir.clone(),
             ..DurableConfig::default()
         };
-        let mut session = DurableSession::new(config);
+        let mut session = DurableSession::new(config).unwrap();
         session.state.url = Some("https://example.com".to_string());
         session.save_state().unwrap();
 
