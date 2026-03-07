@@ -1,6 +1,6 @@
 //! Keyboard input via CDP Input domain.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 
 /// Press a single key (keyDown + keyUp). Supports special keys:

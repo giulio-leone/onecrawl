@@ -1,6 +1,6 @@
 //! Autonomous agent loop — observe → plan → act → verify cycles.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde_json::Value;
 

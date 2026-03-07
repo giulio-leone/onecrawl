@@ -1,4 +1,4 @@
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use super::types::CaptchaDetection;
 use super::types::DETECT_CAPTCHA_JS;

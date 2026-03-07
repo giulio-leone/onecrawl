@@ -2,7 +2,7 @@
 //!
 //! Define extraction rules and get structured data as items are found.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;

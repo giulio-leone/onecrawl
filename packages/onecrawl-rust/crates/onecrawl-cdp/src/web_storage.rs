@@ -1,6 +1,6 @@
 //! Web Storage (localStorage, sessionStorage, IndexedDB) management via JS APIs.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 
 /// Get all localStorage contents as a JSON object.

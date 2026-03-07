@@ -12,8 +12,8 @@ use tokio::sync::Mutex;
 #[derive(Default)]
 pub struct BrowserState {
     pub session: Option<onecrawl_cdp::BrowserSession>,
-    pub page: Option<chromiumoxide::Page>,
-    pub tabs: Vec<chromiumoxide::Page>,
+    pub page: Option<onecrawl_browser::Page>,
+    pub tabs: Vec<onecrawl_browser::Page>,
     pub active_tab: usize,
     pub snapshots: HashMap<String, onecrawl_cdp::DomSnapshot>,
     pub rate_limiter: Option<onecrawl_cdp::RateLimitState>,
@@ -51,7 +51,7 @@ pub struct BrowserState {
     pub event_subscriptions: Vec<String>,
     pub event_buffer: Vec<serde_json::Value>,
     // Multi-browser fleet
-    pub fleet_instances: Vec<(String, Option<chromiumoxide::Page>)>,
+    pub fleet_instances: Vec<(String, Option<onecrawl_browser::Page>)>,
     pub fleet_name: Option<String>,
     // Auth sessions
     pub auth_sessions: HashMap<String, serde_json::Value>,

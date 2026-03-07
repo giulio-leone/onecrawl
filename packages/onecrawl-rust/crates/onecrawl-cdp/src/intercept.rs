@@ -1,6 +1,6 @@
 //! Request interception and response mocking via JS monkey-patching.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

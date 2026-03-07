@@ -1,7 +1,7 @@
 //! Spider/Crawler framework — lightweight, configurable web crawler
 //! using the existing CDP browser infrastructure.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};

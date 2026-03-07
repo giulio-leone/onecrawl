@@ -47,8 +47,8 @@ sled = "0.34"
 # URL parsing
 url = "2"
 
-# Browser (CDP)
-chromiumoxide = { version = "0.8", features = ["tokio-runtime"] }
+# Browser (CDP) — vendored
+onecrawl-browser = { path = "vendor/onecrawl-browser", features = ["tokio-runtime"] }
 futures = "0.3"
 playwright = { package = "playwright-rs", version = "0.8" }
 

@@ -236,7 +236,7 @@ pub struct FingerprintInfo {
     pub device_memory: u32,
 }
 
-/// High-level browser automation powered by chromiumoxide (native CDP).
+/// High-level browser automation powered by onecrawl_browser (native CDP).
 ///
 /// ```js
 /// const browser = await NativeBrowser.launch(true);

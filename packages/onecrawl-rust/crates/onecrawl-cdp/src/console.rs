@@ -3,7 +3,7 @@
 //! Captures console.log/warn/error/info/debug messages, plus
 //! window.onerror and unhandledrejection events.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
 

@@ -1,9 +1,9 @@
-use chromiumoxide::cdp::browser_protocol::web_authn::{
+use onecrawl_browser::cdp::browser_protocol::web_authn::{
     AddCredentialParams, AddVirtualAuthenticatorParams, AuthenticatorId,
     AuthenticatorProtocol, AuthenticatorTransport, Ctap2Version, EnableParams,
     GetCredentialsParams, VirtualAuthenticatorOptions,
 };
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use super::types::PasskeyCredential;
 
@@ -71,7 +71,7 @@ pub async fn cdp_add_credential(
     authenticator_id: &str,
     credential: &PasskeyCredential,
 ) -> Result<()> {
-    use chromiumoxide::cdp::browser_protocol::web_authn::Credential;
+    use onecrawl_browser::cdp::browser_protocol::web_authn::Credential;
     let mut cdp_cred = Credential::new(
         credential.credential_id.clone(),
         credential.is_resident_credential,

@@ -1,5 +1,5 @@
-use chromiumoxide::Page;
-use chromiumoxide::browser::Browser as CrBrowser;
+use onecrawl_browser::Page;
+use onecrawl_browser::browser::Browser as CrBrowser;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 

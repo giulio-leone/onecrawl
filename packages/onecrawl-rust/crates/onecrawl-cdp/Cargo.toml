@@ -16,7 +16,7 @@ playwright = ["dep:playwright"]
 
 [dependencies]
 onecrawl-core = { path = "../onecrawl-core" }
-chromiumoxide = { workspace = true }
+onecrawl-browser = { workspace = true }
 tokio = { workspace = true }
 futures = { workspace = true }
 serde = { workspace = true }

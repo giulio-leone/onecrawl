@@ -1,6 +1,6 @@
 //! Content extraction — text, HTML, Markdown, JSON (Scrapling-like).
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 

@@ -70,7 +70,7 @@ pub fn parse_opt_json_str<T: serde::de::DeserializeOwned>(
 /// Ensure browser session + page are initialised, return a clone of the page handle.
 /// Stealth patches are automatically injected at session level via
 /// `addScriptToEvaluateOnNewDocument` unless `stealth_disabled` is set.
-pub async fn ensure_page(browser: &SharedBrowser) -> Result<chromiumoxide::Page, McpError> {
+pub async fn ensure_page(browser: &SharedBrowser) -> Result<onecrawl_browser::Page, McpError> {
     let mut state = browser.lock().await;
     if state.session.is_none() {
         let session = if state.headed {

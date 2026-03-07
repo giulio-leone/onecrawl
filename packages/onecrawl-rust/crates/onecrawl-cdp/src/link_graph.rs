@@ -1,6 +1,6 @@
 //! Link graph builder and analyser — extract, build, and query link graphs.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

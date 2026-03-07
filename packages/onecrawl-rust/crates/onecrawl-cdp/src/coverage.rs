@@ -2,7 +2,7 @@
 //!
 //! Tracks which parts of JavaScript and CSS are actually executed/used.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -35,7 +35,7 @@ pub struct CoverageReport {
 
 /// Start JS code coverage collection via CDP Profiler.
 pub async fn start_js_coverage(page: &Page) -> Result<()> {
-    use chromiumoxide::cdp::js_protocol::profiler::{EnableParams, StartPreciseCoverageParams};
+    use onecrawl_browser::cdp::js_protocol::profiler::{EnableParams, StartPreciseCoverageParams};
 
     page.execute(EnableParams::default())
         .await
@@ -55,7 +55,7 @@ pub async fn start_js_coverage(page: &Page) -> Result<()> {
 
 /// Stop JS coverage and return the report.
 pub async fn stop_js_coverage(page: &Page) -> Result<CoverageReport> {
-    use chromiumoxide::cdp::js_protocol::profiler::{
+    use onecrawl_browser::cdp::js_protocol::profiler::{
         DisableParams, StopPreciseCoverageParams, TakePreciseCoverageParams,
         TakePreciseCoverageReturns,
     };
@@ -133,8 +133,8 @@ pub async fn stop_js_coverage(page: &Page) -> Result<CoverageReport> {
 
 /// Start CSS coverage collection.
 pub async fn start_css_coverage(page: &Page) -> Result<()> {
-    use chromiumoxide::cdp::browser_protocol::css::EnableParams;
-    use chromiumoxide::cdp::browser_protocol::dom::EnableParams as DomEnableParams;
+    use onecrawl_browser::cdp::browser_protocol::css::EnableParams;
+    use onecrawl_browser::cdp::browser_protocol::dom::EnableParams as DomEnableParams;
 
     page.execute(DomEnableParams::default())
         .await

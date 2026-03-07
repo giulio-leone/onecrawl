@@ -1,6 +1,6 @@
 //! Persistent cookie storage with import/export.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -28,7 +28,7 @@ pub struct StoredCookie {
 /// Export all cookies from page to a CookieJar.
 pub async fn export_cookies(page: &Page) -> Result<CookieJar> {
     let resp = page
-        .execute(chromiumoxide::cdp::browser_protocol::network::GetCookiesParams::default())
+        .execute(onecrawl_browser::cdp::browser_protocol::network::GetCookiesParams::default())
         .await
         .map_err(|e| Error::Cdp(format!("export_cookies failed: {e}")))?;
 
@@ -65,7 +65,7 @@ pub async fn export_cookies(page: &Page) -> Result<CookieJar> {
 pub async fn import_cookies(page: &Page, jar: &CookieJar) -> Result<usize> {
     let mut count = 0;
     for cookie in &jar.cookies {
-        let params = chromiumoxide::cdp::browser_protocol::network::SetCookieParams::builder()
+        let params = onecrawl_browser::cdp::browser_protocol::network::SetCookieParams::builder()
             .name(&cookie.name)
             .value(&cookie.value)
             .domain(&cookie.domain)
@@ -109,7 +109,7 @@ pub async fn merge_cookies_from_file(page: &Page, path: &Path) -> Result<usize> 
 /// Clear all cookies from the page.
 pub async fn clear_all_cookies(page: &Page) -> Result<()> {
     page.execute(
-        chromiumoxide::cdp::browser_protocol::network::ClearBrowserCookiesParams::default(),
+        onecrawl_browser::cdp::browser_protocol::network::ClearBrowserCookiesParams::default(),
     )
     .await
     .map_err(|e| Error::Cdp(format!("clear_all_cookies failed: {e}")))?;

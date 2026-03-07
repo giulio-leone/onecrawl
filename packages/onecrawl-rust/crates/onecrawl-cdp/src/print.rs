@@ -3,7 +3,7 @@
 //! Extends the basic `screenshot::pdf()` with full control over margins,
 //! headers/footers, page ranges, and CSS page-size preferences.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
 
@@ -49,7 +49,7 @@ impl Default for DetailedPdfOptions {
 
 /// Generate PDF with detailed options.
 pub async fn print_to_pdf(page: &Page, options: &DetailedPdfOptions) -> Result<Vec<u8>> {
-    let mut builder = chromiumoxide::cdp::browser_protocol::page::PrintToPdfParams::builder();
+    let mut builder = onecrawl_browser::cdp::browser_protocol::page::PrintToPdfParams::builder();
 
     if let Some(v) = options.landscape {
         builder = builder.landscape(v);

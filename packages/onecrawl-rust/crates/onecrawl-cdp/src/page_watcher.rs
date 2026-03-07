@@ -3,7 +3,7 @@
 //! Watches for navigation (pushState/replaceState/popstate), title changes,
 //! scroll, and resize events, recording them into `window.__onecrawl_page_changes`.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
 

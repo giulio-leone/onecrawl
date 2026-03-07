@@ -199,7 +199,7 @@ impl Store {
 
 use std::sync::Arc;
 
-/// Browser automation class powered by chromiumoxide (native CDP).
+/// Browser automation class powered by onecrawl_browser (native CDP).
 ///
 /// ```python
 /// browser = Browser.launch(headless=True)

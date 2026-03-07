@@ -1,6 +1,6 @@
 //! SPA (Single Page Application) interaction helpers.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 
 /// Detect virtual/windowed scroll containers (react-window, tanstack-virtual, etc.)

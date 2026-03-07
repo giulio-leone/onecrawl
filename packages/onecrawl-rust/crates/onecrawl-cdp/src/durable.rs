@@ -1,6 +1,6 @@
 //! Durable Sessions — crash-resilient browser sessions with auto-checkpoint and reconnect.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

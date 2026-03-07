@@ -2,7 +2,7 @@
 //!
 //! Provides accessibility tree retrieval and WCAG-style audits.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -34,7 +34,7 @@ pub struct A11ySummary {
 /// Get the full accessibility tree as JSON.
 ///
 /// Uses JS to walk the DOM and collect ARIA attributes since
-/// `GetFullAXTreeParams` is not available in chromiumoxide 0.8.
+/// `GetFullAXTreeParams` is not available in onecrawl_browser 0.8.
 pub async fn get_accessibility_tree(page: &Page) -> Result<serde_json::Value> {
     let js = r#"
         (() => {

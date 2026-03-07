@@ -1,6 +1,6 @@
 //! Rich DOM traversal — parent, siblings, children, above, below (Scrapling-like).
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 

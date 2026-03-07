@@ -2,7 +2,7 @@
 //!
 //! Captures WebSocket frames (sent and received) during a page session.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

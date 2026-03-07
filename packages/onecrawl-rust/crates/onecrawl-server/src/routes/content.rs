@@ -201,7 +201,7 @@ pub async fn take_screenshot(
     let page = get_tab_page(&state, &tab_id, owner).await?;
     let bytes = page
         .screenshot(
-            chromiumoxide::page::ScreenshotParams::builder()
+            onecrawl_browser::page::ScreenshotParams::builder()
                 .full_page(true)
                 .build(),
         )
@@ -220,7 +220,7 @@ pub async fn export_pdf(
 ) -> ApiResult<PdfResponse> {
     let owner = headers.get("x-agent-owner").and_then(|v| v.to_str().ok());
     let page = get_tab_page(&state, &tab_id, owner).await?;
-    let params = chromiumoxide::cdp::browser_protocol::page::PrintToPdfParams::builder()
+    let params = onecrawl_browser::cdp::browser_protocol::page::PrintToPdfParams::builder()
         .build();
     let response = page
         .execute(params)

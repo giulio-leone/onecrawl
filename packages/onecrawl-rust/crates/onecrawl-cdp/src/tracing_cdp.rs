@@ -1,6 +1,6 @@
 //! Performance tracing via CDP Tracing/Performance domains and JS Performance API.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -13,7 +13,7 @@ pub struct PerformanceMetric {
 
 /// Start performance tracing via CDP Tracing domain.
 pub async fn start_tracing(page: &Page) -> Result<()> {
-    use chromiumoxide::cdp::browser_protocol::tracing::StartParams;
+    use onecrawl_browser::cdp::browser_protocol::tracing::StartParams;
 
     let params = StartParams::default();
     page.execute(params)
@@ -31,7 +31,7 @@ pub async fn start_tracing(page: &Page) -> Result<()> {
 /// consider using the JS Performance API via `get_navigation_timing` and
 /// `get_resource_timing`.
 pub async fn stop_tracing(page: &Page) -> Result<serde_json::Value> {
-    use chromiumoxide::cdp::browser_protocol::tracing::EndParams;
+    use onecrawl_browser::cdp::browser_protocol::tracing::EndParams;
 
     page.execute(EndParams::default())
         .await
@@ -68,7 +68,7 @@ pub async fn stop_tracing(page: &Page) -> Result<serde_json::Value> {
 
 /// Get performance metrics via CDP Performance domain.
 pub async fn get_performance_metrics(page: &Page) -> Result<Vec<PerformanceMetric>> {
-    use chromiumoxide::cdp::browser_protocol::performance::{
+    use onecrawl_browser::cdp::browser_protocol::performance::{
         EnableParams, GetMetricsParams, GetMetricsReturns,
     };
 

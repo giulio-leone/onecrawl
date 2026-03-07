@@ -1,4 +1,4 @@
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use super::types::*;
 

@@ -1,4 +1,4 @@
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 
 /// Get the full page HTML content.

@@ -1,6 +1,6 @@
 //! Annotated screenshot and adaptive retry for computer-use workflows.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde_json::Value;
 

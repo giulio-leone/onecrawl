@@ -1,6 +1,6 @@
 //! Smart Form Filler — automatic form detection, analysis, and filling.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

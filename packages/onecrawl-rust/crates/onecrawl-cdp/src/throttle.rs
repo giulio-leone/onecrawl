@@ -2,9 +2,9 @@
 //!
 //! Preset profiles for common network conditions (3G, 4G, WiFi, Offline).
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 #[allow(deprecated)]
-use chromiumoxide::cdp::browser_protocol::network::{
+use onecrawl_browser::cdp::browser_protocol::network::{
     ConnectionType, EmulateNetworkConditionsParams,
 };
 use onecrawl_core::{Error, Result};

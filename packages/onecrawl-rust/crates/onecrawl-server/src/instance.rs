@@ -1,5 +1,5 @@
-use chromiumoxide::browser::{Browser, BrowserConfig};
-use chromiumoxide::Page;
+use onecrawl_browser::browser::{Browser, BrowserConfig};
+use onecrawl_browser::Page;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

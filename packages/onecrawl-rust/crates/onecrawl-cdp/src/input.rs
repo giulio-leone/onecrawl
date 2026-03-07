@@ -1,6 +1,6 @@
 //! Advanced input: drag-and-drop, file upload via CDP.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 
 /// Drag an element and drop it onto another element.
@@ -65,7 +65,7 @@ pub async fn set_file_input(page: &Page, selector: &str, file_paths: &[String]) 
 
     let backend_node_id = el.backend_node_id;
 
-    let set_files = chromiumoxide::cdp::browser_protocol::dom::SetFileInputFilesParams::builder()
+    let set_files = onecrawl_browser::cdp::browser_protocol::dom::SetFileInputFilesParams::builder()
         .files(file_paths.to_vec())
         .backend_node_id(backend_node_id)
         .build()

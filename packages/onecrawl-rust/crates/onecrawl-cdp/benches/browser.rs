@@ -19,12 +19,12 @@
 /*
 use criterion::{criterion_group, criterion_main, Criterion};
 
-async fn bench_navigate(page: &chromiumoxide::Page) {
+async fn bench_navigate(page: &onecrawl_browser::Page) {
     onecrawl_cdp::navigation::goto(page, "about:blank").await.unwrap();
     onecrawl_cdp::navigation::wait_ms(10).await;
 }
 
-async fn bench_screenshot(page: &chromiumoxide::Page) {
+async fn bench_screenshot(page: &onecrawl_browser::Page) {
     onecrawl_cdp::screenshot::screenshot_viewport(page).await.unwrap();
 }
 

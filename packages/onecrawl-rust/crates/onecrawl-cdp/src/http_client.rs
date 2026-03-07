@@ -2,7 +2,7 @@
 //!
 //! Inherits cookies, headers, and session from the browser context.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

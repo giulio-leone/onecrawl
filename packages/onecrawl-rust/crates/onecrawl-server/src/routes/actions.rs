@@ -42,7 +42,7 @@ pub async fn execute_actions(
 }
 
 async fn eval_ref_action(
-    page: &chromiumoxide::Page,
+    page: &onecrawl_browser::Page,
     ref_id: &str,
     js_fn: impl FnOnce(i64) -> String,
     action_name: &str,
@@ -58,7 +58,7 @@ async fn eval_ref_action(
 }
 
 fn execute_single_action<'a>(
-    page: &'a chromiumoxide::Page,
+    page: &'a onecrawl_browser::Page,
     action: &'a Action,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ActionResult> + Send + 'a>> {
     Box::pin(async move {

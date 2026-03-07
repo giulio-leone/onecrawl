@@ -3,7 +3,7 @@
 //! Overrides window.alert, window.confirm, and window.prompt to
 //! auto-handle them and record a history of dialog events.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
 

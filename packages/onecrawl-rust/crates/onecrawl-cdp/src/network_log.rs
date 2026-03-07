@@ -3,7 +3,7 @@
 //! Captures all network requests with timing, headers, status, and size info
 //! into `window.__onecrawl_network_entries`.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -38,7 +38,7 @@ pub(crate) async fn get_tab_page(
     state: &AppState,
     tab_id: &str,
     owner: Option<&str>,
-) -> Result<chromiumoxide::Page, (StatusCode, Json<ErrorBody>)> {
+) -> Result<onecrawl_browser::Page, (StatusCode, Json<ErrorBody>)> {
     // Lock enforcement: if tab is locked by a different owner, reject with 409
     if let Some(lock) = state.get_tab_lock(tab_id).await {
         match owner {

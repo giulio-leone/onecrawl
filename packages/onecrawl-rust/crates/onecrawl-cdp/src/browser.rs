@@ -1,4 +1,4 @@
-use chromiumoxide::browser::{Browser, BrowserConfig};
+use onecrawl_browser::browser::{Browser, BrowserConfig};
 use futures::StreamExt;
 use onecrawl_core::{Error, Result};
 
@@ -83,7 +83,7 @@ impl BrowserSession {
     /// Use this for sessions where pages (like SPAs) may take longer than the
     /// default 30 seconds to fire their "load" event.
     pub async fn connect_with_nav_timeout(ws_url: &str) -> Result<Self> {
-        use chromiumoxide::handler::HandlerConfig;
+        use onecrawl_browser::handler::HandlerConfig;
 
         let config = HandlerConfig {
             request_timeout: std::time::Duration::from_secs(90),
@@ -119,7 +119,7 @@ impl BrowserSession {
     }
 
     /// Create a new page/tab.
-    pub async fn new_page(&self, url: &str) -> Result<chromiumoxide::Page> {
+    pub async fn new_page(&self, url: &str) -> Result<onecrawl_browser::Page> {
         self.browser
             .new_page(url)
             .await

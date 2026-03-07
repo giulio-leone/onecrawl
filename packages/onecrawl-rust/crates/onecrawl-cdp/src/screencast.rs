@@ -1,10 +1,10 @@
 //! Live browser streaming via CDP Page.startScreencast / Page.stopScreencast.
 
-use chromiumoxide::cdp::browser_protocol::page::{
+use onecrawl_browser::cdp::browser_protocol::page::{
     CaptureScreenshotFormat, CaptureScreenshotParams, StartScreencastFormat,
     StartScreencastParams, StopScreencastParams,
 };
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 

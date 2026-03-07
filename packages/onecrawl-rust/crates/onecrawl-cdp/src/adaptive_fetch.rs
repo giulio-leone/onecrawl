@@ -8,7 +8,7 @@
 //! The standalone HTTP client mimics Chrome's header ordering and values to avoid
 //! server-side fingerprinting that detects non-browser clients.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

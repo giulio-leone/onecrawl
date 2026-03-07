@@ -4,7 +4,7 @@
 //! WebSocket, etc.) against configurable rules and dispatches handlers (log,
 //! evaluate JS, webhook, screenshot, AI respond, chain, store).
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -682,7 +682,7 @@ fn dispatch_handler_boxed<'a>(
                     .unwrap_or_else(|| format!("reactor_screenshot_{}.png", now_epoch_ms()));
                 let data = page
                     .screenshot(
-                        chromiumoxide::page::ScreenshotParams::builder()
+                        onecrawl_browser::page::ScreenshotParams::builder()
                             .full_page(true)
                             .build(),
                     )

@@ -1,6 +1,6 @@
 //! Virtual geolocation profiles with timezone/locale coordination.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 

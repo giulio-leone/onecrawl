@@ -328,12 +328,12 @@ pub fn get_ua_override(fp: &Fingerprint) -> (String, String, String) {
 /// the fingerprint UA is set to match the real Chrome version, eliminating the version-mismatch
 /// between the main page context (overridden) and Worker contexts (unpatched, reports real UA).
 pub async fn inject_persistent_stealth(
-    page: &chromiumoxide::Page,
+    page: &onecrawl_browser::Page,
     real_ua: Option<&str>,
 ) -> onecrawl_core::Result<()> {
-    use chromiumoxide::cdp::browser_protocol::page::AddScriptToEvaluateOnNewDocumentParams;
-    use chromiumoxide::cdp::browser_protocol::emulation::SetAutomationOverrideParams;
-    use chromiumoxide::cdp::browser_protocol::network::SetExtraHttpHeadersParams;
+    use onecrawl_browser::cdp::browser_protocol::page::AddScriptToEvaluateOnNewDocumentParams;
+    use onecrawl_browser::cdp::browser_protocol::emulation::SetAutomationOverrideParams;
+    use onecrawl_browser::cdp::browser_protocol::network::SetExtraHttpHeadersParams;
     use crate::emulation;
 
     let fp = super::fingerprint::generate_fingerprint_with_real_ua(real_ua);
@@ -359,7 +359,7 @@ pub async fn inject_persistent_stealth(
     let accept_lang_val = fp.languages.iter().enumerate().map(|(i, lang)| {
         if i == 0 { lang.clone() } else { format!("{};q={:.1}", lang, 1.0 - i as f64 * 0.1) }
     }).collect::<Vec<_>>().join(",");
-    use chromiumoxide::cdp::browser_protocol::network::Headers;
+    use onecrawl_browser::cdp::browser_protocol::network::Headers;
     let _ = page
         .execute(
             SetExtraHttpHeadersParams::new(

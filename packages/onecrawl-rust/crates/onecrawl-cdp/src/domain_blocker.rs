@@ -4,7 +4,7 @@
 //! domains on a configurable blocklist.  Provides predefined category lists
 //! and per-domain hit-count statistics.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 

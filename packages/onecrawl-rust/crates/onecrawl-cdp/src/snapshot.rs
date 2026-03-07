@@ -3,7 +3,7 @@
 //! Captures structured snapshots of page state and computes
 //! diffs between snapshots using Jaccard word similarity.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};

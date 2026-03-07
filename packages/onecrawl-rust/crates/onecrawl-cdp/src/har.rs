@@ -2,7 +2,7 @@
 //!
 //! Records network requests/responses and exports them in HAR 1.2 format.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

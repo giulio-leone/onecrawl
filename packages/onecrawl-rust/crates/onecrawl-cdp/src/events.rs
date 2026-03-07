@@ -3,7 +3,7 @@
 //! Provides WebSocket and SSE-compatible event channels for
 //! browser automation events (network, console, page lifecycle).
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;

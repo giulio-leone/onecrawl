@@ -1,4 +1,4 @@
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -75,7 +75,7 @@ pub fn compare_screenshot_files(baseline_path: &Path, current_path: &Path) -> Re
 /// If baseline doesn't exist, saves current screenshot as the new baseline.
 pub async fn visual_regression(page: &Page, baseline_path: &Path) -> Result<DiffResult> {
     let current = page
-        .screenshot(chromiumoxide::page::ScreenshotParams::builder().build())
+        .screenshot(onecrawl_browser::page::ScreenshotParams::builder().build())
         .await
         .map_err(|e| Error::Cdp(format!("visual_regression screenshot failed: {e}")))?;
 

@@ -334,11 +334,11 @@ impl OneCrawlMcp {
             return Err(mcp_err("ws_url must start with ws:// or wss://"));
         }
 
-        // Connect to remote browser via chromiumoxide (with timeout)
+        // Connect to remote browser via onecrawl_browser (with timeout)
         let (browser, mut handler) =
             tokio::time::timeout(
                 std::time::Duration::from_secs(15),
-                chromiumoxide::Browser::connect(&p.ws_url),
+                onecrawl_browser::Browser::connect(&p.ws_url),
             )
             .await
             .map_err(|_| mcp_err("remote CDP connect timed out after 15s"))?

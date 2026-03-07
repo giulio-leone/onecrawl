@@ -1,6 +1,6 @@
 //! Long-running harness: health monitoring, tab GC, circuit breaker.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 
 /// Get browser health metrics: memory, tab count, response time.

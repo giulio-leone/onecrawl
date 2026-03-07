@@ -3,7 +3,7 @@
 //! Fingerprints DOM elements and relocates them after page structure changes
 //! using structural, content, and visual similarity scoring.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 

@@ -3,7 +3,7 @@
 //! Overrides JavaScript-visible navigator, screen, and WebGL properties
 //! to match specific browser profiles.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -209,7 +209,7 @@ return ['userAgent','platform','vendor','appVersion','oscpu','languages','hardwa
 
     // Also set the CDP user-agent override so network requests match
     let ua_params =
-        chromiumoxide::cdp::browser_protocol::emulation::SetUserAgentOverrideParams::new(
+        onecrawl_browser::cdp::browser_protocol::emulation::SetUserAgentOverrideParams::new(
             &fp.user_agent,
         );
     page.execute(ua_params)

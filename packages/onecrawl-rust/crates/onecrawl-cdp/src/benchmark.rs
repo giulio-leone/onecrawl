@@ -156,7 +156,7 @@ pub fn format_results(suite: &BenchmarkSuite) -> String {
 }
 
 /// Run the full CDP benchmark suite against a live page.
-pub async fn run_cdp_benchmarks(page: &chromiumoxide::Page, iterations: u32) -> BenchmarkSuite {
+pub async fn run_cdp_benchmarks(page: &onecrawl_browser::Page, iterations: u32) -> BenchmarkSuite {
     let suite_start = Instant::now();
     let mut results = Vec::new();
 

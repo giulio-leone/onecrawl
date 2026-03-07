@@ -8,8 +8,8 @@
 //! - Cloudflare Bot Management challenge detection
 //! - Auto-wait for CF clearance (up to configurable timeout)
 
-use chromiumoxide::layout::Point;
-use chromiumoxide::Page;
+use onecrawl_browser::layout::Point;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use rand::prelude::*;
 use std::time::Duration;

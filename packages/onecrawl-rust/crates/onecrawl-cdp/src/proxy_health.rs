@@ -1,6 +1,6 @@
 //! Proxy health checking and scoring via browser-based fetch.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 

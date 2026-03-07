@@ -3,7 +3,7 @@
 //! Implements an Anthropic/OpenAI computer-use-style interface that AI agents
 //! can use to observe browser state and execute actions in a tight loop.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

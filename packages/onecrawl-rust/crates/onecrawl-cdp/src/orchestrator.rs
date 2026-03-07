@@ -198,7 +198,7 @@ pub struct OrchestrationResult {
 pub struct DeviceHandle {
     pub config: DeviceConfig,
     pub browser_session: Option<BrowserSession>,
-    pub browser_page: Option<chromiumoxide::Page>,
+    pub browser_page: Option<onecrawl_browser::Page>,
     pub android: Option<AndroidClient>,
     pub ios: Option<IosClient>,
 }
@@ -648,7 +648,7 @@ impl Orchestrator {
 
             OrchAction::Screenshot { path } => {
                 let page = browser_page(handle)?;
-                let params = chromiumoxide::page::ScreenshotParams::builder().build();
+                let params = onecrawl_browser::page::ScreenshotParams::builder().build();
                 let bytes = page
                     .screenshot(params)
                     .await
@@ -1106,7 +1106,7 @@ impl Orchestrator {
 //  Helpers
 // ══════════════════════════════════════════════════════════════════════
 
-fn browser_page(handle: &DeviceHandle) -> std::result::Result<&chromiumoxide::Page, String> {
+fn browser_page(handle: &DeviceHandle) -> std::result::Result<&onecrawl_browser::Page, String> {
     handle
         .browser_page
         .as_ref()

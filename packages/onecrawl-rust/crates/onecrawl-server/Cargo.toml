@@ -10,7 +10,7 @@ description = "PinchTab-style HTTP API server for browser automation"
 [dependencies]
 onecrawl-core = { path = "../onecrawl-core" }
 onecrawl-cdp = { path = "../onecrawl-cdp" }
-chromiumoxide = { workspace = true }
+onecrawl-browser = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

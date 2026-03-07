@@ -1,6 +1,6 @@
 //! Cookie management via CDP Network domain.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -73,7 +73,7 @@ pub async fn get_cookies(page: &Page) -> Result<Vec<Cookie>> {
 /// Get all cookies via CDP Network.getCookies (includes httpOnly cookies).
 pub async fn get_all_cookies(page: &Page) -> Result<Vec<Cookie>> {
     let val = page
-        .execute(chromiumoxide::cdp::browser_protocol::network::GetCookiesParams::default())
+        .execute(onecrawl_browser::cdp::browser_protocol::network::GetCookiesParams::default())
         .await
         .map_err(|e| Error::Cdp(format!("Network.getCookies failed: {e}")))?;
 
@@ -98,9 +98,9 @@ pub async fn get_all_cookies(page: &Page) -> Result<Vec<Cookie>> {
 
 /// Set a cookie via CDP Network.setCookie.
 pub async fn set_cookie(page: &Page, params: &SetCookieParams) -> Result<()> {
-    use chromiumoxide::cdp::browser_protocol::network::TimeSinceEpoch;
+    use onecrawl_browser::cdp::browser_protocol::network::TimeSinceEpoch;
 
-    let mut builder = chromiumoxide::cdp::browser_protocol::network::SetCookieParams::builder()
+    let mut builder = onecrawl_browser::cdp::browser_protocol::network::SetCookieParams::builder()
         .name(&params.name)
         .value(&params.value);
 
@@ -142,7 +142,7 @@ pub async fn delete_cookies(
     path: Option<&str>,
 ) -> Result<()> {
     let mut builder =
-        chromiumoxide::cdp::browser_protocol::network::DeleteCookiesParams::builder().name(name);
+        onecrawl_browser::cdp::browser_protocol::network::DeleteCookiesParams::builder().name(name);
 
     if let Some(d) = domain {
         builder = builder.domain(d);
@@ -165,7 +165,7 @@ pub async fn delete_cookies(
 /// Clear all cookies.
 pub async fn clear_cookies(page: &Page) -> Result<()> {
     page.execute(
-        chromiumoxide::cdp::browser_protocol::network::ClearBrowserCookiesParams::default(),
+        onecrawl_browser::cdp::browser_protocol::network::ClearBrowserCookiesParams::default(),
     )
     .await
     .map_err(|e| Error::Cdp(format!("Network.clearBrowserCookies failed: {e}")))?;

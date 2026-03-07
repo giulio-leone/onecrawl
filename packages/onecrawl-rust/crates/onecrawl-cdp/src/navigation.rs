@@ -1,10 +1,10 @@
-use chromiumoxide::cdp::browser_protocol::page::HandleJavaScriptDialogParams;
-use chromiumoxide::Page;
+use onecrawl_browser::cdp::browser_protocol::page::HandleJavaScriptDialogParams;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 
 /// Navigate to a URL and wait for load.
 ///
-/// Uses JS-based navigation (`window.location.href = url`) to bypass chromiumoxide's
+/// Uses JS-based navigation (`window.location.href = url`) to bypass onecrawl_browser's
 /// navigation watcher, which can timeout on SPAs (like x.com) that keep background
 /// connections open and never truly fire the "load" event.
 ///

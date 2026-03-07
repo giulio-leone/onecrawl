@@ -82,7 +82,7 @@ pub async fn get_instance_tabs(
         .get(&id)
         .ok_or_else(|| api_err(StatusCode::NOT_FOUND, "instance not found"))?;
 
-    let pages: Vec<(String, chromiumoxide::Page)> = {
+    let pages: Vec<(String, onecrawl_browser::Page)> = {
         let tabs = inst.tabs.read().await;
         tabs.iter().map(|(tid, p)| (tid.clone(), p.clone())).collect()
     };
@@ -106,7 +106,7 @@ pub async fn get_instance_tabs(
 }
 
 pub async fn list_all_tabs(State(state): State<AppState>) -> impl IntoResponse {
-    let page_handles: Vec<(String, String, chromiumoxide::Page)> = {
+    let page_handles: Vec<(String, String, onecrawl_browser::Page)> = {
         let instances = state.instances.read().await;
         let mut handles = Vec::new();
         for inst in instances.values() {

@@ -329,7 +329,7 @@ fn validate_step(step: &Step, path: &str, errors: &mut Vec<String>) {
 
 /// Execute a parsed workflow against a browser page.
 pub async fn execute_workflow(
-    page: &chromiumoxide::Page,
+    page: &onecrawl_browser::Page,
     workflow: &Workflow,
 ) -> Result<WorkflowResult> {
     let start = std::time::Instant::now();
@@ -461,7 +461,7 @@ pub async fn execute_workflow(
 
 /// Execute a single workflow action against a browser page.
 fn execute_step<'a>(
-    page: &'a chromiumoxide::Page,
+    page: &'a onecrawl_browser::Page,
     action: &'a Action,
     variables: &'a mut HashMap<String, serde_json::Value>,
     step_index: usize,

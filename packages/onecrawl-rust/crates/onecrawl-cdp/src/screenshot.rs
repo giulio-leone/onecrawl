@@ -1,5 +1,5 @@
-use chromiumoxide::Page;
-use chromiumoxide::cdp::browser_protocol::page::CaptureScreenshotFormat;
+use onecrawl_browser::Page;
+use onecrawl_browser::cdp::browser_protocol::page::CaptureScreenshotFormat;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -63,7 +63,7 @@ impl Default for PdfOptions {
 pub async fn screenshot_full(page: &Page) -> Result<Vec<u8>> {
     let bytes = page
         .screenshot(
-            chromiumoxide::page::ScreenshotParams::builder()
+            onecrawl_browser::page::ScreenshotParams::builder()
                 .full_page(true)
                 .build(),
         )
@@ -75,7 +75,7 @@ pub async fn screenshot_full(page: &Page) -> Result<Vec<u8>> {
 /// Take a screenshot of the visible viewport.
 pub async fn screenshot_viewport(page: &Page) -> Result<Vec<u8>> {
     let bytes = page
-        .screenshot(chromiumoxide::page::ScreenshotParams::builder().build())
+        .screenshot(onecrawl_browser::page::ScreenshotParams::builder().build())
         .await
         .map_err(|e| Error::Cdp(format!("screenshot failed: {e}")))?;
     Ok(bytes)
@@ -89,7 +89,7 @@ pub async fn screenshot_with_options(page: &Page, opts: &ScreenshotOptions) -> R
         ImageFormat::Webp => CaptureScreenshotFormat::Webp,
     };
 
-    let mut builder = chromiumoxide::page::ScreenshotParams::builder()
+    let mut builder = onecrawl_browser::page::ScreenshotParams::builder()
         .full_page(opts.full_page)
         .format(cdp_format);
 
@@ -130,7 +130,7 @@ pub async fn pdf(page: &Page) -> Result<Vec<u8>> {
 
 /// Save page as PDF with custom options.
 pub async fn pdf_with_options(page: &Page, opts: &PdfOptions) -> Result<Vec<u8>> {
-    let params = chromiumoxide::cdp::browser_protocol::page::PrintToPdfParams::builder()
+    let params = onecrawl_browser::cdp::browser_protocol::page::PrintToPdfParams::builder()
         .landscape(opts.landscape)
         .scale(opts.scale)
         .paper_width(opts.paper_width)

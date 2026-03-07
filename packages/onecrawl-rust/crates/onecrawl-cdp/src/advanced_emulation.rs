@@ -1,6 +1,6 @@
 //! Advanced browser emulation: sensors, permissions, battery, network info, hardware.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
 

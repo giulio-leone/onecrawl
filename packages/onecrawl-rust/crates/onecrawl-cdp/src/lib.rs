@@ -1,6 +1,6 @@
 //! OneCrawl CDP — Browser automation via Chrome DevTools Protocol.
 //!
-//! Wraps `chromiumoxide` to provide high-level browser commands.
+//! Wraps `onecrawl_browser` to provide high-level browser commands.
 
 pub mod accessibility;
 pub mod adaptive;
@@ -207,5 +207,5 @@ pub use vision::{
     Detection, BoundingBox, SuggestedAction, ScreenshotFormat,
 };
 
-// Re-export chromiumoxide::Page for downstream consumers
-pub use chromiumoxide::Page;
+// Re-export onecrawl_browser::Page for downstream consumers
+pub use onecrawl_browser::Page;

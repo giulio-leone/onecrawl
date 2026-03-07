@@ -3,7 +3,7 @@
 //! Finds the best matching DOM element using exact text, fuzzy text,
 //! ARIA roles, attribute matching, and CSS selector strategies.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 

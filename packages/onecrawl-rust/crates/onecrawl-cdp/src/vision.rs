@@ -240,7 +240,7 @@ impl VisionStream {
     /// the response through [`parse_vision_response`].
     pub async fn start(
         &self,
-        page: &chromiumoxide::Page,
+        page: &onecrawl_browser::Page,
     ) -> Result<(), String> {
         {
             let cfg = self.config.read().await;
@@ -426,7 +426,7 @@ impl VisionStream {
     /// Capture a single frame and produce a placeholder observation (one-shot).
     pub async fn describe_once(
         &self,
-        page: &chromiumoxide::Page,
+        page: &onecrawl_browser::Page,
     ) -> Result<VisionObservation, String> {
         let config = self.config.read().await.clone();
         let opts = screencast_opts_from_config(&config);

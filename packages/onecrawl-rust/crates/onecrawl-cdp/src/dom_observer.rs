@@ -3,7 +3,7 @@
 //! Injects a MutationObserver that records childList, attribute, and
 //! characterData changes into `window.__onecrawl_dom_mutations`.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
 

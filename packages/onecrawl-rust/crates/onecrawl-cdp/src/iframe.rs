@@ -6,11 +6,11 @@
 //!   `Page.getFrameTree` + `Page.createIsolatedWorld` + `Runtime.evaluate` to bypass
 //!   cross-origin restrictions at the browser protocol level
 
-use chromiumoxide::cdp::browser_protocol::page::{
+use onecrawl_browser::cdp::browser_protocol::page::{
     CreateIsolatedWorldParams, FrameTree, GetFrameTreeParams,
 };
-use chromiumoxide::cdp::js_protocol::runtime::EvaluateParams;
-use chromiumoxide::Page;
+use onecrawl_browser::cdp::js_protocol::runtime::EvaluateParams;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
 
@@ -341,7 +341,7 @@ pub async fn human_click_in_frame(
     human::pre_action_delay().await;
 
     // Click at the computed viewport coordinates using CDP Input.dispatchMouseEvent
-    use chromiumoxide::cdp::browser_protocol::input::{
+    use onecrawl_browser::cdp::browser_protocol::input::{
         DispatchMouseEventParams, DispatchMouseEventType, MouseButton,
     };
 

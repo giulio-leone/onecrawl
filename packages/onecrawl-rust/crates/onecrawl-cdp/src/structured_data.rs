@@ -1,7 +1,7 @@
 //! Structured data extraction — JSON-LD, OpenGraph, Twitter Card, and
 //! general page metadata from live browser pages via CDP.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

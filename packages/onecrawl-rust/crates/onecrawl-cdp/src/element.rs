@@ -1,5 +1,5 @@
-use chromiumoxide::cdp::browser_protocol::input::InsertTextParams;
-use chromiumoxide::Page;
+use onecrawl_browser::cdp::browser_protocol::input::InsertTextParams;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 
 /// Click an element by CSS selector.

@@ -1,6 +1,6 @@
 //! Device and viewport emulation via CDP Emulation domain.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -66,7 +66,7 @@ impl Viewport {
 /// Set the viewport/device emulation.
 pub async fn set_viewport(page: &Page, viewport: &Viewport) -> Result<()> {
     let params =
-        chromiumoxide::cdp::browser_protocol::emulation::SetDeviceMetricsOverrideParams::builder()
+        onecrawl_browser::cdp::browser_protocol::emulation::SetDeviceMetricsOverrideParams::builder()
             .width(viewport.width as i64)
             .height(viewport.height as i64)
             .device_scale_factor(viewport.device_scale_factor)
@@ -80,7 +80,7 @@ pub async fn set_viewport(page: &Page, viewport: &Viewport) -> Result<()> {
 
     if viewport.has_touch {
         let touch_params =
-            chromiumoxide::cdp::browser_protocol::emulation::SetTouchEmulationEnabledParams::new(
+            onecrawl_browser::cdp::browser_protocol::emulation::SetTouchEmulationEnabledParams::new(
                 true,
             );
         page.execute(touch_params)
@@ -94,7 +94,7 @@ pub async fn set_viewport(page: &Page, viewport: &Viewport) -> Result<()> {
 /// Clear viewport override (revert to browser defaults).
 pub async fn clear_viewport(page: &Page) -> Result<()> {
     page.execute(
-        chromiumoxide::cdp::browser_protocol::emulation::ClearDeviceMetricsOverrideParams::default(
+        onecrawl_browser::cdp::browser_protocol::emulation::ClearDeviceMetricsOverrideParams::default(
         ),
     )
     .await
@@ -114,7 +114,7 @@ pub async fn set_user_agent_with_lang(
     accept_language: Option<&str>,
 ) -> Result<()> {
     let mut params =
-        chromiumoxide::cdp::browser_protocol::emulation::SetUserAgentOverrideParams::new(
+        onecrawl_browser::cdp::browser_protocol::emulation::SetUserAgentOverrideParams::new(
             user_agent,
         );
     params.accept_language = accept_language.map(|s| s.to_string());
@@ -132,7 +132,7 @@ pub async fn set_geolocation(
     accuracy: f64,
 ) -> Result<()> {
     let params =
-        chromiumoxide::cdp::browser_protocol::emulation::SetGeolocationOverrideParams::builder()
+        onecrawl_browser::cdp::browser_protocol::emulation::SetGeolocationOverrideParams::builder()
             .latitude(latitude)
             .longitude(longitude)
             .accuracy(accuracy)
@@ -158,7 +158,7 @@ pub async fn set_timezone(page: &Page, timezone_id: &str) -> Result<()> {
 
 /// Emulate color scheme (dark/light).
 pub async fn set_color_scheme(page: &Page, scheme: &str) -> Result<()> {
-    use chromiumoxide::cdp::browser_protocol::emulation::{MediaFeature, SetEmulatedMediaParams};
+    use onecrawl_browser::cdp::browser_protocol::emulation::{MediaFeature, SetEmulatedMediaParams};
     let features = vec![MediaFeature {
         name: "prefers-color-scheme".to_string(),
         value: scheme.to_string(),

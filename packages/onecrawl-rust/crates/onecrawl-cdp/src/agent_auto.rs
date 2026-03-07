@@ -4,7 +4,7 @@
 //! Orchestrates existing components (task planner, smart actions, agent memory,
 //! safety policy) into a single autonomous execution engine.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;

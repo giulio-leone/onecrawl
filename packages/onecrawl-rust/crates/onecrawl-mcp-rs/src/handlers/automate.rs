@@ -151,7 +151,7 @@ impl OneCrawlMcp {
 
     pub(crate) fn execute_step<'a>(
         &'a self,
-        page: &'a chromiumoxide::Page,
+        page: &'a onecrawl_browser::Page,
         action: &'a onecrawl_cdp::workflow::Action,
         variables: &'a mut HashMap<String, serde_json::Value>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = std::result::Result<Option<serde_json::Value>, McpError>> + Send + 'a>> {
@@ -525,7 +525,7 @@ impl OneCrawlMcp {
 
     pub(crate) async fn execute_planned_step(
         &self,
-        page: &chromiumoxide::Page,
+        page: &onecrawl_browser::Page,
         action: &onecrawl_cdp::task_planner::PlannedAction,
     ) -> std::result::Result<Option<serde_json::Value>, McpError> {
         use onecrawl_cdp::task_planner::PlannedAction;

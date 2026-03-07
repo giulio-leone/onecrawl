@@ -3,7 +3,7 @@
 //! Provides comprehensive browser fingerprint patching and bot detection
 //! evasion beyond the basic stealth module — patches all known detection vectors.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 

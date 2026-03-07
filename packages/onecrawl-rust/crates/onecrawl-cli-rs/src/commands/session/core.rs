@@ -99,7 +99,7 @@ pub enum SessionAction {
 /// Priority: explicit file → vault rp_id → empty.
 /// available page, creating a blank one if the browser has none.
 ///
-/// Retries target discovery up to 5×50ms because the chromiumoxide handler
+/// Retries target discovery up to 5×50ms because the onecrawl_browser handler
 /// populates its `targets` map asynchronously after a fresh `connect()`.
 /// Find a free TCP port by binding to port 0.
 pub fn load_session() -> Option<SessionInfo> {
@@ -140,7 +140,7 @@ pub async fn connect_to_session() -> Result<(BrowserSession, onecrawl_cdp::Page)
         .await
         .map_err(|e| format!("Failed to connect to session: {e}"))?;
 
-    // The chromiumoxide handler discovers targets asynchronously after connect.
+    // The onecrawl_browser handler discovers targets asynchronously after connect.
     // Retry page lookup with short backoff to avoid a race-condition where
     // `pages()` returns an empty list right after connecting.
     const MAX_ATTEMPTS: u8 = 5;

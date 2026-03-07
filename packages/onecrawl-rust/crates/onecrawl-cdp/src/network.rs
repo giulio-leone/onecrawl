@@ -3,7 +3,7 @@
 //! Provides resource blocking, request interception, and callback-based
 //! request/response observation for the OneCrawl browser engine.
 
-use chromiumoxide::Page;
+use onecrawl_browser::Page;
 use onecrawl_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -63,7 +63,7 @@ pub struct InterceptedResponse {
 ///
 /// Must be called before any network observation or interception.
 pub async fn enable_network(page: &Page) -> Result<()> {
-    page.execute(chromiumoxide::cdp::browser_protocol::network::EnableParams::default())
+    page.execute(onecrawl_browser::cdp::browser_protocol::network::EnableParams::default())
         .await
         .map_err(|e| Error::Cdp(format!("Network.enable failed: {e}")))?;
     Ok(())
@@ -74,7 +74,7 @@ pub async fn enable_network(page: &Page) -> Result<()> {
 /// Once enabled, requests will pause and can be inspected/modified
 /// through CDP Fetch event handlers.
 pub async fn enable_request_interception(page: &Page) -> Result<()> {
-    page.execute(chromiumoxide::cdp::browser_protocol::fetch::EnableParams::default())
+    page.execute(onecrawl_browser::cdp::browser_protocol::fetch::EnableParams::default())
         .await
         .map_err(|e| Error::Cdp(format!("Fetch.enable failed: {e}")))?;
     Ok(())
@@ -82,7 +82,7 @@ pub async fn enable_request_interception(page: &Page) -> Result<()> {
 
 /// Disable request interception.
 pub async fn disable_request_interception(page: &Page) -> Result<()> {
-    page.execute(chromiumoxide::cdp::browser_protocol::fetch::DisableParams::default())
+    page.execute(onecrawl_browser::cdp::browser_protocol::fetch::DisableParams::default())
         .await
         .map_err(|e| Error::Cdp(format!("Fetch.disable failed: {e}")))?;
     Ok(())
@@ -120,42 +120,42 @@ pub async fn block_resources(page: &Page, resource_types: &[ResourceType]) -> Re
         .map_err(|e| Error::Cdp(format!("block_resources failed: {e}")))?;
 
     // Also set up Fetch-domain interception with patterns
-    let patterns: Vec<chromiumoxide::cdp::browser_protocol::fetch::RequestPattern> = resource_types
+    let patterns: Vec<onecrawl_browser::cdp::browser_protocol::fetch::RequestPattern> = resource_types
         .iter()
         .map(|rt| {
             let cdp_type = match rt {
                 ResourceType::Document => {
-                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Document
+                    onecrawl_browser::cdp::browser_protocol::network::ResourceType::Document
                 }
                 ResourceType::Stylesheet => {
-                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Stylesheet
+                    onecrawl_browser::cdp::browser_protocol::network::ResourceType::Stylesheet
                 }
                 ResourceType::Image => {
-                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Image
+                    onecrawl_browser::cdp::browser_protocol::network::ResourceType::Image
                 }
                 ResourceType::Media => {
-                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Media
+                    onecrawl_browser::cdp::browser_protocol::network::ResourceType::Media
                 }
                 ResourceType::Font => {
-                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Font
+                    onecrawl_browser::cdp::browser_protocol::network::ResourceType::Font
                 }
                 ResourceType::Script => {
-                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Script
+                    onecrawl_browser::cdp::browser_protocol::network::ResourceType::Script
                 }
                 ResourceType::Xhr => {
-                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Xhr
+                    onecrawl_browser::cdp::browser_protocol::network::ResourceType::Xhr
                 }
                 ResourceType::Fetch => {
-                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Fetch
+                    onecrawl_browser::cdp::browser_protocol::network::ResourceType::Fetch
                 }
                 ResourceType::WebSocket => {
-                    chromiumoxide::cdp::browser_protocol::network::ResourceType::WebSocket
+                    onecrawl_browser::cdp::browser_protocol::network::ResourceType::WebSocket
                 }
                 ResourceType::Other => {
-                    chromiumoxide::cdp::browser_protocol::network::ResourceType::Other
+                    onecrawl_browser::cdp::browser_protocol::network::ResourceType::Other
                 }
             };
-            chromiumoxide::cdp::browser_protocol::fetch::RequestPattern {
+            onecrawl_browser::cdp::browser_protocol::fetch::RequestPattern {
                 url_pattern: Some("*".to_string()),
                 resource_type: Some(cdp_type),
                 request_stage: None,
@@ -163,7 +163,7 @@ pub async fn block_resources(page: &Page, resource_types: &[ResourceType]) -> Re
         })
         .collect();
 
-    let params = chromiumoxide::cdp::browser_protocol::fetch::EnableParams {
+    let params = onecrawl_browser::cdp::browser_protocol::fetch::EnableParams {
         patterns: Some(patterns),
         handle_auth_requests: None,
     };

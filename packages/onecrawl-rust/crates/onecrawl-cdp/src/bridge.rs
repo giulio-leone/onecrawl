@@ -1,7 +1,7 @@
 //! Playwright bridge — spawn a Node.js Playwright process and communicate
 //! via JSON messages over stdin/stdout.
 //!
-//! Designed for complex operations that chromiumoxide cannot handle natively
+//! Designed for complex operations that onecrawl_browser cannot handle natively
 //! (e.g., file uploads, dialog handling, complex multi-page flows).
 
 use onecrawl_core::{Error, Result};

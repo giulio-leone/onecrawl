@@ -1,5 +1,5 @@
 //! OneCrawl E2E Benchmark Suite
-//! Tests chromiumoxide vs playwright-rs, stealth patches, crypto, parser, storage
+//! Tests onecrawl_browser vs playwright-rs, stealth patches, crypto, parser, storage
 
 use std::fs;
 use std::path::PathBuf;
@@ -23,7 +23,7 @@ fn report_dir() -> PathBuf {
 
 // ─── Chromiumoxide Benchmark ───
 
-async fn run_chromiumoxide_benchmarks(results: &mut Vec<(String, String)>) {
+async fn run_onecrawl_browser_benchmarks(results: &mut Vec<(String, String)>) {
     use onecrawl_cdp::browser::BrowserSession;
     use onecrawl_cdp::page::evaluate_js;
     use onecrawl_cdp::screenshot;
@@ -39,7 +39,7 @@ async fn run_chromiumoxide_benchmarks(results: &mut Vec<(String, String)>) {
         Ok(s) => {
             let ms = start.elapsed().as_millis();
             println!("  ✅ Launch: {ms}ms");
-            results.push(("chromiumoxide_launch_ms".into(), format!("{ms}")));
+            results.push(("onecrawl_browser_launch_ms".into(), format!("{ms}")));
             s
         }
         Err(e) => {
@@ -63,7 +63,7 @@ async fn run_chromiumoxide_benchmarks(results: &mut Vec<(String, String)>) {
         Ok(_) => {
             let ms = nav_start.elapsed().as_millis();
             println!("  ✅ Navigate to example.com: {ms}ms");
-            results.push(("chromiumoxide_nav_ms".into(), format!("{ms}")));
+            results.push(("onecrawl_browser_nav_ms".into(), format!("{ms}")));
         }
         Err(e) => {
             println!("  ❌ Navigate: {e}");
@@ -83,12 +83,12 @@ async fn run_chromiumoxide_benchmarks(results: &mut Vec<(String, String)>) {
         Ok(bytes) => {
             let ms = ss_start.elapsed().as_millis();
             println!("  ✅ Screenshot: {ms}ms ({} bytes)", bytes.len());
-            results.push(("chromiumoxide_screenshot_ms".into(), format!("{ms}")));
+            results.push(("onecrawl_browser_screenshot_ms".into(), format!("{ms}")));
             results.push((
-                "chromiumoxide_screenshot_bytes".into(),
+                "onecrawl_browser_screenshot_bytes".into(),
                 format!("{}", bytes.len()),
             ));
-            fs::write(report_dir().join("chromiumoxide_example.png"), &bytes).unwrap();
+            fs::write(report_dir().join("onecrawl_browser_example.png"), &bytes).unwrap();
         }
         Err(e) => println!("  ❌ Screenshot: {e}"),
     }
@@ -153,7 +153,7 @@ async fn run_chromiumoxide_benchmarks(results: &mut Vec<(String, String)>) {
 
     // Stealth screenshot
     if let Ok(bytes) = screenshot::screenshot_full(&page).await {
-        fs::write(report_dir().join("chromiumoxide_stealth.png"), &bytes).unwrap();
+        fs::write(report_dir().join("onecrawl_browser_stealth.png"), &bytes).unwrap();
         println!("  📸 Stealth screenshot saved");
     }
 }
@@ -415,9 +415,9 @@ fn generate_report(results: &[(String, String)]) {
 
     md.push_str("\n## Screenshots\n\n");
     for (file, label) in [
-        ("chromiumoxide_example.png", "Chromiumoxide — example.com"),
+        ("onecrawl_browser_example.png", "Chromiumoxide — example.com"),
         (
-            "chromiumoxide_stealth.png",
+            "onecrawl_browser_stealth.png",
             "Chromiumoxide — Stealth Patched",
         ),
         ("playwright_chromium.png", "Playwright-rs — Chromium"),
@@ -441,7 +441,7 @@ async fn main() {
 
     let mut results = Vec::new();
 
-    run_chromiumoxide_benchmarks(&mut results).await;
+    run_onecrawl_browser_benchmarks(&mut results).await;
     run_playwright_benchmarks(&mut results).await;
     run_crypto_benchmarks(&mut results).await;
     run_parser_benchmarks(&mut results).await;
