@@ -53,7 +53,7 @@ packages/onecrawl-rust/
 | **Streaming AI Vision** | Feed browser screencast frames to vision-language models for continuous page understanding and reactive automation |
 | **Visual Workflow Builder** | Local web UI with drag-and-drop workflow creation, template library, project management, and JSON export |
 
-### New in v3.9.0
+### New in v3.9.2
 
 **Tier 1 — Game Changers:**
 
