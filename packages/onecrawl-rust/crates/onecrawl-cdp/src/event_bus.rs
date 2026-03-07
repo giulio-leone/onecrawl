@@ -310,7 +310,8 @@ impl EventBus {
             .to_uppercase();
 
         let mut last_err = String::new();
-        let attempts = sub.retry_count.max(1);
+        // retry_count = number of retries after the initial attempt
+        let attempts = sub.retry_count.saturating_add(1);
 
         for attempt in 0..attempts {
             if attempt > 0 {

@@ -222,7 +222,29 @@ impl Stream for BusEventStream {
                         waker.wake();
                     });
                     self.pending_waker = Some(handle);
-                    return Poll::Pending;
+                    // Re-check after resubscribe to close TOCTOU race window:
+                    // an event may have arrived between try_recv() and resubscribe()
+                    match self.rx.try_recv() {
+                        Ok(event) => {
+                            if let Some(h) = self.pending_waker.take() {
+                                h.abort();
+                            }
+                            if onecrawl_cdp::event_bus::matches_pattern(
+                                &event.event_type,
+                                &self.pattern,
+                            ) {
+                                if let Ok(json) = serde_json::to_string(&event) {
+                                    return Poll::Ready(Some(Ok(Event::default()
+                                        .event(event.event_type)
+                                        .data(json))));
+                                }
+                            }
+                            // Non-matching event; loop to try more
+                        }
+                        Err(_) => {
+                            return Poll::Pending;
+                        }
+                    }
                 }
                 Err(tokio::sync::broadcast::error::TryRecvError::Lagged(n)) => {
                     return Poll::Ready(Some(Ok(Event::default()

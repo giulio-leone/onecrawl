@@ -975,10 +975,53 @@ impl Orchestrator {
     }
 
     /// Interpolate `${var}` references in a string using current variables.
+    ///
+    /// Uses single-pass replacement to prevent second-order injection
+    /// (where a variable's value contains `${other_var}` patterns).
     fn interpolate(&self, text: &str) -> String {
-        let mut result = text.to_string();
-        for (key, value) in &self.variables {
-            result = result.replace(&format!("${{{}}}", key), value);
+        let mut result = String::with_capacity(text.len());
+        let mut chars = text.char_indices().peekable();
+        while let Some((i, c)) = chars.next() {
+            if c == '$' {
+                if let Some(&(_, '{')) = chars.peek() {
+                    chars.next(); // consume '{'
+                    let start = if let Some(&(pos, _)) = chars.peek() {
+                        pos
+                    } else {
+                        result.push_str("${");
+                        break;
+                    };
+                    let mut end = start;
+                    let mut found = false;
+                    while let Some(&(pos, ch)) = chars.peek() {
+                        if ch == '}' {
+                            end = pos;
+                            found = true;
+                            chars.next(); // consume '}'
+                            break;
+                        }
+                        end = pos + ch.len_utf8();
+                        chars.next();
+                    }
+                    if found {
+                        let var_name = &text[start..end];
+                        if let Some(value) = self.variables.get(var_name) {
+                            result.push_str(value);
+                        } else {
+                            result.push_str("${");
+                            result.push_str(var_name);
+                            result.push('}');
+                        }
+                    } else {
+                        result.push_str("${");
+                        result.push_str(&text[start..end]);
+                    }
+                } else {
+                    result.push(c);
+                }
+            } else {
+                result.push(c);
+            }
         }
         result
     }
