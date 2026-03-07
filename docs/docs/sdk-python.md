@@ -5,7 +5,7 @@ title: Python SDK
 
 # Python SDK
 
-Native Rust bindings for Python via PyO3. Full async/await support with `asyncio`, ~130 methods mirroring the Node.js SDK.
+Native Rust bindings for Python via PyO3. Full async/await and synchronous API support, **509 exported methods** across 4 core classes and standalone functions.
 
 ## Installation
 
@@ -13,7 +13,98 @@ Native Rust bindings for Python via PyO3. Full async/await support with `asyncio
 pip install onecrawl
 ```
 
-## Browser Lifecycle
+**Prebuilt wheels** available for:
+- Linux (x64, ARM64)
+- macOS (x64, Apple Silicon)
+- Windows (x64)
+
+**Requirements:** Python 3.9+. No Rust toolchain required.
+
+---
+
+## Type Hints
+
+The SDK ships with comprehensive type stubs (`.pyi`) for IDE autocompletion:
+
+```python
+from onecrawl import (
+    Browser,
+    Orchestrator,
+    PluginManager,
+    Studio,
+    Store,
+)
+
+from onecrawl.types import (
+    LaunchOptions,
+    ScreenshotOptions,
+    CookieParam,
+    Viewport,
+    HarEntry,
+    CoverageReport,
+    AccessibilityNode,
+    StealthTestResult,
+    PasskeyCredential,
+)
+```
+
+---
+
+## Synchronous API
+
+All browser methods are available in both sync and async variants. Use the sync API for scripts and the async API for production services.
+
+### Sync Usage (no `asyncio` needed)
+
+```python
+from onecrawl import Browser
+
+browser = Browser()
+browser.launch_sync(headless=True)
+
+browser.goto_sync("https://example.com")
+title = browser.get_title_sync()
+text = browser.get_text_sync()
+browser.screenshot_sync(path="page.png", full_page=True)
+
+print(f"Title: {title}")
+print(f"Text: {text[:200]}...")
+
+browser.close_sync()
+```
+
+### Async Usage
+
+```python
+import asyncio
+from onecrawl import Browser
+
+async def main():
+    browser = Browser()
+    await browser.launch(headless=True)
+
+    await browser.goto("https://example.com")
+    title = await browser.get_title()
+    text = await browser.get_text()
+    await browser.screenshot(path="page.png", full_page=True)
+
+    print(f"Title: {title}")
+    print(f"Text: {text[:200]}...")
+
+    await browser.close()
+
+asyncio.run(main())
+```
+
+---
+
+## Class Reference
+
+### `Browser`
+
+The primary class for browser automation. **~240 methods.**
+
+#### Lifecycle
 
 ```python
 from onecrawl import Browser
@@ -22,7 +113,7 @@ from onecrawl import Browser
 browser = Browser()
 await browser.launch(headless=True)
 
-# Or connect to an existing instance
+# Or connect to an existing Chrome DevTools instance
 browser2 = Browser()
 await browser2.connect("ws://localhost:9222/devtools/browser/...")
 
@@ -30,19 +121,19 @@ await browser2.connect("ws://localhost:9222/devtools/browser/...")
 await browser.close()
 ```
 
-### Launch Options
+##### Launch Options
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `headless` | `bool` | `True` | Run without a visible window |
-| `executable_path` | `str?` | auto-detect | Path to Chrome/Chromium binary |
-| `user_data_dir` | `str?` | temp dir | Path to user data directory |
-| `args` | `list[str]?` | `[]` | Extra Chrome launch arguments |
-| `proxy` | `str?` | `None` | Proxy server URL |
+| `executable_path` | `str \| None` | auto-detect | Path to Chrome/Chromium binary |
+| `user_data_dir` | `str \| None` | temp dir | Path to user data directory |
+| `args` | `list[str] \| None` | `[]` | Extra Chrome launch arguments |
+| `proxy` | `str \| None` | `None` | Proxy server URL |
+| `timeout` | `int \| None` | `30000` | Default timeout in ms |
+| `slow_mo` | `int \| None` | `0` | Slow down operations by this many ms |
 
----
-
-## Navigation
+#### Navigation
 
 ```python
 # Navigate to a URL
@@ -53,15 +144,14 @@ await browser.goto("https://example.com", wait_until="networkidle")
 await browser.back()
 await browser.forward()
 await browser.reload()
+await browser.reload(hard=True)
 
-# Get current URL and title
+# Get current page info
 url = await browser.get_url()
 title = await browser.get_title()
 ```
 
----
-
-## Screenshots & PDF
+#### Screenshots & PDF
 
 ```python
 # Basic screenshot
@@ -79,24 +169,26 @@ await browser.screenshot(path="page.jpg", format="jpeg", quality=80)
 # Get as base64
 base64_data = await browser.screenshot(encoding="base64")
 
+# Get as bytes
+image_bytes = await browser.screenshot(encoding="bytes")
+
 # PDF export
 await browser.pdf(path="page.pdf")
 await browser.pdf(path="report.pdf", landscape=True, scale=0.8)
 ```
 
----
-
-## DOM Interaction
+#### DOM Interaction
 
 ```python
 # Click
 await browser.click("#submit-btn")
 await browser.dblclick("#item")
+await browser.click("#menu", button="right")
 
 # Type (keystroke simulation)
 await browser.type("#search", "OneCrawl", delay=50)
 
-# Fill (set value directly)
+# Fill (set value directly — faster)
 await browser.fill("#email", "user@example.com")
 
 # Focus and hover
@@ -111,12 +203,16 @@ await browser.select_option("#country", "IT")
 # File upload
 await browser.upload("#file-input", "/path/to/file.pdf")
 
-# Scroll into view
+# Scroll
 await browser.scroll_into_view("#footer")
+await browser.scroll_to(0, 500)
 
 # Bounding box
 box = await browser.bounding_box("#element")
 # {"x": 100, "y": 200, "width": 300, "height": 150}
+
+# Drag and drop
+await browser.drag("#card", "#column-done")
 
 # Get text content
 text = await browser.get_text()
@@ -124,17 +220,17 @@ el_text = await browser.get_text("#specific-element")
 
 # Get HTML
 html = await browser.get_html()
+inner_html = await browser.get_html("#container")
 
 # Evaluate JavaScript
 count = await browser.evaluate("document.querySelectorAll('a').length")
+data = await browser.evaluate("JSON.stringify(window.__DATA__)")
 
 # Set page content
 await browser.set_content("<h1>Hello</h1><p>World</p>")
 ```
 
----
-
-## Wait Operations
+#### Wait Operations
 
 ```python
 # Wait for a fixed duration (milliseconds)
@@ -144,13 +240,27 @@ await browser.wait(2000)
 await browser.wait_for_selector(".loaded")
 await browser.wait_for_selector(".modal", timeout=10000)
 
+# Wait for element to disappear
+await browser.wait_for_selector(".spinner", state="hidden")
+
 # Wait for URL
 await browser.wait_for_url("**/dashboard**")
+
+# Wait for network idle
+await browser.wait_for_network_idle(idle_time=500)
 ```
 
----
+#### Keyboard
 
-## Cookies
+```python
+await browser.press_key("Enter")
+await browser.press_key("Tab")
+await browser.keyboard_shortcut("Ctrl+A")
+await browser.key_down("Shift")
+await browser.key_up("Shift")
+```
+
+#### Cookies
 
 ```python
 # Get all cookies
@@ -176,9 +286,7 @@ await browser.delete_cookie("token")
 await browser.clear_cookies()
 ```
 
----
-
-## Network
+#### Network
 
 ```python
 # Throttle network (simulate 3G)
@@ -189,10 +297,7 @@ await browser.throttle(
 )
 
 # Block domains
-await browser.block_domains([
-    "google-analytics.com",
-    "facebook.net",
-])
+await browser.block_domains(["google-analytics.com", "facebook.net"])
 
 # Go offline / online
 await browser.set_offline(True)
@@ -203,11 +308,14 @@ await browser.har_start()
 await browser.goto("https://example.com")
 har = await browser.har_stop()
 await browser.har_export("trace.har")
+
+# WebSocket
+await browser.ws_connect("wss://stream.example.com")
+await browser.ws_send('{"subscribe": "prices"}')
+await browser.ws_close()
 ```
 
----
-
-## Coverage & Performance
+#### Coverage & Performance
 
 ```python
 # Code coverage
@@ -225,9 +333,7 @@ await browser.goto("https://example.com")
 trace = await browser.trace_stop()
 ```
 
----
-
-## Stealth Mode
+#### Stealth Mode
 
 ```python
 # Inject stealth patches (call before navigation)
@@ -241,19 +347,14 @@ print(results.detected)  # False
 await browser.stealth_fingerprint(randomize=True)
 
 # Block tracking domains
-await browser.stealth_block_domains([
-    "google-analytics.com",
-    "doubleclick.net",
-])
+await browser.stealth_block_domains(["google-analytics.com", "doubleclick.net"])
 
 # Detect CAPTCHA
 captcha = await browser.stealth_detect_captcha()
 print(captcha.has_captcha)  # True/False
 ```
 
----
-
-## WebAuthn / Passkey
+#### WebAuthn / Passkey
 
 ```python
 # Enable the virtual authenticator
@@ -278,9 +379,7 @@ await browser.passkey_remove("cred_abc")
 await browser.passkey_disable()
 ```
 
----
-
-## Emulation
+#### Emulation
 
 ```python
 # Emulate a device
@@ -298,11 +397,156 @@ await browser.emulate_geolocation(latitude=41.9028, longitude=12.4964)
 
 # Override media type
 await browser.emulate_media("print")
+
+# CPU throttling
+await browser.emulate_cpu_throttle(4)  # 4x slowdown
+```
+
+#### Accessibility
+
+```python
+# Get accessibility snapshot
+snapshot = await browser.accessibility_snapshot()
+interactive = await browser.accessibility_snapshot(filter="interactive")
+
+# Run accessibility audit
+audit = await browser.accessibility_audit()
+print(audit.violations)
+```
+
+#### Console & Dialog
+
+```python
+# Capture console messages
+await browser.console_start()
+await browser.goto("https://example.com")
+messages = await browser.console_messages()
+await browser.console_stop()
+
+# Handle dialogs
+await browser.dialog_accept("Yes")
+await browser.dialog_dismiss()
+```
+
+#### Tabs & iFrames
+
+```python
+# Tab management
+tab_id = await browser.tab_open("https://example.com")
+tabs = await browser.tab_list()
+await browser.tab_switch(tab_id)
+await browser.tab_close(tab_id)
+
+# iFrame navigation
+iframes = await browser.iframe_list()
+await browser.iframe_switch(0)
+await browser.iframe_switch_main()
 ```
 
 ---
 
-## Standalone Functions
+### `Orchestrator`
+
+Multi-instance browser management. **~60 methods.**
+
+```python
+from onecrawl import Orchestrator
+
+orchestrator = Orchestrator()
+
+# Create multiple browser instances
+browser1 = await orchestrator.create(headless=True)
+browser2 = await orchestrator.create(headless=True, profile="stealth")
+
+# List all instances
+instances = await orchestrator.list()
+
+# Get instance by ID
+instance = await orchestrator.get(browser1.id)
+
+# Stop a specific instance
+await orchestrator.stop(browser1.id)
+
+# Stop all instances
+await orchestrator.stop_all()
+
+# Pool management
+pool = await orchestrator.create_pool(size=5)
+browser = await pool.acquire()
+# ... use browser ...
+await pool.release(browser)
+```
+
+---
+
+### `PluginManager`
+
+Plugin system for extending OneCrawl. **~35 methods.**
+
+```python
+from onecrawl import PluginManager
+
+plugins = PluginManager()
+
+# Load a plugin
+await plugins.load("stealth")
+await plugins.load("captcha-solver")
+
+# List loaded plugins
+loaded = plugins.list()
+
+# Configure a plugin
+await plugins.configure("stealth", level="maximum")
+
+# Execute a plugin action
+result = await plugins.execute("stealth", "inject")
+```
+
+---
+
+### `Studio`
+
+Visual debugging and recording. **~30 methods.**
+
+```python
+from onecrawl import Studio
+
+studio = Studio()
+
+# Start recording
+await studio.start_recording(output="session.json")
+
+# Replay a recorded session
+await studio.replay("session.json")
+
+# Visual diff
+diff = await studio.screenshot_diff("before.png", "after.png")
+print(diff.change_percentage)
+```
+
+---
+
+### `Store`
+
+Encrypted key-value store. **~15 methods.**
+
+```python
+from onecrawl import Store
+
+store = Store("/path/to/store")
+
+# CRUD operations
+await store.set("api_key", "sk-abc123")
+value = await store.get("api_key")
+exists = await store.has("api_key")
+keys = await store.list(prefix="api_")
+await store.delete("api_key")
+await store.clear()
+```
+
+---
+
+## Standalone Functions (~129 exports)
 
 ### Crypto
 
@@ -339,84 +583,249 @@ links = extract_links(html, absolute=True, base_url="https://example.com")
 ### Server
 
 ```python
-from onecrawl import start_server, get_server_info
+from onecrawl import start_server, stop_server, get_server_info
 
 # Start the HTTP API server programmatically
 server = await start_server(port=9867, bind="127.0.0.1")
 info = get_server_info()
 # {"port": 9867, "instances": 0, "uptime": 42}
+await stop_server()
 ```
 
-### Store (Encrypted KV)
+---
+
+## Error Handling
+
+All errors are subclasses of `OneCrawlError`:
 
 ```python
-from onecrawl import Store
+from onecrawl import Browser, OneCrawlError
+from onecrawl.errors import (
+    ElementNotFoundError,
+    TimeoutError,
+    NavigationError,
+    BrowserDisconnectedError,
+    BrowserLaunchError,
+    CryptoError,
+    StorageError,
+)
 
-store = Store("/path/to/store")
-await store.set("api_key", "sk-abc123")
-value = await store.get("api_key")
-keys = await store.list(prefix="api_")
-await store.delete("api_key")
+async def safe_scrape(url: str) -> str | None:
+    browser = Browser()
+    try:
+        await browser.launch(headless=True)
+        await browser.goto(url)
+        return await browser.get_text()
+    except ElementNotFoundError as e:
+        print(f"Element not found: {e.selector}")
+        return None
+    except TimeoutError as e:
+        print(f"Timeout after {e.timeout_ms}ms")
+        return None
+    except NavigationError as e:
+        print(f"Failed to load {e.url}: {e.status_code}")
+        return None
+    except BrowserDisconnectedError:
+        print("Chrome crashed unexpectedly")
+        return None
+    except OneCrawlError as e:
+        print(f"OneCrawl error: {e}")
+        return None
+    finally:
+        await browser.close()
+```
+
+### Error Classes
+
+| Error Class | Description |
+|---|---|
+| `OneCrawlError` | Base error class for all OneCrawl errors |
+| `ElementNotFoundError` | CSS selector matched no elements |
+| `TimeoutError` | Operation exceeded timeout |
+| `NavigationError` | Page failed to load |
+| `BrowserDisconnectedError` | Chrome process crashed |
+| `BrowserLaunchError` | Chrome failed to start |
+| `CryptoError` | Encryption/decryption failure |
+| `StorageError` | KV store failure |
+| `InvalidArgumentError` | Invalid parameter value |
+
+---
+
+## Agent-in-the-Loop Patterns
+
+### LangChain Integration
+
+```python
+from langchain.tools import tool
+from onecrawl import Browser
+
+browser = Browser()
+
+@tool
+def navigate_to(url: str) -> str:
+    """Navigate to a URL and return the page text."""
+    browser.launch_sync(headless=True)
+    browser.goto_sync(url, wait_until="networkidle")
+    text = browser.get_text_sync()
+    return text[:2000]
+
+@tool
+def take_screenshot(url: str) -> str:
+    """Take a screenshot of a URL and return the base64 image."""
+    browser.goto_sync(url)
+    return browser.screenshot_sync(encoding="base64")
+
+@tool
+def extract_links(url: str) -> list[dict]:
+    """Extract all links from a URL."""
+    browser.goto_sync(url)
+    count = browser.evaluate_sync("document.querySelectorAll('a').length")
+    links = browser.evaluate_sync("""
+        JSON.stringify(
+            Array.from(document.querySelectorAll('a'))
+                .map(a => ({text: a.textContent.trim(), href: a.href}))
+        )
+    """)
+    return json.loads(links)
+```
+
+### CrewAI Integration
+
+```python
+from crewai import Agent, Task, Crew
+from crewai_tools import tool
+from onecrawl import Browser
+
+@tool("web_scraper")
+def web_scraper(url: str) -> str:
+    """Scrape a web page and return its content."""
+    browser = Browser()
+    browser.launch_sync(headless=True)
+    browser.stealth_inject_sync()
+    browser.goto_sync(url, wait_until="networkidle")
+    text = browser.get_text_sync()
+    browser.close_sync()
+    return text
+
+researcher = Agent(
+    role="Web Researcher",
+    goal="Research topics by scraping web pages",
+    tools=[web_scraper],
+)
+```
+
+### OpenAI Function Calling
+
+```python
+import json
+import openai
+from onecrawl import Browser
+
+browser = Browser()
+browser.launch_sync(headless=True)
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "navigate",
+            "description": "Navigate browser to a URL and return page text",
+            "parameters": {
+                "type": "object",
+                "properties": {"url": {"type": "string", "description": "URL to navigate to"}},
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "click_element",
+            "description": "Click an element on the page",
+            "parameters": {
+                "type": "object",
+                "properties": {"selector": {"type": "string", "description": "CSS selector"}},
+                "required": ["selector"],
+            },
+        },
+    },
+]
+
+def handle_tool_call(name: str, args: dict) -> str:
+    if name == "navigate":
+        browser.goto_sync(args["url"], wait_until="networkidle")
+        return browser.get_text_sync()[:2000]
+    elif name == "click_element":
+        browser.click_sync(args["selector"])
+        return browser.get_text_sync()[:500]
+    return "Unknown tool"
 ```
 
 ---
 
 ## Real-World Examples
 
-### 1. Scrape with stealth mode
+### 1. Stealth scraping with retry
 
 ```python
 import asyncio
-from onecrawl import Browser
+from onecrawl import Browser, OneCrawlError
 
-async def stealth_scrape(url: str) -> dict:
+async def stealth_scrape(url: str, retries: int = 3) -> dict:
     browser = Browser()
     await browser.launch(headless=True)
     await browser.stealth_inject()
     await browser.stealth_block_domains(["google-analytics.com"])
 
-    await browser.goto(url, wait_until="networkidle")
-    await browser.wait_for_selector(".content")
+    for attempt in range(1, retries + 1):
+        try:
+            await browser.goto(url, wait_until="networkidle")
 
-    title = await browser.get_title()
-    text = await browser.get_text(".content")
-    link_count = await browser.evaluate("document.querySelectorAll('a').length")
+            captcha = await browser.stealth_detect_captcha()
+            if captcha.has_captcha:
+                print(f"CAPTCHA detected on attempt {attempt}")
+                await browser.wait(5000)
+                continue
+
+            title = await browser.get_title()
+            text = await browser.get_text(".content")
+            await browser.close()
+            return {"title": title, "text": text}
+
+        except OneCrawlError as e:
+            print(f"Attempt {attempt} failed: {e}")
+            if attempt == retries:
+                raise
+            await browser.wait(2000 * attempt)
 
     await browser.close()
-    return {"title": title, "text": text, "links": link_count}
+    raise RuntimeError("All retries exhausted")
 
 result = asyncio.run(stealth_scrape("https://example.com"))
 print(result)
 ```
 
-### 2. Network monitoring with HAR recording
+### 2. Network monitoring with HAR
 
 ```python
 import asyncio
-import json
 from onecrawl import Browser
 
 async def monitor_network(url: str, output: str = "trace.har"):
     browser = Browser()
     await browser.launch(headless=True)
 
-    # Start HAR recording
     await browser.har_start()
-
-    # Navigate and interact
     await browser.goto(url, wait_until="networkidle")
 
-    # Get performance metrics
     metrics = await browser.performance_metrics()
     print(f"DOM nodes: {metrics.get('Nodes', 'N/A')}")
     print(f"JS listeners: {metrics.get('JSEventListeners', 'N/A')}")
 
-    # Stop and export HAR
-    har_data = await browser.har_stop()
+    await browser.har_stop()
     await browser.har_export(output)
     print(f"HAR exported to {output}")
 
-    # Coverage analysis
     await browser.coverage_start()
     await browser.reload()
     coverage = await browser.coverage_stop()
@@ -428,7 +837,36 @@ async def monitor_network(url: str, output: str = "trace.har"):
 asyncio.run(monitor_network("https://example.com"))
 ```
 
-### 3. Accessibility audit
+### 3. Parallel scraping with orchestrator
+
+```python
+import asyncio
+from onecrawl import Orchestrator
+
+async def parallel_scrape(urls: list[str]) -> list[dict]:
+    orchestrator = Orchestrator()
+
+    async def scrape_one(url: str) -> dict:
+        browser = await orchestrator.create(headless=True)
+        await browser.stealth_inject()
+        await browser.goto(url, wait_until="networkidle")
+        title = await browser.get_title()
+        text = await browser.get_text()
+        return {"url": url, "title": title, "text_length": len(text)}
+
+    results = await asyncio.gather(*[scrape_one(url) for url in urls])
+    await orchestrator.stop_all()
+    return list(results)
+
+data = asyncio.run(parallel_scrape([
+    "https://example.com",
+    "https://example.com/about",
+    "https://example.com/contact",
+]))
+print(data)
+```
+
+### 4. Accessibility audit
 
 ```python
 import asyncio
@@ -439,48 +877,19 @@ async def accessibility_audit(urls: list[str]):
     browser = Browser()
     await browser.launch(headless=True)
 
-    results = []
     for url in urls:
         await browser.goto(url, wait_until="networkidle")
 
-        # Get full accessibility tree
-        tree = await browser.evaluate("""
-            JSON.stringify(
-                (function getTree(el, depth = 0) {
-                    const role = el.getAttribute('role') || el.tagName.toLowerCase();
-                    const name = el.getAttribute('aria-label') || el.textContent?.trim().slice(0, 50);
-                    const children = Array.from(el.children).map(c => getTree(c, depth + 1));
-                    return { role, name, children: children.length ? children : undefined };
-                })(document.body)
-            )
-        """)
+        audit = await browser.accessibility_audit()
+        print(f"\n{'='*60}")
+        print(f"URL: {url}")
+        print(f"Score: {audit.score}")
+        print(f"Violations: {len(audit.violations)}")
 
-        # Check for common issues
-        issues = await browser.evaluate("""
-            JSON.stringify({
-                imagesWithoutAlt: document.querySelectorAll('img:not([alt])').length,
-                inputsWithoutLabel: document.querySelectorAll('input:not([aria-label]):not([id])').length,
-                missingLang: !document.documentElement.lang,
-                lowContrast: document.querySelectorAll('[style*="color: #ccc"]').length,
-            })
-        """)
-
-        results.append({
-            "url": url,
-            "tree": json.loads(tree),
-            "issues": json.loads(issues),
-        })
+        for violation in audit.violations:
+            print(f"  ⚠️  {violation.id}: {violation.description}")
 
     await browser.close()
-
-    for r in results:
-        print(f"\n{'='*60}")
-        print(f"URL: {r['url']}")
-        for key, val in r["issues"].items():
-            status = "✅" if not val else f"⚠️  {val}"
-            print(f"  {key}: {status}")
-
-    return results
 
 asyncio.run(accessibility_audit([
     "https://example.com",

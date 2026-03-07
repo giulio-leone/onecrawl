@@ -1,8 +1,8 @@
 # OneCrawl MCP API Reference
 
-> **10 consolidated tools • 250 actions • Action-based dispatch**
+> **17 consolidated tools • 421 actions • Action-based dispatch**
 
-All browser automation, crawling, scraping, security, and AI orchestration capabilities are accessed through 10 super-tools. Each tool accepts a uniform `{ action, params }` interface.
+All browser automation, crawling, scraping, security, and AI orchestration capabilities are accessed through 17 super-tools. Each tool accepts a uniform `{ action, params }` interface.
 
 ---
 
@@ -10,16 +10,23 @@ All browser automation, crawling, scraping, security, and AI orchestration capab
 
 | Tool | Actions | Description |
 |------|:-------:|-------------|
-| [`browser`](#1-browser) | 95 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage, network interception, console & errors, device emulation, file operations, shadow DOM, session context, smart forms, self-healing selectors, event reactions, service worker/PWA, offline mode, session config |
+| [`browser`](#1-browser) | 112 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage, network interception, console & errors, device emulation, file operations, shadow DOM, session context, smart forms, self-healing selectors, event reactions, service worker/PWA, offline mode, session config |
 | [`crawl`](#2-crawl) | 5 | Web crawling, robots.txt, sitemaps, DOM snapshots |
-| [`agent`](#3-agent) | 40 | Command chains, API capture, iframes, CDP cross-origin iframe interaction, remote CDP, safety, screencast, recording, iOS, task decomposition, vision observation, WCAG auditing, accessibility tree, screen reader simulation |
-| [`stealth`](#4-stealth) | 13 | Anti-detection patches, fingerprinting, CAPTCHA detection and solving, human behavior simulation |
-| [`data`](#5-data) | 26 | Data pipelines, HTTP client, link graphs, network intelligence, structured extraction, WebSocket, SSE, GraphQL subscriptions |
+| [`agent`](#3-agent) | 111 | Command chains, API capture, iframes, CDP cross-origin iframe interaction, remote CDP, safety, screencast, recording, iOS, task decomposition, vision observation, WCAG auditing, accessibility tree, screen reader simulation |
+| [`stealth`](#4-stealth) | 25 | Anti-detection patches, fingerprinting, CAPTCHA detection and solving, human behavior simulation |
+| [`data`](#5-data) | 27 | Data pipelines, HTTP client, link graphs, network intelligence, structured extraction, WebSocket, SSE, GraphQL subscriptions |
 | [`secure`](#6-secure) | 21 | Encryption, PKCE, TOTP, KV store, WebAuthn, OAuth2, session/form auth, MFA |
-| [`computer`](#7-computer) | 18 | AI computer-use, autonomous goal execution, smart element resolution, browser pool, multi-browser fleet |
+| [`computer`](#7-computer) | 24 | AI computer-use, autonomous goal execution, smart element resolution, browser pool, multi-browser fleet |
 | [`memory`](#8-memory) | 6 | Persistent agent memory across sessions |
-| [`automate`](#9-automate) | 19 | Workflow DSL, AI task planning, rate limiting, retry queues, error recovery, session checkpoints, workflow control flow |
-| [`perf`](#10-perf) | 7 | Performance audits, budgets, regression detection, visual regression testing |
+| [`automate`](#9-automate) | 27 | Workflow DSL, AI task planning, rate limiting, retry queues, error recovery, session checkpoints, workflow control flow |
+| [`perf`](#10-perf) | 8 | Performance audits, budgets, regression detection, visual regression testing |
+| [`durable`](#11-durable) | 8 | Crash-resilient browser sessions with auto-checkpoint, save/restore state |
+| [`reactor`](#12-reactor) | 8 | Persistent observer pattern for DOM mutations, network, and console events |
+| [`orchestrator`](#13-orchestrator) | 5 | Multi-device control (desktop + Android + iOS) from a single workflow |
+| [`events`](#14-events) | 8 | Pub/sub event bus with HMAC-signed webhooks |
+| [`vault`](#15-vault) | 9 | Encrypted credential management with import/export |
+| [`plugins`](#16-plugins) | 9 | Extensible plugin system with JSON manifests |
+| [`studio`](#17-studio) | 8 | Visual workflow builder with drag-and-drop |
 
 ---
 
@@ -4742,6 +4749,1412 @@ Promote the current screenshot to become the new baseline for a test.
 
 ---
 
+### 11. `durable`
+
+Crash-resilient browser sessions with automatic checkpointing. Save and restore full browser state — cookies, localStorage, sessionStorage, scroll position, and DOM snapshots — so sessions survive crashes, restarts, and network interruptions.
+
+#### Actions
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `checkpoint_save` | `{name?, include_dom?, include_screenshot?}` | Save a named checkpoint of current browser state |
+| `checkpoint_restore` | `{name}` | Restore browser state from a named checkpoint |
+| `checkpoint_list` | — | List all saved checkpoints with metadata |
+| `checkpoint_delete` | `{name?, older_than?}` | Delete checkpoint(s) by name or age |
+| `durable_start` | `{url, auto_checkpoint?, interval_ms?}` | Start a durable session with auto-checkpoint |
+| `durable_stop` | — | Stop durable session and finalize checkpoints |
+| `durable_status` | — | Get durable session status and checkpoint info |
+| `durable_config` | `{auto_checkpoint?, interval_ms?, max_checkpoints?, storage_path?}` | Configure durable session settings |
+
+#### Action Details
+
+<details>
+<summary><strong><code>checkpoint_save</code></strong> — Save checkpoint</summary>
+
+Save a snapshot of the current browser state including cookies, storage, scroll position, and optionally DOM and screenshot.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | | Checkpoint name (auto-generated if omitted) |
+| `include_dom` | boolean | | Include full DOM snapshot (default `false`) |
+| `include_screenshot` | boolean | | Include screenshot (default `false`) |
+
+**Response:**
+```json
+{
+  "checkpoint": "login-complete",
+  "url": "https://example.com/dashboard",
+  "cookies": 12,
+  "local_storage_keys": 5,
+  "session_storage_keys": 2,
+  "scroll": { "x": 0, "y": 350 },
+  "timestamp": "2025-01-15T10:30:00Z",
+  "size_bytes": 8432
+}
+```
+</details>
+
+<details>
+<summary><strong><code>checkpoint_restore</code></strong> — Restore checkpoint</summary>
+
+Restore browser state from a previously saved checkpoint. Navigates to the saved URL and restores all cookies, storage, and scroll position.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | ✅ | Name of the checkpoint to restore |
+
+**Response:**
+```json
+{
+  "restored": "login-complete",
+  "url": "https://example.com/dashboard",
+  "cookies_restored": 12,
+  "storage_restored": 7,
+  "scroll_restored": { "x": 0, "y": 350 }
+}
+```
+</details>
+
+<details>
+<summary><strong><code>checkpoint_list</code></strong> — List checkpoints</summary>
+
+List all saved checkpoints with their metadata.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "checkpoints": [
+    {
+      "name": "login-complete",
+      "url": "https://example.com/dashboard",
+      "timestamp": "2025-01-15T10:30:00Z",
+      "size_bytes": 8432
+    },
+    {
+      "name": "form-filled",
+      "url": "https://example.com/checkout",
+      "timestamp": "2025-01-15T10:32:00Z",
+      "size_bytes": 12108
+    }
+  ],
+  "total": 2,
+  "total_size_bytes": 20540
+}
+```
+</details>
+
+<details>
+<summary><strong><code>checkpoint_delete</code></strong> — Delete checkpoint(s)</summary>
+
+Delete one or more checkpoints by name or by age.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | | Checkpoint name to delete (deletes one) |
+| `older_than` | string | | Delete checkpoints older than duration (e.g. `1h`, `30m`, `7d`) |
+
+> If both are omitted, returns an error. Pass `name: "*"` to delete all.
+
+**Response:** `{ "deleted": 1, "freed_bytes": 8432 }`
+</details>
+
+<details>
+<summary><strong><code>durable_start</code></strong> — Start durable session</summary>
+
+Start a durable browser session with optional auto-checkpointing. If a previous session crashed, automatically restores from the latest checkpoint.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `url` | string | ✅ | URL to navigate to |
+| `auto_checkpoint` | boolean | | Enable auto-checkpoint (default `true`) |
+| `interval_ms` | number | | Auto-checkpoint interval in ms (default `30000`) |
+
+**Response:**
+```json
+{
+  "session_id": "dur_abc123",
+  "url": "https://example.com",
+  "auto_checkpoint": true,
+  "interval_ms": 30000,
+  "restored_from": null
+}
+```
+Or if recovering from crash:
+```json
+{
+  "session_id": "dur_abc123",
+  "url": "https://example.com/dashboard",
+  "auto_checkpoint": true,
+  "interval_ms": 30000,
+  "restored_from": "auto-1705312200"
+}
+```
+</details>
+
+<details>
+<summary><strong><code>durable_stop</code></strong> — Stop durable session</summary>
+
+Stop the durable session, save a final checkpoint, and clean up timers.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "stopped": true,
+  "session_id": "dur_abc123",
+  "final_checkpoint": "auto-final-1705312500",
+  "total_checkpoints": 8,
+  "duration_ms": 300000
+}
+```
+</details>
+
+<details>
+<summary><strong><code>durable_status</code></strong> — Durable session status</summary>
+
+Get the current durable session status, including auto-checkpoint state and recovery info.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "active": true,
+  "session_id": "dur_abc123",
+  "url": "https://example.com/dashboard",
+  "auto_checkpoint": true,
+  "interval_ms": 30000,
+  "last_checkpoint": "auto-1705312200",
+  "checkpoint_count": 5,
+  "uptime_ms": 150000
+}
+```
+</details>
+
+<details>
+<summary><strong><code>durable_config</code></strong> — Configure durable session</summary>
+
+Update durable session configuration. Changes apply immediately to the running session.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `auto_checkpoint` | boolean | | Enable/disable auto-checkpoint |
+| `interval_ms` | number | | Auto-checkpoint interval in milliseconds |
+| `max_checkpoints` | number | | Maximum checkpoints to retain (oldest pruned first) |
+| `storage_path` | string | | Directory for checkpoint storage (default `~/.onecrawl/checkpoints`) |
+
+**Response:**
+```json
+{
+  "updated": true,
+  "config": {
+    "auto_checkpoint": true,
+    "interval_ms": 15000,
+    "max_checkpoints": 20,
+    "storage_path": "~/.onecrawl/checkpoints"
+  }
+}
+```
+</details>
+
+---
+
+### 12. `reactor`
+
+Persistent observer pattern — attach rules that react to DOM mutations, network events, and console output in real time. Rules survive across navigations within a session.
+
+#### Actions
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `reactor_start` | `{name?, persist?}` | Start the event reactor engine |
+| `reactor_stop` | — | Stop the reactor and remove all rules |
+| `reactor_status` | — | Get reactor status and active rule count |
+| `reactor_add_rule` | `{event, filter?, action, name?}` | Add a reactive rule |
+| `reactor_remove_rule` | `{rule_id}` | Remove a rule by ID |
+| `reactor_list_rules` | — | List all active rules |
+| `reactor_pause` | `{rule_id?}` | Pause one or all rules |
+| `reactor_resume` | `{rule_id?}` | Resume one or all paused rules |
+
+#### Action Details
+
+<details>
+<summary><strong><code>reactor_start</code></strong> — Start reactor</summary>
+
+Initialize the event reactor engine. Must be called before adding rules.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | | Name for this reactor instance |
+| `persist` | boolean | | Persist rules across page navigations (default `true`) |
+
+**Response:**
+```json
+{
+  "started": true,
+  "reactor_id": "reactor_1",
+  "persist": true
+}
+```
+</details>
+
+<details>
+<summary><strong><code>reactor_stop</code></strong> — Stop reactor</summary>
+
+Stop the reactor engine and remove all rules.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "stopped": true,
+  "rules_removed": 4,
+  "events_processed": 127
+}
+```
+</details>
+
+<details>
+<summary><strong><code>reactor_status</code></strong> — Reactor status</summary>
+
+Get the current reactor status, including active rules and event counts.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "active": true,
+  "reactor_id": "reactor_1",
+  "rules": 4,
+  "paused_rules": 1,
+  "events_processed": 127,
+  "uptime_ms": 45000
+}
+```
+</details>
+
+<details>
+<summary><strong><code>reactor_add_rule</code></strong> — Add reactive rule</summary>
+
+Add a rule that fires when a matching event occurs. Supports DOM mutation, network, and console event types.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `event` | string | ✅ | Event type: `dom_mutation`, `network_request`, `network_response`, `console_message`, `page_error` |
+| `filter` | object | | Filter conditions (e.g. `{"selector": ".alert"}` for DOM, `{"url_pattern": "*/api/*"}` for network, `{"level": "error"}` for console) |
+| `action` | object | ✅ | Action to take: `{"type": "log"}`, `{"type": "screenshot"}`, `{"type": "callback", "js": "..."}`, `{"type": "notify", "webhook": "..."}` |
+| `name` | string | | Human-readable rule name |
+
+**Response:**
+```json
+{
+  "rule_id": "rule_1",
+  "name": "capture-errors",
+  "event": "console_message",
+  "filter": { "level": "error" },
+  "action": { "type": "screenshot" },
+  "status": "active"
+}
+```
+</details>
+
+<details>
+<summary><strong><code>reactor_remove_rule</code></strong> — Remove rule</summary>
+
+Remove a reactive rule by its ID.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `rule_id` | string | ✅ | ID of the rule to remove |
+
+**Response:** `{ "removed": true, "rule_id": "rule_1" }`
+</details>
+
+<details>
+<summary><strong><code>reactor_list_rules</code></strong> — List rules</summary>
+
+List all active and paused reactor rules.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "rules": [
+    {
+      "rule_id": "rule_1",
+      "name": "capture-errors",
+      "event": "console_message",
+      "filter": { "level": "error" },
+      "action": { "type": "screenshot" },
+      "status": "active",
+      "fires": 3
+    }
+  ],
+  "total": 1
+}
+```
+</details>
+
+<details>
+<summary><strong><code>reactor_pause</code></strong> — Pause rule(s)</summary>
+
+Pause one rule or all rules. Paused rules stop processing events but retain their configuration.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `rule_id` | string | | Rule ID to pause (omit to pause all) |
+
+**Response:** `{ "paused": 1 }` or `{ "paused": 4, "all": true }`
+</details>
+
+<details>
+<summary><strong><code>reactor_resume</code></strong> — Resume rule(s)</summary>
+
+Resume one or all paused rules.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `rule_id` | string | | Rule ID to resume (omit to resume all) |
+
+**Response:** `{ "resumed": 1 }` or `{ "resumed": 4, "all": true }`
+</details>
+
+---
+
+### 13. `orchestrator`
+
+Multi-device orchestration — control desktop browsers, Android devices, and iOS devices from a single workflow definition. Coordinate cross-device test scenarios.
+
+#### Actions
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `orchestrator_run` | `{workflow, devices?}` | Execute a multi-device workflow |
+| `orchestrator_status` | `{run_id}` | Get status of an orchestration run |
+| `orchestrator_cancel` | `{run_id}` | Cancel a running orchestration |
+| `orchestrator_validate` | `{workflow}` | Validate a workflow definition without executing |
+| `orchestrator_list_devices` | — | List available devices (desktop browsers, Android, iOS) |
+
+#### Action Details
+
+<details>
+<summary><strong><code>orchestrator_run</code></strong> — Run multi-device workflow</summary>
+
+Execute a workflow across multiple devices. Steps can target specific devices and run in parallel or sequence.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `workflow` | object | ✅ | Workflow definition with `steps` array. Each step has `device`, `tool`, `action`, `params` |
+| `devices` | object | | Device overrides: `{"desktop": {"browser": "chrome"}, "android": {"serial": "..."}, "ios": {"udid": "..."}}` |
+
+**Response:**
+```json
+{
+  "run_id": "orch_abc123",
+  "status": "completed",
+  "devices": ["desktop-chrome", "android-pixel7", "ios-iphone15"],
+  "steps_completed": 8,
+  "steps_total": 8,
+  "duration_ms": 12500,
+  "results": [
+    { "step": 1, "device": "desktop-chrome", "status": "ok", "result": "navigated to https://example.com" },
+    { "step": 2, "device": "android-pixel7", "status": "ok", "result": "navigated to https://example.com" }
+  ]
+}
+```
+</details>
+
+<details>
+<summary><strong><code>orchestrator_status</code></strong> — Run status</summary>
+
+Get the current status of a multi-device orchestration run.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `run_id` | string | ✅ | Orchestration run ID |
+
+**Response:**
+```json
+{
+  "run_id": "orch_abc123",
+  "status": "running",
+  "steps_completed": 3,
+  "steps_total": 8,
+  "current_step": { "step": 4, "device": "ios-iphone15", "action": "screenshot" },
+  "elapsed_ms": 5200
+}
+```
+</details>
+
+<details>
+<summary><strong><code>orchestrator_cancel</code></strong> — Cancel run</summary>
+
+Cancel a running multi-device orchestration.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `run_id` | string | ✅ | Orchestration run ID to cancel |
+
+**Response:** `{ "cancelled": true, "run_id": "orch_abc123", "steps_completed": 3, "steps_skipped": 5 }`
+</details>
+
+<details>
+<summary><strong><code>orchestrator_validate</code></strong> — Validate workflow</summary>
+
+Validate a multi-device workflow definition without executing it. Checks device availability, action validity, and dependency resolution.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `workflow` | object | ✅ | Workflow definition to validate |
+
+**Response:**
+```json
+{
+  "valid": true,
+  "steps": 8,
+  "devices_required": ["desktop", "android", "ios"],
+  "estimated_duration_ms": 15000,
+  "warnings": []
+}
+```
+Or on error:
+```json
+{
+  "valid": false,
+  "errors": ["Step 3: unknown action 'clck' — did you mean 'click'?"],
+  "warnings": ["Step 5: iOS device not detected, will fail at runtime"]
+}
+```
+</details>
+
+<details>
+<summary><strong><code>orchestrator_list_devices</code></strong> — List devices</summary>
+
+List all available devices for orchestration, including desktop browsers, connected Android devices, and connected iOS devices.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "devices": [
+    { "id": "desktop-chrome", "type": "desktop", "browser": "chrome", "status": "available" },
+    { "id": "desktop-firefox", "type": "desktop", "browser": "firefox", "status": "available" },
+    { "id": "android-pixel7", "type": "android", "serial": "1A2B3C4D", "model": "Pixel 7", "status": "connected" },
+    { "id": "ios-iphone15", "type": "ios", "udid": "00001111-...", "model": "iPhone 15", "status": "connected" }
+  ],
+  "total": 4
+}
+```
+</details>
+
+---
+
+### 14. `events`
+
+Pub/sub event bus — emit, subscribe, replay, and stream events with optional HMAC-signed webhook delivery.
+
+#### Actions
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `event_emit` | `{topic, payload, metadata?}` | Emit an event to a topic |
+| `event_subscribe` | `{topic, webhook?, hmac_secret?}` | Subscribe to events on a topic |
+| `event_unsubscribe` | `{subscription_id}` | Unsubscribe from a topic |
+| `event_list_subscriptions` | `{topic?}` | List active subscriptions |
+| `event_recent` | `{topic?, limit?}` | Get recent events |
+| `event_replay` | `{topic, from?, to?, limit?}` | Replay past events from a topic |
+| `event_stats` | `{topic?}` | Get event bus statistics |
+| `event_stream` | `{topic, duration_ms?}` | Stream events in real-time for a duration |
+
+#### Action Details
+
+<details>
+<summary><strong><code>event_emit</code></strong> — Emit event</summary>
+
+Publish an event to a topic. All subscribers (local callbacks and webhooks) are notified.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `topic` | string | ✅ | Topic name (e.g. `page.loaded`, `form.submitted`) |
+| `payload` | any | ✅ | Event payload (JSON) |
+| `metadata` | object | | Additional metadata (e.g. `{"source": "agent"}`) |
+
+**Response:**
+```json
+{
+  "event_id": "evt_abc123",
+  "topic": "page.loaded",
+  "subscribers_notified": 3,
+  "webhooks_sent": 1,
+  "timestamp": "2025-01-15T10:30:00Z"
+}
+```
+</details>
+
+<details>
+<summary><strong><code>event_subscribe</code></strong> — Subscribe to topic</summary>
+
+Subscribe to events on a topic. Optionally configure webhook delivery with HMAC signing.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `topic` | string | ✅ | Topic to subscribe to (supports glob patterns: `page.*`) |
+| `webhook` | string | | Webhook URL for event delivery |
+| `hmac_secret` | string | | HMAC secret for signing webhook payloads (SHA-256) |
+
+**Response:**
+```json
+{
+  "subscription_id": "sub_xyz789",
+  "topic": "page.*",
+  "webhook": "https://hooks.example.com/events",
+  "hmac_enabled": true
+}
+```
+</details>
+
+<details>
+<summary><strong><code>event_unsubscribe</code></strong> — Unsubscribe</summary>
+
+Remove an event subscription.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `subscription_id` | string | ✅ | Subscription ID to remove |
+
+**Response:** `{ "unsubscribed": true, "subscription_id": "sub_xyz789" }`
+</details>
+
+<details>
+<summary><strong><code>event_list_subscriptions</code></strong> — List subscriptions</summary>
+
+List all active event subscriptions, optionally filtered by topic.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `topic` | string | | Filter by topic pattern |
+
+**Response:**
+```json
+{
+  "subscriptions": [
+    {
+      "subscription_id": "sub_xyz789",
+      "topic": "page.*",
+      "webhook": "https://hooks.example.com/events",
+      "hmac_enabled": true,
+      "events_received": 42
+    }
+  ],
+  "total": 1
+}
+```
+</details>
+
+<details>
+<summary><strong><code>event_recent</code></strong> — Recent events</summary>
+
+Get the most recent events, optionally filtered by topic.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `topic` | string | | Filter by topic |
+| `limit` | number | | Maximum events to return (default `20`) |
+
+**Response:**
+```json
+{
+  "events": [
+    {
+      "event_id": "evt_abc123",
+      "topic": "page.loaded",
+      "payload": { "url": "https://example.com" },
+      "timestamp": "2025-01-15T10:30:00Z"
+    }
+  ],
+  "total": 1
+}
+```
+</details>
+
+<details>
+<summary><strong><code>event_replay</code></strong> — Replay events</summary>
+
+Replay past events from a topic within a time range. Useful for debugging and recovery.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `topic` | string | ✅ | Topic to replay |
+| `from` | string | | Start time (ISO 8601) |
+| `to` | string | | End time (ISO 8601) |
+| `limit` | number | | Maximum events to replay (default `100`) |
+
+**Response:**
+```json
+{
+  "topic": "page.loaded",
+  "replayed": 15,
+  "from": "2025-01-15T10:00:00Z",
+  "to": "2025-01-15T11:00:00Z"
+}
+```
+</details>
+
+<details>
+<summary><strong><code>event_stats</code></strong> — Event statistics</summary>
+
+Get event bus statistics — total events, topics, subscribers, and throughput.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `topic` | string | | Filter stats by topic |
+
+**Response:**
+```json
+{
+  "total_events": 1250,
+  "total_topics": 8,
+  "total_subscriptions": 12,
+  "events_per_minute": 4.2,
+  "top_topics": [
+    { "topic": "page.loaded", "count": 450 },
+    { "topic": "network.response", "count": 380 }
+  ],
+  "webhook_deliveries": { "success": 98, "failed": 2 }
+}
+```
+</details>
+
+<details>
+<summary><strong><code>event_stream</code></strong> — Stream events</summary>
+
+Stream events in real-time for a specified duration. Returns all events captured during the streaming window.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `topic` | string | ✅ | Topic to stream (supports glob patterns) |
+| `duration_ms` | number | | Streaming duration in ms (default `5000`, max `60000`) |
+
+**Response:**
+```json
+{
+  "topic": "page.*",
+  "duration_ms": 5000,
+  "events": [
+    { "event_id": "evt_1", "topic": "page.loaded", "payload": { "url": "..." }, "timestamp": "..." },
+    { "event_id": "evt_2", "topic": "page.navigated", "payload": { "url": "..." }, "timestamp": "..." }
+  ],
+  "count": 2
+}
+```
+</details>
+
+---
+
+### 15. `vault`
+
+Encrypted credential management — securely store, retrieve, and manage secrets for automation workflows. Credentials are encrypted at rest with AES-256-GCM.
+
+#### Actions
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `vault_create` | `{name, passphrase?}` | Create a new vault |
+| `vault_open` | `{name, passphrase?}` | Open (unlock) an existing vault |
+| `vault_lock` | `{name?}` | Lock the current vault |
+| `vault_store` | `{key, value, tags?}` | Store a secret in the vault |
+| `vault_retrieve` | `{key}` | Retrieve a secret from the vault |
+| `vault_delete` | `{key}` | Delete a secret from the vault |
+| `vault_list` | `{tags?}` | List stored secret keys (values not exposed) |
+| `vault_import` | `{format, data, passphrase?}` | Import secrets from external format |
+| `vault_export` | `{format, keys?, passphrase?}` | Export secrets to external format |
+
+#### Action Details
+
+<details>
+<summary><strong><code>vault_create</code></strong> — Create vault</summary>
+
+Create a new encrypted vault. Vaults are stored at `~/.onecrawl/vaults/`.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | ✅ | Vault name (alphanumeric, hyphens, underscores) |
+| `passphrase` | string | | Encryption passphrase (auto-generated if omitted) |
+
+**Response:**
+```json
+{
+  "created": true,
+  "name": "project-secrets",
+  "path": "~/.onecrawl/vaults/project-secrets.vault",
+  "encryption": "AES-256-GCM"
+}
+```
+</details>
+
+<details>
+<summary><strong><code>vault_open</code></strong> — Open vault</summary>
+
+Unlock an existing vault for reading and writing.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | ✅ | Vault name to open |
+| `passphrase` | string | | Passphrase (uses keychain if omitted) |
+
+**Response:**
+```json
+{
+  "opened": true,
+  "name": "project-secrets",
+  "entries": 5,
+  "last_modified": "2025-01-15T10:30:00Z"
+}
+```
+</details>
+
+<details>
+<summary><strong><code>vault_lock</code></strong> — Lock vault</summary>
+
+Lock the vault, clearing decrypted data from memory.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | | Vault name (defaults to current open vault) |
+
+**Response:** `{ "locked": true, "name": "project-secrets" }`
+</details>
+
+<details>
+<summary><strong><code>vault_store</code></strong> — Store secret</summary>
+
+Store a secret in the open vault. Values are encrypted immediately.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `key` | string | ✅ | Secret key identifier |
+| `value` | string | ✅ | Secret value to store |
+| `tags` | string[] | | Tags for categorization (e.g. `["api", "production"]`) |
+
+**Response:** `{ "stored": true, "key": "github-token", "tags": ["api", "production"] }`
+</details>
+
+<details>
+<summary><strong><code>vault_retrieve</code></strong> — Retrieve secret</summary>
+
+Retrieve a decrypted secret from the vault.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `key` | string | ✅ | Secret key to retrieve |
+
+**Response:**
+```json
+{
+  "key": "github-token",
+  "value": "ghp_xxxxxxxxxxxx",
+  "tags": ["api", "production"],
+  "created_at": "2025-01-10T08:00:00Z",
+  "accessed_at": "2025-01-15T10:30:00Z"
+}
+```
+Or `{ "key": "...", "found": false }` if not found.
+</details>
+
+<details>
+<summary><strong><code>vault_delete</code></strong> — Delete secret</summary>
+
+Delete a secret from the vault.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `key` | string | ✅ | Secret key to delete |
+
+**Response:** `{ "deleted": true, "key": "github-token" }`
+</details>
+
+<details>
+<summary><strong><code>vault_list</code></strong> — List secrets</summary>
+
+List all secret keys in the vault. Values are never exposed in list output.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `tags` | string[] | | Filter by tags |
+
+**Response:**
+```json
+{
+  "entries": [
+    { "key": "github-token", "tags": ["api", "production"], "created_at": "2025-01-10T08:00:00Z" },
+    { "key": "db-password", "tags": ["database"], "created_at": "2025-01-12T14:00:00Z" }
+  ],
+  "total": 2
+}
+```
+</details>
+
+<details>
+<summary><strong><code>vault_import</code></strong> — Import secrets</summary>
+
+Import secrets from an external format into the vault.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `format` | string | ✅ | Import format: `env` (dotenv), `json`, `yaml` |
+| `data` | string | ✅ | Data to import (file path or inline content) |
+| `passphrase` | string | | Passphrase for encrypted imports |
+
+**Response:**
+```json
+{
+  "imported": 12,
+  "format": "env",
+  "skipped": 0,
+  "errors": []
+}
+```
+</details>
+
+<details>
+<summary><strong><code>vault_export</code></strong> — Export secrets</summary>
+
+Export secrets from the vault to an external format.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `format` | string | ✅ | Export format: `env`, `json`, `yaml` |
+| `keys` | string[] | | Specific keys to export (omit for all) |
+| `passphrase` | string | | Passphrase for encrypted export |
+
+**Response:**
+```json
+{
+  "exported": 12,
+  "format": "json",
+  "data": "{ ... }",
+  "encrypted": false
+}
+```
+</details>
+
+---
+
+### 16. `plugins`
+
+Extensible plugin system — install, manage, and execute plugins that extend OneCrawl's capabilities. Plugins use JSON manifests to declare actions, hooks, and dependencies.
+
+#### Actions
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `plugin_list` | `{status?}` | List installed plugins |
+| `plugin_install` | `{source, version?}` | Install a plugin from registry, git URL, or local path |
+| `plugin_remove` | `{name}` | Remove an installed plugin |
+| `plugin_enable` | `{name}` | Enable a disabled plugin |
+| `plugin_disable` | `{name}` | Disable a plugin without removing it |
+| `plugin_execute` | `{name, action, params?}` | Execute a plugin action |
+| `plugin_scaffold` | `{name, template?}` | Scaffold a new plugin project |
+| `plugin_validate` | `{path}` | Validate a plugin manifest and structure |
+| `plugin_info` | `{name}` | Get detailed plugin information |
+
+#### Action Details
+
+<details>
+<summary><strong><code>plugin_list</code></strong> — List plugins</summary>
+
+List all installed plugins with their status and metadata.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `status` | string | | Filter by status: `enabled`, `disabled`, `all` (default `all`) |
+
+**Response:**
+```json
+{
+  "plugins": [
+    {
+      "name": "onecrawl-plugin-lighthouse",
+      "version": "1.2.0",
+      "status": "enabled",
+      "actions": ["audit", "budget"],
+      "author": "onecrawl-community"
+    }
+  ],
+  "total": 1
+}
+```
+</details>
+
+<details>
+<summary><strong><code>plugin_install</code></strong> — Install plugin</summary>
+
+Install a plugin from the registry, a git URL, or a local path.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `source` | string | ✅ | Plugin source: registry name (`onecrawl-plugin-lighthouse`), git URL, or local path |
+| `version` | string | | Specific version to install (default `latest`) |
+
+**Response:**
+```json
+{
+  "installed": true,
+  "name": "onecrawl-plugin-lighthouse",
+  "version": "1.2.0",
+  "actions": ["audit", "budget"],
+  "path": "~/.onecrawl/plugins/onecrawl-plugin-lighthouse"
+}
+```
+</details>
+
+<details>
+<summary><strong><code>plugin_remove</code></strong> — Remove plugin</summary>
+
+Uninstall a plugin and remove its files.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | ✅ | Plugin name to remove |
+
+**Response:** `{ "removed": true, "name": "onecrawl-plugin-lighthouse" }`
+</details>
+
+<details>
+<summary><strong><code>plugin_enable</code></strong> — Enable plugin</summary>
+
+Enable a previously disabled plugin.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | ✅ | Plugin name to enable |
+
+**Response:** `{ "enabled": true, "name": "onecrawl-plugin-lighthouse" }`
+</details>
+
+<details>
+<summary><strong><code>plugin_disable</code></strong> — Disable plugin</summary>
+
+Disable a plugin without removing it. Disabled plugins remain installed but do not load.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | ✅ | Plugin name to disable |
+
+**Response:** `{ "disabled": true, "name": "onecrawl-plugin-lighthouse" }`
+</details>
+
+<details>
+<summary><strong><code>plugin_execute</code></strong> — Execute plugin action</summary>
+
+Execute a specific action provided by an installed plugin.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | ✅ | Plugin name |
+| `action` | string | ✅ | Action to execute (as declared in plugin manifest) |
+| `params` | object | | Action-specific parameters |
+
+**Response:**
+```json
+{
+  "plugin": "onecrawl-plugin-lighthouse",
+  "action": "audit",
+  "result": { /* plugin-specific response */ },
+  "duration_ms": 3200
+}
+```
+</details>
+
+<details>
+<summary><strong><code>plugin_scaffold</code></strong> — Scaffold plugin</summary>
+
+Generate a new plugin project with boilerplate manifest, action handlers, and tests.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | ✅ | Plugin name (must start with `onecrawl-plugin-`) |
+| `template` | string | | Template: `basic`, `scraper`, `transformer` (default `basic`) |
+
+**Response:**
+```json
+{
+  "scaffolded": true,
+  "name": "onecrawl-plugin-my-tool",
+  "path": "./onecrawl-plugin-my-tool",
+  "files": ["manifest.json", "src/index.ts", "src/actions/", "tests/", "README.md"]
+}
+```
+</details>
+
+<details>
+<summary><strong><code>plugin_validate</code></strong> — Validate plugin</summary>
+
+Validate a plugin's manifest file and directory structure.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `path` | string | ✅ | Path to plugin directory or manifest.json |
+
+**Response:**
+```json
+{
+  "valid": true,
+  "name": "onecrawl-plugin-my-tool",
+  "version": "0.1.0",
+  "actions": ["transform"],
+  "warnings": []
+}
+```
+Or:
+```json
+{
+  "valid": false,
+  "errors": ["manifest.json: missing required field 'actions'", "src/index.ts: export 'handleAction' not found"],
+  "warnings": ["README.md not found"]
+}
+```
+</details>
+
+<details>
+<summary><strong><code>plugin_info</code></strong> — Plugin info</summary>
+
+Get detailed information about an installed plugin, including manifest, dependencies, and usage stats.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | ✅ | Plugin name |
+
+**Response:**
+```json
+{
+  "name": "onecrawl-plugin-lighthouse",
+  "version": "1.2.0",
+  "description": "Lighthouse performance auditing integration",
+  "author": "onecrawl-community",
+  "status": "enabled",
+  "actions": ["audit", "budget"],
+  "dependencies": {},
+  "path": "~/.onecrawl/plugins/onecrawl-plugin-lighthouse",
+  "installed_at": "2025-01-10T08:00:00Z",
+  "executions": 42
+}
+```
+</details>
+
+---
+
+### 17. `studio`
+
+Visual workflow builder — create, manage, and export automation workflows through a drag-and-drop interface. Projects serialize to portable JSON.
+
+#### Actions
+
+| Action | Params | Description |
+|--------|--------|-------------|
+| `studio_page` | `{project_id?}` | Open the Studio visual editor page |
+| `studio_templates` | `{category?}` | List available workflow templates |
+| `studio_projects` | `{status?}` | List saved Studio projects |
+| `studio_create` | `{name, template?, description?}` | Create a new Studio project |
+| `studio_export` | `{project_id, format?}` | Export a project to JSON, YAML, or workflow DSL |
+| `studio_import` | `{data, format?, name?}` | Import a project from external format |
+| `studio_validate` | `{project_id}` | Validate project workflow for errors |
+| `studio_delete` | `{project_id}` | Delete a Studio project |
+
+#### Action Details
+
+<details>
+<summary><strong><code>studio_page</code></strong> — Open Studio editor</summary>
+
+Open the Studio visual workflow editor. If a project ID is provided, opens that project for editing.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `project_id` | string | | Project ID to open (opens blank canvas if omitted) |
+
+**Response:**
+```json
+{
+  "url": "http://localhost:9223/studio",
+  "project_id": "proj_abc123",
+  "status": "opened"
+}
+```
+</details>
+
+<details>
+<summary><strong><code>studio_templates</code></strong> — List templates</summary>
+
+List available workflow templates that can be used to create new projects.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `category` | string | | Filter by category: `scraping`, `testing`, `monitoring`, `auth` |
+
+**Response:**
+```json
+{
+  "templates": [
+    {
+      "id": "tpl_login_flow",
+      "name": "Login Flow",
+      "category": "auth",
+      "description": "Multi-step login with MFA support",
+      "steps": 5
+    },
+    {
+      "id": "tpl_ecommerce_scrape",
+      "name": "E-commerce Scraper",
+      "category": "scraping",
+      "description": "Paginated product extraction with price monitoring",
+      "steps": 8
+    }
+  ],
+  "total": 2
+}
+```
+</details>
+
+<details>
+<summary><strong><code>studio_projects</code></strong> — List projects</summary>
+
+List all saved Studio projects.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `status` | string | | Filter: `draft`, `published`, `archived`, `all` (default `all`) |
+
+**Response:**
+```json
+{
+  "projects": [
+    {
+      "project_id": "proj_abc123",
+      "name": "Product Monitor",
+      "status": "published",
+      "steps": 12,
+      "created_at": "2025-01-10T08:00:00Z",
+      "updated_at": "2025-01-15T10:30:00Z"
+    }
+  ],
+  "total": 1
+}
+```
+</details>
+
+<details>
+<summary><strong><code>studio_create</code></strong> — Create project</summary>
+
+Create a new Studio project, optionally from a template.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `name` | string | ✅ | Project name |
+| `template` | string | | Template ID to start from |
+| `description` | string | | Project description |
+
+**Response:**
+```json
+{
+  "created": true,
+  "project_id": "proj_def456",
+  "name": "My Workflow",
+  "template": null,
+  "status": "draft"
+}
+```
+</details>
+
+<details>
+<summary><strong><code>studio_export</code></strong> — Export project</summary>
+
+Export a Studio project to a portable format.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `project_id` | string | ✅ | Project ID to export |
+| `format` | string | | Export format: `json` (default), `yaml`, `workflow_dsl` |
+
+**Response:**
+```json
+{
+  "project_id": "proj_abc123",
+  "format": "json",
+  "data": "{ ... }",
+  "size_bytes": 2048
+}
+```
+</details>
+
+<details>
+<summary><strong><code>studio_import</code></strong> — Import project</summary>
+
+Import a project from an external format.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `data` | string | ✅ | Project data (inline JSON/YAML or file path) |
+| `format` | string | | Format: `json` (default), `yaml`, `workflow_dsl` |
+| `name` | string | | Override project name |
+
+**Response:**
+```json
+{
+  "imported": true,
+  "project_id": "proj_ghi789",
+  "name": "Imported Workflow",
+  "steps": 8,
+  "format": "json"
+}
+```
+</details>
+
+<details>
+<summary><strong><code>studio_validate</code></strong> — Validate project</summary>
+
+Validate a project's workflow for structural errors, missing references, and unreachable steps.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `project_id` | string | ✅ | Project ID to validate |
+
+**Response:**
+```json
+{
+  "valid": true,
+  "project_id": "proj_abc123",
+  "steps": 12,
+  "warnings": []
+}
+```
+Or:
+```json
+{
+  "valid": false,
+  "project_id": "proj_abc123",
+  "errors": ["Step 5: references undefined variable 'login_url'", "Step 9: unreachable — no incoming connections"],
+  "warnings": ["Step 3: timeout not set, using default 30s"]
+}
+```
+</details>
+
+<details>
+<summary><strong><code>studio_delete</code></strong> — Delete project</summary>
+
+Delete a Studio project and all its associated data.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `project_id` | string | ✅ | Project ID to delete |
+
+**Response:** `{ "deleted": true, "project_id": "proj_abc123" }`
+</details>
+
+---
+
 ## Examples
 
 ### Navigate and screenshot
@@ -4813,7 +6226,7 @@ Promote the current screenshot to become the new baseline for a test.
 
 ---
 
-## Migration from v2 (108 tools → 10 tools)
+## Migration from v2 (108 tools → 17 tools)
 
 The old 108-tool interface mapped 1:1 to individual operations. The new interface groups them by domain:
 
@@ -4932,6 +6345,61 @@ The old 108-tool interface mapped 1:1 to individual operations. The new interfac
 | `crawl.dom_compare` | `crawl` | `dom_compare` |
 | `pool.list` | `computer` | `pool_list` |
 | `pool.status` | `computer` | `pool_status` |
+| `durable.checkpoint_save` | `durable` | `checkpoint_save` |
+| `durable.checkpoint_restore` | `durable` | `checkpoint_restore` |
+| `durable.checkpoint_list` | `durable` | `checkpoint_list` |
+| `durable.checkpoint_delete` | `durable` | `checkpoint_delete` |
+| `durable.start` | `durable` | `durable_start` |
+| `durable.stop` | `durable` | `durable_stop` |
+| `durable.status` | `durable` | `durable_status` |
+| `durable.config` | `durable` | `durable_config` |
+| `reactor.start` | `reactor` | `reactor_start` |
+| `reactor.stop` | `reactor` | `reactor_stop` |
+| `reactor.status` | `reactor` | `reactor_status` |
+| `reactor.add_rule` | `reactor` | `reactor_add_rule` |
+| `reactor.remove_rule` | `reactor` | `reactor_remove_rule` |
+| `reactor.list_rules` | `reactor` | `reactor_list_rules` |
+| `reactor.pause` | `reactor` | `reactor_pause` |
+| `reactor.resume` | `reactor` | `reactor_resume` |
+| `orchestrator.run` | `orchestrator` | `orchestrator_run` |
+| `orchestrator.status` | `orchestrator` | `orchestrator_status` |
+| `orchestrator.cancel` | `orchestrator` | `orchestrator_cancel` |
+| `orchestrator.validate` | `orchestrator` | `orchestrator_validate` |
+| `orchestrator.list_devices` | `orchestrator` | `orchestrator_list_devices` |
+| `events.emit` | `events` | `event_emit` |
+| `events.subscribe` | `events` | `event_subscribe` |
+| `events.unsubscribe` | `events` | `event_unsubscribe` |
+| `events.list_subscriptions` | `events` | `event_list_subscriptions` |
+| `events.recent` | `events` | `event_recent` |
+| `events.replay` | `events` | `event_replay` |
+| `events.stats` | `events` | `event_stats` |
+| `events.stream` | `events` | `event_stream` |
+| `vault.create` | `vault` | `vault_create` |
+| `vault.open` | `vault` | `vault_open` |
+| `vault.lock` | `vault` | `vault_lock` |
+| `vault.store` | `vault` | `vault_store` |
+| `vault.retrieve` | `vault` | `vault_retrieve` |
+| `vault.delete` | `vault` | `vault_delete` |
+| `vault.list` | `vault` | `vault_list` |
+| `vault.import` | `vault` | `vault_import` |
+| `vault.export` | `vault` | `vault_export` |
+| `plugins.list` | `plugins` | `plugin_list` |
+| `plugins.install` | `plugins` | `plugin_install` |
+| `plugins.remove` | `plugins` | `plugin_remove` |
+| `plugins.enable` | `plugins` | `plugin_enable` |
+| `plugins.disable` | `plugins` | `plugin_disable` |
+| `plugins.execute` | `plugins` | `plugin_execute` |
+| `plugins.scaffold` | `plugins` | `plugin_scaffold` |
+| `plugins.validate` | `plugins` | `plugin_validate` |
+| `plugins.info` | `plugins` | `plugin_info` |
+| `studio.page` | `studio` | `studio_page` |
+| `studio.templates` | `studio` | `studio_templates` |
+| `studio.projects` | `studio` | `studio_projects` |
+| `studio.create` | `studio` | `studio_create` |
+| `studio.export` | `studio` | `studio_export` |
+| `studio.import` | `studio` | `studio_import` |
+| `studio.validate` | `studio` | `studio_validate` |
+| `studio.delete` | `studio` | `studio_delete` |
 
 ---
 
@@ -4965,7 +6433,12 @@ All tools return errors in a consistent format:
 - **Memory persistence**: Agent memory is stored at `~/.onecrawl/agent_memory.json` and survives across sessions.
 - **Stealth-by-Default**: Stealth patches are automatically injected at session level using CDP `addScriptToEvaluateOnNewDocument`, so they persist across all page navigations within a session. No opt-in needed. Use `browser` → `set_stealth {enabled: false}` to disable for debugging.
 - **Rate limiting**: The `automate` → `rate_limit` action configures per-domain request throttling that applies to all subsequent navigation and network actions.
+- **Durable sessions**: Checkpoints are saved to `~/.onecrawl/checkpoints/` and include cookies, storage, scroll position, and optional DOM snapshots. Auto-checkpoint runs on a configurable interval.
+- **Reactor persistence**: Reactor rules persist across page navigations within a session by re-injecting via CDP `addScriptToEvaluateOnNewDocument`.
+- **Vault encryption**: Secrets are encrypted at rest using AES-256-GCM. Vault files are stored at `~/.onecrawl/vaults/`.
+- **Plugin directory**: Plugins are installed to `~/.onecrawl/plugins/` and must include a `manifest.json` with declared actions and hooks.
+- **Studio projects**: Projects are stored at `~/.onecrawl/studio/` and serialize to portable JSON for import/export.
 
 ---
 
-*Auto-generated from OneCrawl MCP server source (`onecrawl-mcp-rs`). Total: 10 tools, 250 actions.*
+*Auto-generated from OneCrawl MCP server source (`onecrawl-mcp-rs`). Total: 17 tools, 421 actions.*
