@@ -120,6 +120,7 @@ impl EventBus {
         let timeout_ms = config.webhook_timeout_ms;
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_millis(timeout_ms))
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .unwrap_or_default();
 
@@ -433,6 +434,8 @@ pub fn matches_pattern(event_type: &str, pattern: &str) -> bool {
 // ────────────────────────────────────────────────────────────────────
 
 /// Validate that a webhook URL is safe (no SSRF to internal services).
+///
+/// Performs DNS resolution to catch hostnames that resolve to private IPs.
 fn validate_webhook_url(url: &str) -> Result<(), String> {
     let parsed = url::Url::parse(url).map_err(|e| format!("invalid webhook URL: {e}"))?;
 
@@ -458,7 +461,7 @@ fn validate_webhook_url(url: &str) -> Result<(), String> {
         }
     }
 
-    // Block loopback and private IP ranges
+    // Block loopback and private IP ranges (literal IPs)
     if let Ok(ip) = host.parse::<std::net::IpAddr>() {
         if ip.is_loopback() || is_private_ip(ip) {
             return Err(format!(
@@ -477,6 +480,21 @@ fn validate_webhook_url(url: &str) -> Result<(), String> {
             }
         }
     }
+
+    // Resolve hostname to IPs and check each against private ranges
+    let port = parsed.port().unwrap_or(if parsed.scheme() == "https" { 443 } else { 80 });
+    let addr_str = format!("{}:{}", host, port);
+    if let Ok(addrs) = std::net::ToSocketAddrs::to_socket_addrs(&addr_str as &str) {
+        for addr in addrs {
+            let ip = addr.ip();
+            if ip.is_loopback() || is_private_ip(ip) {
+                return Err(format!(
+                    "webhook URL host '{host}' resolves to private/loopback address: {ip}"
+                ));
+            }
+        }
+    }
+    // If DNS resolution fails, allow it — deliver_webhook will fail with a connection error
 
     Ok(())
 }

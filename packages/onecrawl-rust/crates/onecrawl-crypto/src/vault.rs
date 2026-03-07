@@ -235,19 +235,24 @@ impl Vault {
 
         // Atomic write: write to temp file, fsync, then rename over original
         let tmp_path = self.path.with_extension("vault.tmp");
-        {
-            use std::io::Write;
-            let mut f = std::fs::File::create(&tmp_path)
-                .map_err(|e| Error::Crypto(format!("create temp vault: {e}")))?;
-            f.write_all(output.as_bytes())
-                .map_err(|e| Error::Crypto(format!("write temp vault: {e}")))?;
-            f.sync_all()
-                .map_err(|e| Error::Crypto(format!("fsync temp vault: {e}")))?;
+        let result = (|| -> Result<()> {
+            {
+                use std::io::Write;
+                let mut f = std::fs::File::create(&tmp_path)
+                    .map_err(|e| Error::Crypto(format!("create temp vault: {e}")))?;
+                f.write_all(output.as_bytes())
+                    .map_err(|e| Error::Crypto(format!("write temp vault: {e}")))?;
+                f.sync_all()
+                    .map_err(|e| Error::Crypto(format!("fsync temp vault: {e}")))?;
+            }
+            std::fs::rename(&tmp_path, &self.path)
+                .map_err(|e| Error::Crypto(format!("rename vault: {e}")))?;
+            Ok(())
+        })();
+        if result.is_err() {
+            let _ = std::fs::remove_file(&tmp_path);
         }
-        std::fs::rename(&tmp_path, &self.path)
-            .map_err(|e| Error::Crypto(format!("rename vault: {e}")))?;
-
-        Ok(())
+        result
     }
 
     /// Return keys of expired entries.
