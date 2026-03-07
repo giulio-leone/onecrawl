@@ -280,13 +280,13 @@ impl OneCrawlMcp {
         let max_delay = p.max_delay_ms.unwrap_or(200);
         let typos = p.typos.unwrap_or(false);
         let js = format!(r#"(async () => {{
-            const el = document.querySelector("{}");
+            const el = document.querySelector({});
             if (!el) return {{ error: "Element not found" }};
             el.focus();
             el.value = '';
             el.dispatchEvent(new Event('focus', {{ bubbles: true }}));
             
-            const text = "{}";
+            const text = {};
             let typed = '';
             const minDelay = {min_delay};
             const maxDelay = {max_delay};
@@ -323,7 +323,7 @@ impl OneCrawlMcp {
             }}
             
             el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-            return {{ typed: text.length, typos_simulated: typoCount, selector: "{}" }};
+            return {{ typed: text.length, typos_simulated: typoCount, selector: {} }};
         }})()"#, json_escape(&p.selector), json_escape(&p.text), json_escape(&p.selector));
         let result = page.evaluate(js).await.mcp()?;
         let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));

@@ -331,7 +331,7 @@ pub fn extract_context(goal: &str) -> HashMap<String, String> {
     let mut in_quote = false;
     let mut quote_start = 0;
     let mut quotes = Vec::new();
-    for (i, c) in goal.chars().enumerate() {
+    for (i, c) in goal.char_indices() {
         if c == '"' || c == '\'' {
             if in_quote {
                 quotes.push(&goal[quote_start + 1..i]);

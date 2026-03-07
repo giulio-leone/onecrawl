@@ -1704,7 +1704,7 @@ impl OneCrawlMcp {
         let selector = p.selector.as_deref().unwrap_or("body");
         let include_passes = p.include_passes.unwrap_or(false);
         let js = format!(r#"(() => {{
-            const root = document.querySelector("{}");
+            const root = document.querySelector({});
             if (!root) return {{ error: "Selector not found" }};
             const issues = [];
             const passes = [];
@@ -1823,7 +1823,7 @@ impl OneCrawlMcp {
                 const l2 = luminance(...bg) + 0.05;
                 return l1 > l2 ? l1 / l2 : l2 / l1;
             }}
-            const elements = document.querySelectorAll("{}");
+            const elements = document.querySelectorAll({});
             const failures = [];
             const checked = Math.min(elements.length, 200);
             for (let i = 0; i < checked; i++) {{
@@ -1952,7 +1952,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let selector = p.selector.as_deref().unwrap_or("body");
         let js = format!(r#"(() => {{
-            const root = document.querySelector("{}");
+            const root = document.querySelector({});
             if (!root) return {{ error: "Selector not found" }};
             const valid_roles = new Set(['alert','alertdialog','application','article','banner','button','cell','checkbox',
                 'columnheader','combobox','complementary','contentinfo','definition','dialog','directory','document',
@@ -2031,7 +2031,7 @@ impl OneCrawlMcp {
         let start = p.start_selector.as_deref().unwrap_or("body");
         let max_el = p.max_elements.unwrap_or(50);
         let js = format!(r#"(() => {{
-            const root = document.querySelector("{}");
+            const root = document.querySelector({});
             if (!root) return {{ error: "Start selector not found" }};
             const output = [];
             const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null);

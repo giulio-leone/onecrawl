@@ -263,11 +263,9 @@ pub async fn checkpoint_restore(page: &Page, checkpoint_path: &str, name: &str) 
     if let Some(ls) = checkpoint["state"]["localStorage"].as_object() {
         for (key, value) in ls {
             if let Some(v) = value.as_str() {
-                let js = format!(
-                    "localStorage.setItem('{}', '{}')",
-                    key.replace('\\', "\\\\").replace('\'', "\\'"),
-                    v.replace('\\', "\\\\").replace('\'', "\\'")
-                );
+                let key_json = serde_json::to_string(key).unwrap_or_default();
+                let val_json = serde_json::to_string(&v).unwrap_or_default();
+                let js = format!("localStorage.setItem({}, {})", key_json, val_json);
                 let _ = page.evaluate(js).await;
             }
         }
@@ -277,11 +275,9 @@ pub async fn checkpoint_restore(page: &Page, checkpoint_path: &str, name: &str) 
     if let Some(ss) = checkpoint["state"]["sessionStorage"].as_object() {
         for (key, value) in ss {
             if let Some(v) = value.as_str() {
-                let js = format!(
-                    "sessionStorage.setItem('{}', '{}')",
-                    key.replace('\\', "\\\\").replace('\'', "\\'"),
-                    v.replace('\\', "\\\\").replace('\'', "\\'")
-                );
+                let key_json = serde_json::to_string(key).unwrap_or_default();
+                let val_json = serde_json::to_string(&v).unwrap_or_default();
+                let js = format!("sessionStorage.setItem({}, {})", key_json, val_json);
                 let _ = page.evaluate(js).await;
             }
         }

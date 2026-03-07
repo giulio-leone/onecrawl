@@ -579,12 +579,12 @@ impl OneCrawlMcp {
         if let Some(ref expect) = p.expect {
             if expect.starts_with("selector:") {
                 let sel = &expect[9..];
-                let js = format!(r#"document.querySelector("{}") !== null"#, json_escape(sel));
+                let js = format!(r#"document.querySelector({}) !== null"#, json_escape(sel));
                 let found: bool = page.evaluate(js).await.mcp()?.into_value().unwrap_or(false);
                 verification["expect_result"] = serde_json::json!({"type": "selector", "selector": sel, "found": found, "passed": found});
             } else if expect.starts_with("text:") {
                 let text = &expect[5..];
-                let js = format!(r#"document.body.innerText.includes("{}")"#, json_escape(text));
+                let js = format!(r#"document.body.innerText.includes({})"#, json_escape(text));
                 let found: bool = page.evaluate(js).await.mcp()?.into_value().unwrap_or(false);
                 verification["expect_result"] = serde_json::json!({"type": "text", "text": text, "found": found, "passed": found});
             } else if expect.starts_with("url:") {
