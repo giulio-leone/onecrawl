@@ -5,6 +5,7 @@
 pub mod accessibility;
 pub mod adaptive;
 pub mod agent;
+pub mod agent_auto;
 pub mod agent_memory;
 pub mod android;
 pub mod annotated;
@@ -146,6 +147,7 @@ pub use vrt::{VrtComparisonResult, VrtStatus, VrtSuite, VrtSuiteResult, VrtTestC
 pub use workflow::{Workflow, WorkflowResult, Step, Action, StepResult, StepStatus, AgentStepContext, AgentDecision};
 pub use task_planner::{TaskPlan, PlannedStep, PlannedAction, TaskExecutionResult, TaskStatus, GoalCategory};
 pub use safety::{SafetyCheck, SafetyPolicy, SafetyState};
+pub use agent_auto::{AgentAuto, AgentAutoConfig, AgentAutoResult, AgentAutoState, AutoStep, StepStatus as AutoStepStatus, OutputFormat as AutoOutputFormat, agent_auto_run, agent_auto_plan};
 
 pub use captcha::{CaptchaConfig, CaptchaDetection, CaptchaResult, SolverConfig, SolverService, solve_via_api, load_solver_config};
 pub use cookie_jar::{CookieJar, StoredCookie};

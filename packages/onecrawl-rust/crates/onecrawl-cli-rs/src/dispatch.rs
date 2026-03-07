@@ -1369,6 +1369,24 @@ pub(crate) async fn dispatch(command: Commands) {
                 commands::browser::auto_chain(&actions, &on_error, retries).await
             }
             AgentCliAction::Think => commands::browser::think().await,
+            AgentCliAction::Auto {
+                goal, model, max_steps, max_cost, screenshot_every_step,
+                output, output_format, verbose, timeout, resume, save_state,
+            } => {
+                commands::browser::agent_auto_run(
+                    goal.as_deref(), model.as_deref(), max_steps, max_cost,
+                    screenshot_every_step, output.as_deref(), output_format.as_deref(),
+                    verbose, timeout, resume.as_deref(), save_state.as_deref(),
+                ).await
+            }
+            AgentCliAction::Plan { goal, verbose } => {
+                commands::browser::agent_auto_plan_cli(&goal, verbose).await
+            }
+            AgentCliAction::Status => commands::browser::agent_auto_status_cli().await,
+            AgentCliAction::Stop { save_state } => {
+                commands::browser::agent_auto_stop_cli(save_state.as_deref()).await
+            }
+            AgentCliAction::Result => commands::browser::agent_auto_result_cli().await,
         },
 
         // ── Computer Use ────────────────────────────────────────────

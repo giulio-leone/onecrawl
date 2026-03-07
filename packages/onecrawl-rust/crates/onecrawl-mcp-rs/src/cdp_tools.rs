@@ -3035,3 +3035,73 @@ pub struct ReactorEventsParams {
 
 #[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
 pub struct ReactorClearParams {}
+
+// ────────────────────────────────────────────────────────────────────
+//  Agent Auto params
+// ────────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct AgentAutoRunParams {
+    #[schemars(description = "Natural language goal for the agent")]
+    pub goal: String,
+    #[schemars(description = "LLM model name (for caller reference)")]
+    pub model: Option<String>,
+    #[schemars(description = "Max steps (default 50)")]
+    pub max_steps: Option<u32>,
+    #[schemars(description = "Cost cap in cents (e.g. 50 = $0.50)")]
+    pub max_cost_cents: Option<u32>,
+    #[schemars(description = "Capture screenshot after each step")]
+    pub screenshot_every_step: Option<bool>,
+    #[schemars(description = "Directory for screenshots")]
+    pub screenshot_dir: Option<String>,
+    #[schemars(description = "Output file path (e.g. results.csv)")]
+    pub output: Option<String>,
+    #[schemars(description = "Output format: csv, json, jsonl")]
+    pub output_format: Option<String>,
+    #[schemars(description = "Save state file path for resume")]
+    pub save_state: Option<String>,
+    #[schemars(description = "Enable verbose logging")]
+    pub verbose: Option<bool>,
+    #[schemars(description = "Allowed domains (safety)")]
+    pub allowed_domains: Option<Vec<String>>,
+    #[schemars(description = "Blocked domains (safety)")]
+    pub blocked_domains: Option<Vec<String>>,
+    #[schemars(description = "Overall timeout in seconds")]
+    pub timeout_secs: Option<u64>,
+    #[schemars(description = "Use agent memory for learning (default true)")]
+    pub use_memory: Option<bool>,
+    #[schemars(description = "Path for memory persistence")]
+    pub memory_path: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct AgentAutoPlanParams {
+    #[schemars(description = "Natural language goal to plan")]
+    pub goal: String,
+    #[schemars(description = "Enable verbose output")]
+    pub verbose: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct AgentAutoStatusParams {}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct AgentAutoStopParams {
+    #[schemars(description = "Path to save state for resume")]
+    pub save_state: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct AgentAutoResumeParams {
+    #[schemars(description = "Path to saved state file")]
+    pub state_file: String,
+    #[schemars(description = "Max additional steps")]
+    pub max_steps: Option<u32>,
+    #[schemars(description = "Cost cap in cents")]
+    pub max_cost_cents: Option<u32>,
+    #[schemars(description = "Enable verbose logging")]
+    pub verbose: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct AgentAutoResultParams {}

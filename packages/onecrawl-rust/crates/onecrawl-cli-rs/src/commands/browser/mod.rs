@@ -41,6 +41,11 @@ pub use agent_computer::{
     page_info_cli,
     assert_checks_cli,
     element_detail_cli,
+    agent_auto_run,
+    agent_auto_plan_cli,
+    agent_auto_status_cli,
+    agent_auto_stop_cli,
+    agent_auto_result_cli,
 };
 pub use auth::{
     passkey_enable,

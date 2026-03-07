@@ -48,4 +48,59 @@ pub enum AgentCliAction {
     },
     /// Analyze page and recommend next actions
     Think,
+    /// Autonomous goal-based browser automation
+    Auto {
+        /// Natural language goal
+        #[arg(long)]
+        goal: Option<String>,
+        /// LLM model name (for reference)
+        #[arg(long)]
+        model: Option<String>,
+        /// Max steps (default 50)
+        #[arg(long, default_value = "50")]
+        max_steps: u32,
+        /// Cost cap in dollars (e.g. 0.50)
+        #[arg(long)]
+        max_cost: Option<f64>,
+        /// Capture screenshot after each step
+        #[arg(long)]
+        screenshot_every_step: bool,
+        /// Output file path (e.g. results.csv)
+        #[arg(long)]
+        output: Option<String>,
+        /// Output format: csv, json, jsonl
+        #[arg(long)]
+        output_format: Option<String>,
+        /// Enable verbose logging
+        #[arg(long)]
+        verbose: bool,
+        /// Overall timeout in seconds
+        #[arg(long)]
+        timeout: Option<u64>,
+        /// Resume from saved state file
+        #[arg(long)]
+        resume: Option<String>,
+        /// Save state path for resume
+        #[arg(long)]
+        save_state: Option<String>,
+    },
+    /// Plan steps for a goal without executing
+    Plan {
+        /// Natural language goal
+        #[arg(long)]
+        goal: String,
+        /// Enable verbose output
+        #[arg(long)]
+        verbose: bool,
+    },
+    /// Get status of running agent
+    Status,
+    /// Stop a running agent
+    Stop {
+        /// Save state path for resume
+        #[arg(long)]
+        save_state: Option<String>,
+    },
+    /// Get result of the last completed run
+    Result,
 }

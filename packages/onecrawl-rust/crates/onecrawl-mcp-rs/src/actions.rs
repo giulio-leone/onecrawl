@@ -268,6 +268,13 @@ action_enum!(AgentAction, "agent", [
     PlanExecute => "plan_execute",
     PageSummary => "page_summary",
     ErrorContext => "error_context",
+    // Autonomous agent auto
+    AgentAutoRun => "agent_auto_run",
+    AgentAutoPlan => "agent_auto_plan",
+    AgentAutoStatus => "agent_auto_status",
+    AgentAutoStop => "agent_auto_stop",
+    AgentAutoResume => "agent_auto_resume",
+    AgentAutoResult => "agent_auto_result",
 ]);
 
 action_enum!(StealthAction, "stealth", [

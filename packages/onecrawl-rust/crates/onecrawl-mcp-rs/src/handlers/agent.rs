@@ -2235,4 +2235,130 @@ impl OneCrawlMcp {
             serde_json::from_str(&text).unwrap_or(serde_json::json!({"raw": text}));
         json_ok(&parsed)
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Agent Auto — autonomous goal-based browser automation
+    // ════════════════════════════════════════════════════════════════
+
+    pub(crate) async fn agent_auto_run(
+        &self,
+        p: AgentAutoRunParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let config = build_auto_config_from_run_params(p);
+        let result = onecrawl_cdp::agent_auto::agent_auto_run(&page, config)
+            .await
+            .mcp()?;
+        json_ok(&result)
+    }
+
+    pub(crate) async fn agent_auto_plan(
+        &self,
+        p: AgentAutoPlanParams,
+    ) -> Result<CallToolResult, McpError> {
+        let config = onecrawl_cdp::agent_auto::AgentAutoConfig {
+            goal: p.goal,
+            verbose: p.verbose.unwrap_or(false),
+            ..Default::default()
+        };
+        let steps = onecrawl_cdp::agent_auto::agent_auto_plan(&config).mcp()?;
+        json_ok(&serde_json::json!({
+            "goal": config.goal,
+            "steps": steps,
+            "steps_count": steps.len(),
+        }))
+    }
+
+    pub(crate) async fn agent_auto_status(
+        &self,
+        _p: AgentAutoStatusParams,
+    ) -> Result<CallToolResult, McpError> {
+        // Status is a point-in-time snapshot; with sync execution the run
+        // is either done or hasn't started. Return a simple indication.
+        json_ok(&serde_json::json!({
+            "status": "idle",
+            "message": "agent_auto runs synchronously; use agent_auto_run to start"
+        }))
+    }
+
+    pub(crate) async fn agent_auto_stop(
+        &self,
+        _p: AgentAutoStopParams,
+    ) -> Result<CallToolResult, McpError> {
+        json_ok(&serde_json::json!({
+            "status": "no_active_run",
+            "message": "agent_auto runs synchronously; cost/timeout caps provide automatic stopping"
+        }))
+    }
+
+    pub(crate) async fn agent_auto_resume(
+        &self,
+        p: AgentAutoResumeParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let config = onecrawl_cdp::agent_auto::AgentAutoConfig {
+            goal: String::new(), // overridden by saved state
+            resume_from: Some(p.state_file),
+            max_steps: p.max_steps.unwrap_or(50),
+            max_cost_cents: p.max_cost_cents,
+            verbose: p.verbose.unwrap_or(false),
+            save_state: Some("/tmp/onecrawl-agent-auto-state.json".into()),
+            ..Default::default()
+        };
+        let result = onecrawl_cdp::agent_auto::agent_auto_run(&page, config)
+            .await
+            .mcp()?;
+        json_ok(&result)
+    }
+
+    pub(crate) async fn agent_auto_result(
+        &self,
+        _p: AgentAutoResultParams,
+    ) -> Result<CallToolResult, McpError> {
+        // Check if state file exists from previous run
+        let state_path = "/tmp/onecrawl-agent-auto-state.json";
+        match std::fs::read_to_string(state_path) {
+            Ok(json) => {
+                let parsed: serde_json::Value =
+                    serde_json::from_str(&json).unwrap_or(serde_json::json!({"error": "invalid state"}));
+                json_ok(&parsed)
+            }
+            Err(_) => {
+                json_ok(&serde_json::json!({
+                    "status": "no_result",
+                    "message": "no previous agent_auto run found"
+                }))
+            }
+        }
+    }
+}
+
+fn build_auto_config_from_run_params(
+    p: AgentAutoRunParams,
+) -> onecrawl_cdp::agent_auto::AgentAutoConfig {
+    let output_format = p.output_format.as_deref().and_then(|f| match f {
+        "csv" => Some(onecrawl_cdp::agent_auto::OutputFormat::Csv),
+        "json" => Some(onecrawl_cdp::agent_auto::OutputFormat::Json),
+        "jsonl" => Some(onecrawl_cdp::agent_auto::OutputFormat::Jsonl),
+        _ => None,
+    });
+
+    onecrawl_cdp::agent_auto::AgentAutoConfig {
+        goal: p.goal,
+        model: p.model,
+        max_steps: p.max_steps.unwrap_or(50),
+        max_cost_cents: p.max_cost_cents,
+        screenshot_every_step: p.screenshot_every_step.unwrap_or(false),
+        screenshot_dir: p.screenshot_dir,
+        output: p.output,
+        output_format,
+        resume_from: None,
+        save_state: p.save_state,
+        verbose: p.verbose.unwrap_or(false),
+        allowed_domains: p.allowed_domains.unwrap_or_default(),
+        blocked_domains: p.blocked_domains.unwrap_or_default(),
+        timeout_secs: p.timeout_secs,
+        use_memory: p.use_memory.unwrap_or(true),
+        memory_path: p.memory_path,
+    }
 }

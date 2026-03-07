@@ -1083,6 +1083,30 @@ impl OneCrawlMcp {
                 let params: ErrorContextParams = parse_params(v, "error_context")?;
                 self.error_context(params).await
             }
+            AgentAction::AgentAutoRun => {
+                let params: AgentAutoRunParams = parse_params(v, "agent_auto_run")?;
+                self.agent_auto_run(params).await
+            }
+            AgentAction::AgentAutoPlan => {
+                let params: AgentAutoPlanParams = parse_params(v, "agent_auto_plan")?;
+                self.agent_auto_plan(params).await
+            }
+            AgentAction::AgentAutoStatus => {
+                let params: AgentAutoStatusParams = parse_params(v, "agent_auto_status")?;
+                self.agent_auto_status(params).await
+            }
+            AgentAction::AgentAutoStop => {
+                let params: AgentAutoStopParams = parse_params(v, "agent_auto_stop")?;
+                self.agent_auto_stop(params).await
+            }
+            AgentAction::AgentAutoResume => {
+                let params: AgentAutoResumeParams = parse_params(v, "agent_auto_resume")?;
+                self.agent_auto_resume(params).await
+            }
+            AgentAction::AgentAutoResult => {
+                let params: AgentAutoResultParams = parse_params(v, "agent_auto_result")?;
+                self.agent_auto_result(params).await
+            }
         }
     }
 

@@ -374,3 +374,191 @@ pub async fn element_detail_cli(selector: &str) {
         Ok(())
     }).await;
 }
+
+
+// ════════════════════════════════════════════════════════════════
+//  Agent Auto — autonomous goal-based browser automation CLI
+// ════════════════════════════════════════════════════════════════
+
+#[allow(clippy::too_many_arguments)]
+pub async fn agent_auto_run(
+    goal: Option<&str>,
+    model: Option<&str>,
+    max_steps: u32,
+    max_cost: Option<f64>,
+    screenshot_every_step: bool,
+    output: Option<&str>,
+    output_format: Option<&str>,
+    verbose: bool,
+    timeout: Option<u64>,
+    resume: Option<&str>,
+    save_state: Option<&str>,
+) {
+    let goal_str = goal.unwrap_or("").to_string();
+    if goal_str.is_empty() && resume.is_none() {
+        println!("{} --goal is required (or use --resume <state_file>)", "✗".red());
+        return;
+    }
+
+    let model = model.map(String::from);
+    let output = output.map(String::from);
+    let output_format_parsed = output_format.and_then(|f| match f {
+        "csv" => Some(onecrawl_cdp::agent_auto::OutputFormat::Csv),
+        "json" => Some(onecrawl_cdp::agent_auto::OutputFormat::Json),
+        "jsonl" => Some(onecrawl_cdp::agent_auto::OutputFormat::Jsonl),
+        _ => None,
+    });
+    let resume = resume.map(String::from);
+    let save_state = save_state.map(String::from);
+    let max_cost_cents = max_cost.map(|d| (d * 100.0) as u32);
+
+    with_page(|page| async move {
+        let config = onecrawl_cdp::agent_auto::AgentAutoConfig {
+            goal: goal_str.clone(),
+            model,
+            max_steps,
+            max_cost_cents,
+            screenshot_every_step,
+            screenshot_dir: None,
+            output,
+            output_format: output_format_parsed,
+            resume_from: resume,
+            save_state,
+            verbose,
+            allowed_domains: Vec::new(),
+            blocked_domains: Vec::new(),
+            timeout_secs: timeout,
+            use_memory: true,
+            memory_path: None,
+        };
+
+        let mut agent = onecrawl_cdp::agent_auto::AgentAuto::new(config);
+        match agent.plan() {
+            Ok(steps) => {
+                println!("{} Planned {} steps for goal: {}",
+                    "✓".green(), steps.len().to_string().cyan(), goal_str);
+                if verbose {
+                    for step in &steps {
+                        println!("  {} [{}] {}", "→".dimmed(), step.action_type.cyan(), step.description);
+                    }
+                }
+            }
+            Err(e) => {
+                println!("{} Planning failed: {}", "✗".red(), e);
+                return Err(e.to_string());
+            }
+        }
+
+        match agent.execute(&page).await {
+            Ok(result) => {
+                if result.success {
+                    println!("{} Goal achieved: {}/{} steps completed in {:.1}s",
+                        "✓".green(),
+                        result.steps_completed.to_string().cyan(),
+                        result.steps_total.to_string().cyan(),
+                        result.duration_secs);
+                } else {
+                    println!("{} Goal partially completed: {}/{} steps, {} errors",
+                        "⚠".yellow(),
+                        result.steps_completed,
+                        result.steps_total,
+                        result.errors.len());
+                }
+                if !result.extracted_data.is_empty() {
+                    println!("  {} items extracted", result.extracted_data.len());
+                }
+                if let Some(ref path) = result.output_path {
+                    println!("  Output: {}", path);
+                }
+                println!("  Cost: {} cents", result.cost_cents);
+                if verbose {
+                    println!("{}", serde_json::to_string_pretty(&result).unwrap_or_default());
+                }
+                Ok(())
+            }
+            Err(e) => {
+                println!("{} Execution failed: {}", "✗".red(), e);
+                Err(e.to_string())
+            }
+        }
+    }).await;
+}
+
+pub async fn agent_auto_plan_cli(goal: &str, verbose: bool) {
+    let config = onecrawl_cdp::agent_auto::AgentAutoConfig {
+        goal: goal.to_string(),
+        verbose,
+        ..Default::default()
+    };
+    match onecrawl_cdp::agent_auto::agent_auto_plan(&config) {
+        Ok(steps) => {
+            println!("{} Planned {} steps for: {}", "✓".green(), steps.len().to_string().cyan(), goal);
+            for step in &steps {
+                let status_icon = match step.status {
+                    onecrawl_cdp::agent_auto::StepStatus::Pending => "○",
+                    onecrawl_cdp::agent_auto::StepStatus::Completed => "✓",
+                    _ => "·",
+                };
+                println!("  {} [{}] {}", status_icon, step.action_type.cyan(), step.description);
+                if verbose {
+                    if let Some(ref target) = step.target {
+                        println!("    target: {}", target.dimmed());
+                    }
+                }
+            }
+        }
+        Err(e) => println!("{} Planning failed: {}", "✗".red(), e),
+    }
+}
+
+pub async fn agent_auto_status_cli() {
+    println!("{} Agent auto status: idle (runs synchronously)", "ℹ".cyan());
+    let state_path = "/tmp/onecrawl-agent-auto-state.json";
+    if std::path::Path::new(state_path).exists() {
+        if let Ok(json) = std::fs::read_to_string(state_path) {
+            if let Ok(state) = serde_json::from_str::<onecrawl_cdp::agent_auto::AgentAutoState>(&json) {
+                let completed = state.steps.iter()
+                    .filter(|s| s.status == onecrawl_cdp::agent_auto::StepStatus::Completed)
+                    .count();
+                println!("  Last run: {} — {}/{} steps, {} cents",
+                    state.config.goal, completed, state.steps.len(), state.cost_cents);
+            }
+        }
+    }
+}
+
+pub async fn agent_auto_stop_cli(_save_state: Option<&str>) {
+    println!("{} Agent auto runs synchronously; use cost/timeout caps for automatic stopping", "ℹ".cyan());
+}
+
+pub async fn agent_auto_result_cli() {
+    let state_path = "/tmp/onecrawl-agent-auto-state.json";
+    if std::path::Path::new(state_path).exists() {
+        match std::fs::read_to_string(state_path) {
+            Ok(json) => {
+                if let Ok(state) = serde_json::from_str::<onecrawl_cdp::agent_auto::AgentAutoState>(&json) {
+                    let completed = state.steps.iter()
+                        .filter(|s| s.status == onecrawl_cdp::agent_auto::StepStatus::Completed)
+                        .count();
+                    let failed = state.steps.iter()
+                        .filter(|s| s.status == onecrawl_cdp::agent_auto::StepStatus::Failed)
+                        .count();
+                    println!("{} Last run result:", "✓".green());
+                    println!("  Goal: {}", state.config.goal);
+                    println!("  Steps: {}/{} completed, {} failed", completed, state.steps.len(), failed);
+                    println!("  Cost: {} cents", state.cost_cents);
+                    println!("  Extracted: {} items", state.extracted_data.len());
+                    println!("  Timestamp: {}", state.timestamp);
+                    if let Some(ref url) = state.url {
+                        println!("  Last URL: {}", url);
+                    }
+                } else {
+                    println!("{}", json);
+                }
+            }
+            Err(e) => println!("{} Could not read result: {}", "✗".red(), e),
+        }
+    } else {
+        println!("{} No previous agent_auto run found", "ℹ".cyan());
+    }
+}
