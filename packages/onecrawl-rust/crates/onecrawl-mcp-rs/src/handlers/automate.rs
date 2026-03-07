@@ -1116,4 +1116,13 @@ impl OneCrawlMcp {
         let result = onecrawl_cdp::harness::gc_tabs_info(&page).await.mcp()?;
         json_ok(&result)
     }
+
+    pub(crate) async fn watchdog(
+        &self,
+        _p: WatchdogParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let result = onecrawl_cdp::harness::watchdog_status(&page).await.mcp()?;
+        json_ok(&result)
+    }
 }

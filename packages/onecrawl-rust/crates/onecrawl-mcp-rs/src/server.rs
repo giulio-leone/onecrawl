@@ -1305,6 +1305,10 @@ impl OneCrawlMcp {
                 let params: GcTabsParams = parse_params(v, "gc_tabs")?;
                 self.gc_tabs(params).await
             }
+            AutomateAction::Watchdog => {
+                let params: WatchdogParams = parse_params(v, "watchdog")?;
+                self.watchdog(params).await
+            }
         }
     }
 

@@ -349,6 +349,7 @@ action_enum!(AutomateAction, "automate", [
     // Long-running harness
     ReconnectCdp => "reconnect_cdp",
     GcTabs => "gc_tabs",
+    Watchdog => "watchdog",
 ]);
 
 action_enum!(PerfAction, "perf", [

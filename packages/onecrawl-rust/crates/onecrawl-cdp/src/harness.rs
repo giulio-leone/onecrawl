@@ -330,3 +330,66 @@ pub async fn gc_tabs_info(page: &Page) -> Result<Value> {
         "note": "Tab GC requires browser-level access. Use session pool management for multi-tab cleanup."
     }))
 }
+
+/// Watchdog: monitor browser health and report crash/hang indicators
+pub async fn watchdog_status(page: &Page) -> Result<Value> {
+    let start = std::time::Instant::now();
+    
+    // Test responsiveness with timeout
+    let responsive = match tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        page.evaluate("document.readyState".to_string()),
+    ).await {
+        Ok(Ok(val)) => {
+            let state: String = val.into_value().unwrap_or_default();
+            serde_json::json!({
+                "alive": true,
+                "ready_state": state,
+                "response_ms": start.elapsed().as_millis()
+            })
+        }
+        Ok(Err(e)) => serde_json::json!({
+            "alive": false,
+            "error": e.to_string(),
+            "response_ms": start.elapsed().as_millis()
+        }),
+        Err(_) => serde_json::json!({
+            "alive": false,
+            "error": "timeout (5s)",
+            "response_ms": 5000
+        }),
+    };
+
+    // Get memory info if alive
+    let memory = if responsive["alive"].as_bool().unwrap_or(false) {
+        let js = r#"
+            (() => {
+                const perf = performance.memory || {};
+                return JSON.stringify({
+                    used_js_heap: perf.usedJSHeapSize || 0,
+                    total_js_heap: perf.totalJSHeapSize || 0,
+                    heap_limit: perf.jsHeapSizeLimit || 0
+                });
+            })()
+        "#.to_string();
+        match page.evaluate(js).await {
+            Ok(val) => {
+                let s: String = val.into_value().unwrap_or_else(|_| "{}".to_string());
+                serde_json::from_str(&s).unwrap_or(serde_json::json!({}))
+            }
+            Err(_) => serde_json::json!({})
+        }
+    } else {
+        serde_json::json!({})
+    };
+
+    Ok(serde_json::json!({
+        "action": "watchdog",
+        "browser": responsive,
+        "memory": memory,
+        "timestamp": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+    }))
+}

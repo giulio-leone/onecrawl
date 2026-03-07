@@ -2392,3 +2392,9 @@ pub struct GcTabsParams {
     /// Maximum number of tabs to keep (default: 10)
     pub max_count: Option<usize>,
 }
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct WatchdogParams {
+    /// Include memory details (default: true)
+    pub include_memory: Option<bool>,
+}
