@@ -586,6 +586,12 @@ fn execute_step<'a>(
                         }
                     }
                     LoopSource::Range { start, end } => {
+                        let count = (*end).saturating_sub(*start).max(0);
+                        if count > 100_000 {
+                            return Err(Error::Cdp(format!(
+                                "loop range too large: {count} items (max 100000)"
+                            )));
+                        }
                         (*start..*end).map(|i| serde_json::json!(i)).collect()
                     }
                 };
