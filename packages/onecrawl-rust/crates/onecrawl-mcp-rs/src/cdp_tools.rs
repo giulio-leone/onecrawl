@@ -2398,3 +2398,79 @@ pub struct WatchdogParams {
     /// Include memory details (default: true)
     pub include_memory: Option<bool>,
 }
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct StateInspectParams {
+    /// Optional dot-separated path into store state (e.g., "user.profile")
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct FormWizardTrackParams {
+    /// Optional form index to inspect (default: all forms)
+    pub form_index: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct DynamicImportWaitParams {
+    /// Pattern to match against loaded script URLs
+    pub module_pattern: String,
+    /// Timeout in ms (default: 10000)
+    pub timeout_ms: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ParallelExecParams {
+    /// List of JavaScript expressions to execute in parallel
+    pub actions: Vec<String>,
+}
+
+// ──────────────── Session context / auto-chain / think params ──────────────
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct SessionContextParams {
+    /// Command: "set", "get", "get_all", "clear"
+    pub command: String,
+    /// Key for set/get operations
+    pub key: Option<String>,
+    /// Value for set operation
+    pub value: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct AutoChainParams {
+    /// List of JavaScript expressions to execute in sequence
+    pub actions: Vec<String>,
+    /// Error handling: "retry", "skip", "abort" (default: "skip")
+    pub on_error: Option<String>,
+    /// Max retries per action (default: 2)
+    pub max_retries: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ThinkParams {
+    /// Optional context to consider (ignored, for LLM prompt chaining)
+    pub context: Option<String>,
+}
+
+// ──────────────── Coordinate click / multi-page sync / input replay params ──
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ClickAtCoordsParams {
+    /// X coordinate (viewport pixels)
+    pub x: f64,
+    /// Y coordinate (viewport pixels)
+    pub y: f64,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct MultiPageSyncParams {
+    /// Optional: specific tab indices to query (default: all)
+    pub tab_indices: Option<Vec<usize>>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct InputReplayParams {
+    /// Sequence of input events. Each event has "type" (click/type/scroll/wait) and params.
+    pub events: Vec<serde_json::Value>,
+}

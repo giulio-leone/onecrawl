@@ -713,4 +713,45 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
+    pub(crate) async fn click_at_coords(
+        &self,
+        p: ClickAtCoordsParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let result = onecrawl_cdp::agent::click_at_coords(&page, p.x, p.y).await.mcp()?;
+        json_ok(&result)
+    }
+
+    pub(crate) async fn multi_page_sync(
+        &self,
+        _p: MultiPageSyncParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"
+            JSON.stringify({
+                url: window.location.href,
+                title: document.title,
+                ready_state: document.readyState,
+                timestamp: Date.now()
+            })
+        "#.to_string();
+        let result = page.evaluate(js).await.map_err(|e| mcp_err(format!("multi_page_sync: {e}")))?;
+        let raw: String = result.into_value().unwrap_or_else(|_| "{}".to_string());
+        let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap_or(serde_json::json!({}));
+        json_ok(&serde_json::json!({
+            "action": "multi_page_sync",
+            "pages": [parsed],
+            "note": "Multi-tab sync requires browser-level access. Shows current page state."
+        }))
+    }
+
+    pub(crate) async fn input_replay(
+        &self,
+        p: InputReplayParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let result = onecrawl_cdp::agent::input_replay(&page, &p.events).await.mcp()?;
+        json_ok(&result)
+    }
+
 }

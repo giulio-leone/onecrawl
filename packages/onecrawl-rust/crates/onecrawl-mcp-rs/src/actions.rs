@@ -144,6 +144,10 @@ action_enum!(BrowserAction, "browser", [
     TriggerLazyLoad => "trigger_lazy_load",
     HealthCheck => "health_check",
     CircuitBreaker => "circuit_breaker",
+    StateInspect => "state_inspect",
+    FormWizardTrack => "form_wizard_track",
+    DynamicImportWait => "dynamic_import_wait",
+    ParallelExec => "parallel_exec",
 ]);
 
 action_enum!(CrawlAction, "crawl", [
@@ -202,6 +206,10 @@ action_enum!(AgentAction, "agent", [
     AgentLoop => "agent_loop",
     GoalAssert => "goal_assert",
     AnnotatedObserve => "annotated_observe",
+    // Session context, auto-chain, structured reasoning
+    SessionContext => "session_context",
+    AutoChain => "auto_chain",
+    Think => "think",
 ]);
 
 action_enum!(StealthAction, "stealth", [
@@ -312,6 +320,10 @@ action_enum!(ComputerAction, "computer", [
     // Annotated screenshot & adaptive retry
     AnnotatedScreenshot => "annotated_screenshot",
     AdaptiveRetry => "adaptive_retry",
+    // Coordinate click, multi-page sync, input replay
+    ClickAtCoords => "click_at_coords",
+    MultiPageSync => "multi_page_sync",
+    InputReplay => "input_replay",
 ]);
 
 action_enum!(MemoryAction, "memory", [

@@ -298,3 +298,227 @@ pub async fn trigger_lazy_load(page: &Page, selector: &str) -> Result<usize> {
     let count: usize = result.into_value().unwrap_or(0);
     Ok(count)
 }
+
+/// Inspect SPA state stores (Redux, Zustand, Pinia, MobX)
+pub async fn state_inspect(page: &Page, store_path: Option<&str>) -> Result<serde_json::Value> {
+    let path = store_path.unwrap_or("");
+    let js = format!(r#"
+        (() => {{
+            const stores = {{}};
+            
+            // Redux
+            try {{
+                if (window.__REDUX_DEVTOOLS_EXTENSION__) stores.redux_devtools = true;
+                if (window.__store) stores.redux_window = typeof window.__store.getState === 'function';
+                const reduxEl = document.querySelector('[data-reactroot]');
+                if (reduxEl && reduxEl._reactInternalInstance) stores.react_internal = true;
+            }} catch(e) {{}}
+            
+            // Try to get Redux state
+            try {{
+                if (window.__store && window.__store.getState) {{
+                    const state = window.__store.getState();
+                    if ('{path}') {{
+                        const parts = '{path}'.split('.');
+                        let val = state;
+                        for (const p of parts) {{ if (val) val = val[p]; }}
+                        stores.redux_state = val;
+                    }} else {{
+                        stores.redux_state = Object.keys(state);
+                    }}
+                }}
+            }} catch(e) {{ stores.redux_error = e.message; }}
+            
+            // Zustand
+            try {{
+                const zustandStores = Object.entries(window).filter(([k,v]) => v && typeof v.getState === 'function' && typeof v.subscribe === 'function');
+                if (zustandStores.length > 0) {{
+                    stores.zustand = {{}};
+                    zustandStores.forEach(([name, store]) => {{
+                        stores.zustand[name] = Object.keys(store.getState());
+                    }});
+                }}
+            }} catch(e) {{}}
+            
+            // Next.js
+            try {{
+                if (window.__NEXT_DATA__) stores.nextjs = {{ page: window.__NEXT_DATA__.page, buildId: window.__NEXT_DATA__.buildId }};
+            }} catch(e) {{}}
+            
+            // Nuxt
+            try {{
+                if (window.__nuxt || window.__NUXT__) stores.nuxt = true;
+                if (window.__NUXT_DATA__) stores.nuxt_data = true;
+            }} catch(e) {{}}
+            
+            // Vue/Pinia
+            try {{
+                if (window.__vue_app__) stores.vue = true;
+                if (window.__pinia) {{
+                    stores.pinia = Object.keys(window.__pinia.state.value || {{}});
+                }}
+            }} catch(e) {{}}
+            
+            return JSON.stringify(stores);
+        }})()
+    "#);
+
+    let result = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Cdp(format!("state_inspect: {e}")))?;
+    let raw: String = result.into_value().unwrap_or_else(|_| "{}".to_string());
+    Ok(serde_json::from_str(&raw).unwrap_or(serde_json::json!({})))
+}
+
+/// Track multi-step form wizard state
+pub async fn form_wizard_track(page: &Page) -> Result<serde_json::Value> {
+    let js = r#"
+        (() => {
+            const forms = document.querySelectorAll('form');
+            const wizards = [];
+            
+            forms.forEach((form, fi) => {
+                const inputs = form.querySelectorAll('input, select, textarea');
+                const fieldsets = form.querySelectorAll('fieldset');
+                const steps = form.querySelectorAll('[data-step], .step, .wizard-step, [class*="step"]');
+                
+                const formData = {};
+                inputs.forEach(input => {
+                    const name = input.name || input.id || `field_${input.type}`;
+                    if (input.type === 'checkbox' || input.type === 'radio') {
+                        formData[name] = input.checked;
+                    } else {
+                        formData[name] = input.value || '';
+                    }
+                });
+                
+                // Detect current step
+                let currentStep = -1;
+                let totalSteps = Math.max(steps.length, fieldsets.length);
+                steps.forEach((step, si) => {
+                    const visible = step.offsetParent !== null || step.style.display !== 'none';
+                    if (visible) currentStep = si + 1;
+                });
+                
+                // Check for progress indicators
+                const progress = form.querySelector('progress, [role="progressbar"], .progress');
+                
+                wizards.push({
+                    form_index: fi,
+                    action: form.action || '',
+                    method: form.method || 'get',
+                    total_fields: inputs.length,
+                    filled_fields: Array.from(inputs).filter(i => i.value || i.checked).length,
+                    current_step: currentStep,
+                    total_steps: totalSteps,
+                    has_progress: !!progress,
+                    data: formData,
+                    valid: form.checkValidity()
+                });
+            });
+            
+            return JSON.stringify({
+                forms_found: wizards.length,
+                wizards
+            });
+        })()
+    "#.to_string();
+
+    let result = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Cdp(format!("form_wizard_track: {e}")))?;
+    let raw: String = result.into_value().unwrap_or_else(|_| "{}".to_string());
+    Ok(serde_json::from_str(&raw).unwrap_or(serde_json::json!({})))
+}
+
+/// Wait for dynamic imports / code-split chunks to load
+pub async fn dynamic_import_wait(page: &Page, module_pattern: &str, timeout_ms: u64) -> Result<serde_json::Value> {
+    let js = format!(r#"
+        new Promise((resolve) => {{
+            const start = Date.now();
+            const pattern = '{}';
+            const timeout = {};
+            
+            // Monitor performance entries for script loading
+            const check = () => {{
+                const entries = performance.getEntriesByType('resource')
+                    .filter(e => e.initiatorType === 'script' && e.name.includes(pattern));
+                
+                if (entries.length > 0) {{
+                    resolve(JSON.stringify({{
+                        loaded: true,
+                        chunks: entries.map(e => ({{ url: e.name, duration: Math.round(e.duration), size: e.transferSize || 0 }})),
+                        wait_ms: Date.now() - start
+                    }}));
+                    return;
+                }}
+                
+                if (Date.now() - start > timeout) {{
+                    // Return what we found even on timeout
+                    const all = performance.getEntriesByType('resource')
+                        .filter(e => e.initiatorType === 'script')
+                        .map(e => e.name);
+                    resolve(JSON.stringify({{
+                        loaded: false,
+                        available_scripts: all.slice(-20),
+                        wait_ms: timeout
+                    }}));
+                    return;
+                }}
+                
+                setTimeout(check, 200);
+            }};
+            check();
+        }})
+    "#, module_pattern.replace('\'', "\\'"), timeout_ms);
+
+    let result = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Cdp(format!("dynamic_import_wait: {e}")))?;
+    let raw: String = result.into_value().unwrap_or_else(|_| "{}".to_string());
+    Ok(serde_json::from_str(&raw).unwrap_or(serde_json::json!({})))
+}
+
+/// Execute multiple JS actions in parallel
+pub async fn parallel_exec(page: &Page, actions: &[String]) -> Result<serde_json::Value> {
+    let actions_json: Vec<String> = actions.iter().enumerate().map(|(i, a)| {
+        format!(r#"
+            (async () => {{
+                try {{
+                    const r = await (async () => {{ {} }})();
+                    return {{ index: {}, status: 'fulfilled', value: r === undefined ? null : r }};
+                }} catch(e) {{
+                    return {{ index: {}, status: 'rejected', reason: e.message }};
+                }}
+            }})()
+        "#, a, i, i)
+    }).collect();
+
+    let js = format!(r#"
+        (async () => {{
+            const results = await Promise.allSettled([{}]);
+            return JSON.stringify(results.map((r, i) => ({{
+                index: i,
+                status: r.status,
+                value: r.status === 'fulfilled' ? r.value : null,
+                reason: r.status === 'rejected' ? r.reason : null
+            }})));
+        }})()
+    "#, actions_json.join(","));
+
+    let result = page
+        .evaluate(js)
+        .await
+        .map_err(|e| Error::Cdp(format!("parallel_exec: {e}")))?;
+    let raw: String = result.into_value().unwrap_or_else(|_| "[]".to_string());
+    let parsed: serde_json::Value = serde_json::from_str(&raw).unwrap_or(serde_json::json!([]));
+
+    Ok(serde_json::json!({
+        "action": "parallel_exec",
+        "total": actions.len(),
+        "results": parsed
+    }))
+}

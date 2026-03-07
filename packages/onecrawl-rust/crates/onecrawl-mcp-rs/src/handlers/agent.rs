@@ -1419,4 +1419,35 @@ impl OneCrawlMcp {
             .mcp()?;
         json_ok(&result)
     }
+
+    pub(crate) async fn session_context(
+        &self,
+        p: SessionContextParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let result = onecrawl_cdp::agent::session_context(
+            &page, &p.command, p.key.as_deref(), p.value.as_deref()
+        ).await.mcp()?;
+        json_ok(&result)
+    }
+
+    pub(crate) async fn auto_chain(
+        &self,
+        p: AutoChainParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let on_error = p.on_error.as_deref().unwrap_or("skip");
+        let max_retries = p.max_retries.unwrap_or(2);
+        let result = onecrawl_cdp::agent::auto_chain(&page, &p.actions, on_error, max_retries).await.mcp()?;
+        json_ok(&result)
+    }
+
+    pub(crate) async fn think(
+        &self,
+        _p: ThinkParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let result = onecrawl_cdp::agent::think(&page).await.mcp()?;
+        json_ok(&result)
+    }
 }

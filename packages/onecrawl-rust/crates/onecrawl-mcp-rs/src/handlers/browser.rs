@@ -2709,4 +2709,41 @@ impl OneCrawlMcp {
             "state": parsed
         }))
     }
+
+    pub(crate) async fn state_inspect(
+        &self,
+        p: StateInspectParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let result = onecrawl_cdp::spa::state_inspect(&page, p.path.as_deref()).await.mcp()?;
+        json_ok(&result)
+    }
+
+    pub(crate) async fn form_wizard_track(
+        &self,
+        _p: FormWizardTrackParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let result = onecrawl_cdp::spa::form_wizard_track(&page).await.mcp()?;
+        json_ok(&result)
+    }
+
+    pub(crate) async fn dynamic_import_wait(
+        &self,
+        p: DynamicImportWaitParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let timeout = p.timeout_ms.unwrap_or(10000);
+        let result = onecrawl_cdp::spa::dynamic_import_wait(&page, &p.module_pattern, timeout).await.mcp()?;
+        json_ok(&result)
+    }
+
+    pub(crate) async fn parallel_exec(
+        &self,
+        p: ParallelExecParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let result = onecrawl_cdp::spa::parallel_exec(&page, &p.actions).await.mcp()?;
+        json_ok(&result)
+    }
 }

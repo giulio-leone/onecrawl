@@ -553,6 +553,22 @@ impl OneCrawlMcp {
                 let params: CircuitBreakerParams = parse_params(v, "circuit_breaker")?;
                 self.circuit_breaker(params).await
             }
+            BrowserAction::StateInspect => {
+                let params: StateInspectParams = parse_params(v, "state_inspect")?;
+                self.state_inspect(params).await
+            }
+            BrowserAction::FormWizardTrack => {
+                let params: FormWizardTrackParams = parse_params(v, "form_wizard_track")?;
+                self.form_wizard_track(params).await
+            }
+            BrowserAction::DynamicImportWait => {
+                let params: DynamicImportWaitParams = parse_params(v, "dynamic_import_wait")?;
+                self.dynamic_import_wait(params).await
+            }
+            BrowserAction::ParallelExec => {
+                let params: ParallelExecParams = parse_params(v, "parallel_exec")?;
+                self.parallel_exec(params).await
+            }
         }
     }
 
@@ -593,7 +609,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "agent",
-        description = "AI agent orchestration — command chains, element screenshots, API capture, iframes (same-origin + cross-origin CDP), remote CDP, safety policies, skills, screencast, recording, iOS automation, and WCAG accessibility auditing.\n\nActions:\n- execute_chain {commands} — Execute multiple commands in sequence\n- element_screenshot {selector} — Screenshot a specific element\n- api_capture_start — Start capturing API calls\n- api_capture_summary — Get captured API call summary\n- iframe_list — List all iframes on page (DOM-based)\n- iframe_snapshot {index, interactive_only?} — Snapshot an iframe\n- iframe_eval_cdp {frame_url, expression} — Evaluate JS in cross-origin iframe via CDP (bypasses SOP)\n- iframe_click_cdp {frame_url, selector, human_like?} — Click element inside cross-origin iframe\n- iframe_frames — List all frames via CDP (includes cross-origin)\n- connect_remote {ws_url, headers?} — Connect to remote CDP\n- safety_set {policy} — Set safety policy JSON\n- safety_status — Get current safety policy status\n- skills_list — List available skills\n- screencast_start {quality?, max_width?, max_height?} — Start screencast\n- screencast_stop — Stop screencast\n- screencast_frame — Get latest screencast frame\n- recording_start {output?, fps?, quality?} — Start video recording\n- recording_stop — Stop recording and save\n- recording_status — Get recording status\n- ios_devices — List iOS devices\n- ios_connect {device_id, wda_url?} — Connect to iOS device\n- ios_navigate {url} — Navigate iOS Safari\n- ios_tap {x, y} — Tap on iOS screen\n- ios_screenshot — Take iOS screenshot\n- task_decompose {goal, context?, max_depth?} — Decompose goal into subtasks\n- task_plan {tasks, strategy?} — Generate execution plan\n- task_status — Get current task plans status\n- vision_describe {selector?, format?} — Describe page/element visually\n- vision_locate {description, strategy?} — Find element by description\n- vision_compare {baseline, current?, threshold?} — Compare page states\n- wcag_audit {level?, selector?} — Full WCAG compliance audit\n- aria_tree — Build ARIA accessibility tree\n- contrast_check {selector?, threshold?} — Color contrast ratio check\n- landmark_nav — List ARIA landmark regions\n- focus_order — Map tab/focus order of interactive elements\n- alt_text_audit {selector?, include_decorative?} — Audit image alt text\n- heading_structure — Validate heading hierarchy (h1-h6)\n- role_validate {selector?, roles?} — Validate ARIA roles and properties\n- keyboard_trap_detect — Detect keyboard focus traps\n- screen_reader_sim {selector?, max_elements?} — Simulate screen reader output"
+        description = "AI agent orchestration — command chains, element screenshots, API capture, iframes (same-origin + cross-origin CDP), remote CDP, safety policies, skills, screencast, recording, iOS automation, WCAG accessibility auditing, session context, auto-chain, and structured reasoning.\n\nActions:\n- execute_chain {commands} — Execute multiple commands in sequence\n- element_screenshot {selector} — Screenshot a specific element\n- api_capture_start — Start capturing API calls\n- api_capture_summary — Get captured API call summary\n- iframe_list — List all iframes on page (DOM-based)\n- iframe_snapshot {index, interactive_only?} — Snapshot an iframe\n- iframe_eval_cdp {frame_url, expression} — Evaluate JS in cross-origin iframe via CDP (bypasses SOP)\n- iframe_click_cdp {frame_url, selector, human_like?} — Click element inside cross-origin iframe\n- iframe_frames — List all frames via CDP (includes cross-origin)\n- connect_remote {ws_url, headers?} — Connect to remote CDP\n- safety_set {policy} — Set safety policy JSON\n- safety_status — Get current safety policy status\n- skills_list — List available skills\n- screencast_start {quality?, max_width?, max_height?} — Start screencast\n- screencast_stop — Stop screencast\n- screencast_frame — Get latest screencast frame\n- recording_start {output?, fps?, quality?} — Start video recording\n- recording_stop — Stop recording and save\n- recording_status — Get recording status\n- ios_devices — List iOS devices\n- ios_connect {device_id, wda_url?} — Connect to iOS device\n- ios_navigate {url} — Navigate iOS Safari\n- ios_tap {x, y} — Tap on iOS screen\n- ios_screenshot — Take iOS screenshot\n- task_decompose {goal, context?, max_depth?} — Decompose goal into subtasks\n- task_plan {tasks, strategy?} — Generate execution plan\n- task_status — Get current task plans status\n- vision_describe {selector?, format?} — Describe page/element visually\n- vision_locate {description, strategy?} — Find element by description\n- vision_compare {baseline, current?, threshold?} — Compare page states\n- wcag_audit {level?, selector?} — Full WCAG compliance audit\n- aria_tree — Build ARIA accessibility tree\n- contrast_check {selector?, threshold?} — Color contrast ratio check\n- landmark_nav — List ARIA landmark regions\n- focus_order — Map tab/focus order of interactive elements\n- alt_text_audit {selector?, include_decorative?} — Audit image alt text\n- heading_structure — Validate heading hierarchy (h1-h6)\n- role_validate {selector?, roles?} — Validate ARIA roles and properties\n- keyboard_trap_detect — Detect keyboard focus traps\n- screen_reader_sim {selector?, max_elements?} — Simulate screen reader output\n- session_context {command, key?, value?} — Store/retrieve persistent context (set/get/get_all/clear)\n- auto_chain {actions, on_error?, max_retries?} — Execute JS chain with error recovery\n- think {context?} — Structured reasoning: observe page state and recommend actions"
     )]
     async fn tool_agent(
         &self,
@@ -757,6 +773,18 @@ impl OneCrawlMcp {
             AgentAction::AnnotatedObserve => {
                 let params: AnnotatedObserveParams = parse_params(v, "annotated_observe")?;
                 self.annotated_observe(params).await
+            }
+            AgentAction::SessionContext => {
+                let params: SessionContextParams = parse_params(v, "session_context")?;
+                self.session_context(params).await
+            }
+            AgentAction::AutoChain => {
+                let params: AutoChainParams = parse_params(v, "auto_chain")?;
+                self.auto_chain(params).await
+            }
+            AgentAction::Think => {
+                let params: ThinkParams = parse_params(v, "think")?;
+                self.think(params).await
             }
         }
     }
@@ -1081,7 +1109,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "computer",
-        description = "AI computer use protocol, smart element resolution, browser pool, multi-browser fleet, and autonomous goal execution.\n\nActions:\n- act {action_type, coordinate?, text?, key?} — Perform computer action\n- observe {observation_type?} — Observe screen state\n- batch {actions} — Execute multiple actions in sequence\n- smart_find {description, strategy?} — Find element by description\n- smart_click {description} — Click element by description\n- smart_fill {description, value} — Fill input by description\n- pool_list — List browser pool instances\n- pool_status — Get pool status and stats\n- fleet_spawn {count?, fleet_name?} — Launch multi-browser fleet\n- fleet_broadcast {fleet_name, action} — Send action to all fleet instances\n- fleet_collect {fleet_name, selector?, attribute?} — Collect data from all instances\n- fleet_destroy {fleet_name} — Terminate fleet\n- fleet_status — Get all fleet statuses\n- fleet_balance {fleet_name, urls} — Distribute URLs across fleet\n- computer_use {goal, url?, max_steps?, screenshots?} — Autonomous goal execution with planning\n- goal_execute {plan_id, from_step?, until_step?} — Execute plan steps\n- step_verify {plan_id, step_id, expect?} — Verify step completion\n- auto_recover {plan_id, step_id, error?, max_retries?} — Auto-recover from failed steps"
+        description = "AI computer use protocol, smart element resolution, browser pool, multi-browser fleet, autonomous goal execution, coordinate clicks, multi-page sync, and input replay.\n\nActions:\n- act {action_type, coordinate?, text?, key?} — Perform computer action\n- observe {observation_type?} — Observe screen state\n- batch {actions} — Execute multiple actions in sequence\n- smart_find {description, strategy?} — Find element by description\n- smart_click {description} — Click element by description\n- smart_fill {description, value} — Fill input by description\n- pool_list — List browser pool instances\n- pool_status — Get pool status and stats\n- fleet_spawn {count?, fleet_name?} — Launch multi-browser fleet\n- fleet_broadcast {fleet_name, action} — Send action to all fleet instances\n- fleet_collect {fleet_name, selector?, attribute?} — Collect data from all instances\n- fleet_destroy {fleet_name} — Terminate fleet\n- fleet_status — Get all fleet statuses\n- fleet_balance {fleet_name, urls} — Distribute URLs across fleet\n- computer_use {goal, url?, max_steps?, screenshots?} — Autonomous goal execution with planning\n- goal_execute {plan_id, from_step?, until_step?} — Execute plan steps\n- step_verify {plan_id, step_id, expect?} — Verify step completion\n- auto_recover {plan_id, step_id, error?, max_retries?} — Auto-recover from failed steps\n- click_at_coords {x, y} — Click at viewport coordinates with element feedback\n- multi_page_sync {tab_indices?} — Get synchronized state from all pages\n- input_replay {events} — Replay a sequence of input events (click/type/scroll/wait)"
     )]
     async fn tool_computer(
         &self,
@@ -1168,6 +1196,18 @@ impl OneCrawlMcp {
             ComputerAction::AdaptiveRetry => {
                 let params: AdaptiveRetryParams = parse_params(v, "adaptive_retry")?;
                 self.adaptive_retry(params).await
+            }
+            ComputerAction::ClickAtCoords => {
+                let params: ClickAtCoordsParams = parse_params(v, "click_at_coords")?;
+                self.click_at_coords(params).await
+            }
+            ComputerAction::MultiPageSync => {
+                let params: MultiPageSyncParams = parse_params(v, "multi_page_sync")?;
+                self.multi_page_sync(params).await
+            }
+            ComputerAction::InputReplay => {
+                let params: InputReplayParams = parse_params(v, "input_replay")?;
+                self.input_replay(params).await
             }
         }
     }

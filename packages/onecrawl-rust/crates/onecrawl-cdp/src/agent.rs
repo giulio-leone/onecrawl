@@ -1,7 +1,7 @@
 //! Autonomous agent loop — observe → plan → act → verify cycles.
 
 use chromiumoxide::Page;
-use onecrawl_core::Result;
+use onecrawl_core::{Error, Result};
 use serde_json::Value;
 
 use crate::page::evaluate_js;
@@ -229,4 +229,336 @@ pub async fn annotated_observe(page: &Page) -> Result<Value> {
     "#;
 
     evaluate_js(page, js).await
+}
+
+/// Store/retrieve session context in page window object
+pub async fn session_context(
+    page: &Page,
+    command: &str,
+    key: Option<&str>,
+    value: Option<&str>,
+) -> Result<Value> {
+    let js = match command {
+        "set" => {
+            let k = key.unwrap_or("default");
+            let v = value.unwrap_or("");
+            format!(r#"
+                (() => {{
+                    if (!window.__onecrawl_ctx) window.__onecrawl_ctx = {{}};
+                    window.__onecrawl_ctx['{}'] = '{}';
+                    return JSON.stringify({{ action: 'set', key: '{}', stored: true }});
+                }})()
+            "#, k.replace('\'', "\\'"), v.replace('\'', "\\'"), k.replace('\'', "\\'"))
+        }
+        "get" => {
+            let k = key.unwrap_or("default");
+            format!(r#"
+                (() => {{
+                    if (!window.__onecrawl_ctx) return JSON.stringify({{ action: 'get', key: '{}', value: null }});
+                    return JSON.stringify({{ action: 'get', key: '{}', value: window.__onecrawl_ctx['{}'] || null }});
+                }})()
+            "#, k.replace('\'', "\\'"), k.replace('\'', "\\'"), k.replace('\'', "\\'"))
+        }
+        "get_all" => {
+            r#"
+                (() => {
+                    return JSON.stringify({ action: 'get_all', context: window.__onecrawl_ctx || {} });
+                })()
+            "#.to_string()
+        }
+        "clear" => {
+            r#"
+                (() => {
+                    window.__onecrawl_ctx = {};
+                    return JSON.stringify({ action: 'clear', cleared: true });
+                })()
+            "#.to_string()
+        }
+        _ => return Ok(serde_json::json!({"error": "unknown command"})),
+    };
+
+    let result = page.evaluate(js).await
+        .map_err(|e| Error::Cdp(format!("session_context: {e}")))?;
+    let raw: String = result.into_value().unwrap_or_else(|_| "{}".to_string());
+    Ok(serde_json::from_str(&raw).unwrap_or(serde_json::json!({})))
+}
+
+/// Execute a chain of JS actions with error recovery
+pub async fn auto_chain(
+    page: &Page,
+    actions: &[String],
+    on_error: &str,
+    max_retries: usize,
+) -> Result<Value> {
+    let mut results = Vec::new();
+
+    for (i, action_js) in actions.iter().enumerate() {
+        let mut success = false;
+        let mut last_err = String::new();
+        let mut attempts = 0;
+
+        for attempt in 0..=max_retries {
+            attempts = attempt + 1;
+            match page.evaluate(action_js.to_string()).await {
+                Ok(val) => {
+                    let r: String = val.into_value().unwrap_or_else(|_| "null".to_string());
+                    results.push(serde_json::json!({
+                        "step": i + 1,
+                        "status": "success",
+                        "result": r,
+                        "attempts": attempts
+                    }));
+                    success = true;
+                    break;
+                }
+                Err(e) => {
+                    last_err = e.to_string();
+                    if on_error != "retry" || attempt == max_retries {
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                }
+            }
+        }
+
+        if !success {
+            match on_error {
+                "skip" => {
+                    results.push(serde_json::json!({
+                        "step": i + 1,
+                        "status": "skipped",
+                        "error": last_err,
+                        "attempts": attempts
+                    }));
+                }
+                "abort" => {
+                    results.push(serde_json::json!({
+                        "step": i + 1,
+                        "status": "aborted",
+                        "error": last_err,
+                        "attempts": attempts
+                    }));
+                    return Ok(serde_json::json!({
+                        "status": "aborted",
+                        "completed_steps": i,
+                        "total_steps": actions.len(),
+                        "results": results
+                    }));
+                }
+                _ => {
+                    results.push(serde_json::json!({
+                        "step": i + 1,
+                        "status": "failed",
+                        "error": last_err,
+                        "attempts": attempts
+                    }));
+                }
+            }
+        }
+    }
+
+    let all_ok = results.iter().all(|r| r["status"] == "success");
+    Ok(serde_json::json!({
+        "status": if all_ok { "all_success" } else { "partial" },
+        "completed_steps": results.len(),
+        "total_steps": actions.len(),
+        "results": results
+    }))
+}
+
+/// Structured reasoning: observe and recommend actions
+pub async fn think(page: &Page) -> Result<Value> {
+    let js = r#"
+        (() => {
+            const state = {
+                url: window.location.href,
+                title: document.title,
+                ready: document.readyState,
+                scroll: { x: window.scrollX, y: window.scrollY, maxY: document.documentElement.scrollHeight - window.innerHeight },
+                viewport: { w: window.innerWidth, h: window.innerHeight }
+            };
+
+            const buttons = document.querySelectorAll('button, [role="button"]');
+            const links = document.querySelectorAll('a[href]');
+            const inputs = document.querySelectorAll('input, textarea, select');
+            const forms = document.querySelectorAll('form');
+
+            const ctas = Array.from(buttons).filter(b => {
+                const rect = b.getBoundingClientRect();
+                return rect.width > 50 && rect.height > 20 && rect.top < window.innerHeight;
+            }).map(b => ({
+                text: (b.innerText || '').trim().substring(0, 50),
+                tag: b.tagName.toLowerCase(),
+                type: b.type || '',
+                disabled: b.disabled
+            })).slice(0, 10);
+
+            const emptyInputs = Array.from(inputs).filter(i => {
+                return i.required && !i.value && i.getBoundingClientRect().width > 0;
+            }).map(i => ({
+                name: i.name || i.id || i.placeholder || i.type,
+                type: i.type
+            })).slice(0, 10);
+
+            const hasLogin = !!(document.querySelector('[type="password"]') || document.querySelector('form[action*="login"]'));
+            const hasSearch = !!(document.querySelector('[type="search"]') || document.querySelector('[name="q"]'));
+            const hasModal = !!(document.querySelector('[role="dialog"]') || document.querySelector('.modal.show'));
+            const hasCaptcha = !!(document.querySelector('[class*="captcha"]') || document.querySelector('iframe[src*="captcha"]'));
+            const isLoading = !!(document.querySelector('.loading, .spinner, [aria-busy="true"]'));
+
+            const analysis = {
+                page_type: hasLogin ? 'login_page' : hasSearch ? 'search_page' : hasModal ? 'modal_open' : 'content_page',
+                state,
+                interactive: {
+                    buttons: buttons.length,
+                    links: links.length,
+                    inputs: inputs.length,
+                    forms: forms.length
+                },
+                prominent_ctas: ctas,
+                empty_required: emptyInputs,
+                flags: { hasLogin, hasSearch, hasModal, hasCaptcha, isLoading },
+                recommendations: []
+            };
+
+            if (hasCaptcha) analysis.recommendations.push({ action: 'solve_captcha', priority: 'high', reason: 'CAPTCHA detected' });
+            if (hasModal) analysis.recommendations.push({ action: 'dismiss_modal', priority: 'high', reason: 'Modal blocking interaction' });
+            if (isLoading) analysis.recommendations.push({ action: 'wait', priority: 'high', reason: 'Page still loading' });
+            if (emptyInputs.length > 0) analysis.recommendations.push({ action: 'fill_form', priority: 'medium', reason: `${emptyInputs.length} required inputs empty` });
+            if (hasLogin) analysis.recommendations.push({ action: 'authenticate', priority: 'medium', reason: 'Login form detected' });
+            if (ctas.length > 0) analysis.recommendations.push({ action: 'click_cta', priority: 'low', reason: `${ctas.length} CTAs available` });
+            if (state.scroll.maxY > 0 && state.scroll.y === 0) analysis.recommendations.push({ action: 'scroll_explore', priority: 'low', reason: 'Page has scrollable content' });
+
+            return JSON.stringify(analysis);
+        })()
+    "#.to_string();
+
+    let result = page.evaluate(js).await
+        .map_err(|e| Error::Cdp(format!("think: {e}")))?;
+    let raw: String = result.into_value().unwrap_or_else(|_| "{}".to_string());
+    Ok(serde_json::from_str(&raw).unwrap_or(serde_json::json!({})))
+}
+
+/// Click at specific viewport coordinates with element feedback
+pub async fn click_at_coords(page: &Page, x: f64, y: f64) -> Result<Value> {
+    let identify_js = format!(r#"
+        (() => {{
+            const el = document.elementFromPoint({x}, {y});
+            if (!el) return JSON.stringify({{ found: false }});
+            return JSON.stringify({{
+                found: true,
+                tag: el.tagName.toLowerCase(),
+                text: (el.innerText || '').trim().substring(0, 100),
+                id: el.id || '',
+                className: el.className?.toString?.() || '',
+                href: el.getAttribute('href') || '',
+                type: el.getAttribute('type') || '',
+                role: el.getAttribute('role') || ''
+            }});
+        }})()
+    "#);
+
+    let identify_result = page.evaluate(identify_js).await
+        .map_err(|e| Error::Cdp(format!("click_at_coords identify: {e}")))?;
+    let element_info: String = identify_result.into_value().unwrap_or_else(|_| r#"{{"found":false}}"#.to_string());
+    let element: Value = serde_json::from_str(&element_info).unwrap_or(serde_json::json!({"found": false}));
+
+    let click_js = format!(r#"
+        (() => {{
+            const el = document.elementFromPoint({x}, {y});
+            if (el) {{
+                el.click();
+                return 'clicked';
+            }}
+            return 'no_element';
+        }})()
+    "#);
+
+    let click_result = page.evaluate(click_js).await
+        .map_err(|e| Error::Cdp(format!("click_at_coords click: {e}")))?;
+    let click_status: String = click_result.into_value().unwrap_or_else(|_| "error".to_string());
+
+    Ok(serde_json::json!({
+        "action": "click_at_coords",
+        "x": x,
+        "y": y,
+        "clicked": click_status == "clicked",
+        "element": element
+    }))
+}
+
+/// Replay a sequence of input events
+pub async fn input_replay(
+    page: &Page,
+    events: &[Value],
+) -> Result<Value> {
+    let mut results = Vec::new();
+
+    for (i, event) in events.iter().enumerate() {
+        let event_type = event["type"].as_str().unwrap_or("unknown");
+        let result = match event_type {
+            "click" => {
+                let selector = event["selector"].as_str().unwrap_or("body");
+                let js = format!(r#"
+                    (() => {{
+                        const el = document.querySelector('{}');
+                        if (el) {{ el.click(); return 'clicked'; }}
+                        return 'not_found';
+                    }})()
+                "#, selector.replace('\'', "\\'"));
+                page.evaluate(js).await.map(|v| {
+                    let s: String = v.into_value().unwrap_or_default();
+                    serde_json::json!({"status": s})
+                }).unwrap_or(serde_json::json!({"status": "error"}))
+            }
+            "type" => {
+                let selector = event["selector"].as_str().unwrap_or("input");
+                let text = event["text"].as_str().unwrap_or("");
+                let js = format!(r#"
+                    (() => {{
+                        const el = document.querySelector('{}');
+                        if (el) {{
+                            el.focus();
+                            el.value = '{}';
+                            el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                            el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                            return 'typed';
+                        }}
+                        return 'not_found';
+                    }})()
+                "#, selector.replace('\'', "\\'"), text.replace('\'', "\\'"));
+                page.evaluate(js).await.map(|v| {
+                    let s: String = v.into_value().unwrap_or_default();
+                    serde_json::json!({"status": s})
+                }).unwrap_or(serde_json::json!({"status": "error"}))
+            }
+            "scroll" => {
+                let sx = event["x"].as_f64().unwrap_or(0.0);
+                let sy = event["y"].as_f64().unwrap_or(0.0);
+                let js = format!("window.scrollBy({}, {}); 'scrolled'", sx, sy);
+                page.evaluate(js).await.map(|v| {
+                    let s: String = v.into_value().unwrap_or_default();
+                    serde_json::json!({"status": s})
+                }).unwrap_or(serde_json::json!({"status": "error"}))
+            }
+            "wait" => {
+                let ms = event["ms"].as_u64().unwrap_or(1000);
+                tokio::time::sleep(std::time::Duration::from_millis(ms)).await;
+                serde_json::json!({"status": "waited", "ms": ms})
+            }
+            _ => serde_json::json!({"status": "unknown_event_type"})
+        };
+
+        results.push(serde_json::json!({
+            "step": i + 1,
+            "type": event_type,
+            "result": result
+        }));
+    }
+
+    Ok(serde_json::json!({
+        "action": "input_replay",
+        "total_events": events.len(),
+        "results": results
+    }))
 }
