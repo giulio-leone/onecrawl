@@ -151,6 +151,9 @@ action_enum!(AgentAction, "agent", [
     ApiCaptureSummary => "api_capture_summary",
     IframeList => "iframe_list",
     IframeSnapshot => "iframe_snapshot",
+    IframeEvalCdp => "iframe_eval_cdp",
+    IframeClickCdp => "iframe_click_cdp",
+    IframeFrames => "iframe_frames",
     ConnectRemote => "connect_remote",
     SafetySet => "safety_set",
     SafetyStatus => "safety_status",
@@ -193,6 +196,7 @@ action_enum!(StealthAction, "stealth", [
     Fingerprint => "fingerprint",
     BlockDomains => "block_domains",
     DetectCaptcha => "detect_captcha",
+    SolveCaptcha => "solve_captcha",
     // Human behavior simulation
     HumanDelay => "human_delay",
     HumanMouse => "human_mouse",

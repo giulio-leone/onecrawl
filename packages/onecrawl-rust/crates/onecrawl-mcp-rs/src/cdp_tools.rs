@@ -1681,6 +1681,36 @@ pub struct AutoRecoverParams {
     pub max_retries: Option<u32>,
 }
 
+// ── CAPTCHA Solving ──
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct SolveCaptchaParams {
+    #[schemars(description = "CAPTCHA type to solve: 'recaptcha_checkbox' (click the checkbox), 'recaptcha_audio' (audio challenge + Whisper STT), 'turnstile' (Cloudflare Turnstile), 'auto' (detect and solve). Default: 'auto'")]
+    pub captcha_type: Option<String>,
+    #[schemars(description = "Timeout in milliseconds for challenge clearance. Default: 15000")]
+    pub timeout_ms: Option<u64>,
+}
+
+// ── Cross-Origin Iframe (CDP) ──
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IframeEvalCdpParams {
+    #[schemars(description = "URL substring to match the target iframe (e.g. 'recaptcha', 'stripe.com'). Uses CDP Page.getFrameTree to find the frame, then createIsolatedWorld with universal access to evaluate cross-origin.")]
+    pub frame_url: String,
+    #[schemars(description = "JavaScript expression to evaluate inside the iframe")]
+    pub expression: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct IframeClickCdpParams {
+    #[schemars(description = "URL substring to match the target iframe")]
+    pub frame_url: String,
+    #[schemars(description = "CSS selector of the element to click inside the iframe")]
+    pub selector: String,
+    #[schemars(description = "Use human-like bezier mouse movement to the element. Default: true")]
+    pub human_like: Option<bool>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

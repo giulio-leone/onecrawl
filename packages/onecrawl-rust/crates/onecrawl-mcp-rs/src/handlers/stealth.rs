@@ -91,6 +91,116 @@ impl OneCrawlMcp {
             .mcp()?;
         json_ok(&detection)
     }
+
+    pub(crate) async fn stealth_solve_captcha(
+        &self,
+        p: SolveCaptchaParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let timeout = p.timeout_ms.unwrap_or(15000);
+        let captcha_type = p.captcha_type.as_deref().unwrap_or("auto");
+
+        match captcha_type {
+            "recaptcha_checkbox" => {
+                // Click just the reCAPTCHA checkbox using CDP frame targeting
+                let checkbox_sel = ".recaptcha-checkbox-border, [role=\"checkbox\"], .recaptcha-checkbox";
+                let pattern = "recaptcha/api2/anchor";
+                match onecrawl_cdp::iframe::human_click_in_frame(&page, pattern, checkbox_sel).await {
+                    Ok(()) => json_ok(&serde_json::json!({
+                        "solved": true,
+                        "method": "cdp_frame_targeting",
+                        "captcha_type": "recaptcha_checkbox",
+                        "note": "Checkbox clicked via CDP cross-origin frame targeting. Check if challenge appeared."
+                    })),
+                    Err(e) => json_ok(&serde_json::json!({
+                        "solved": false,
+                        "error": format!("{e}"),
+                        "suggestion": "Try 'recaptcha_audio' for audio challenge fallback"
+                    })),
+                }
+            }
+            "recaptcha_audio" => {
+                match onecrawl_cdp::captcha::solve_recaptcha_audio(&page).await {
+                    Ok(transcription) => json_ok(&serde_json::json!({
+                        "solved": true,
+                        "method": "audio_whisper",
+                        "transcription": transcription,
+                    })),
+                    Err(e) => json_ok(&serde_json::json!({
+                        "solved": false,
+                        "error": format!("{e}"),
+                    })),
+                }
+            }
+            "turnstile" => {
+                match onecrawl_cdp::captcha::solve_turnstile_native(&page, timeout).await {
+                    Ok(passed) => json_ok(&serde_json::json!({
+                        "solved": passed,
+                        "method": "turnstile_native",
+                    })),
+                    Err(e) => json_ok(&serde_json::json!({
+                        "solved": false,
+                        "error": format!("{e}"),
+                    })),
+                }
+            }
+            "auto" | _ => {
+                // Auto-detect and solve
+                let detection = onecrawl_cdp::captcha::detect_captcha(&page).await.mcp()?;
+                if !detection.detected {
+                    return json_ok(&serde_json::json!({
+                        "solved": false,
+                        "error": "No CAPTCHA detected on page",
+                    }));
+                }
+
+                let provider = detection.provider.as_str();
+                match provider {
+                    p if p.contains("recaptcha") || p.contains("google") => {
+                        // Try checkbox first, then audio if challenge appears
+                        let checkbox_sel = ".recaptcha-checkbox-border, [role=\"checkbox\"], .recaptcha-checkbox";
+                        let pattern = "recaptcha/api2/anchor";
+                        let click_result = onecrawl_cdp::iframe::human_click_in_frame(
+                            &page, pattern, checkbox_sel,
+                        ).await;
+                        json_ok(&serde_json::json!({
+                            "solved": click_result.is_ok(),
+                            "method": "auto_recaptcha_checkbox",
+                            "detection": {
+                                "type": detection.captcha_type,
+                                "provider": detection.provider,
+                                "confidence": detection.confidence,
+                            },
+                            "note": if click_result.is_ok() {
+                                "Checkbox clicked. If challenge appears, use solve_captcha with type='recaptcha_audio'"
+                            } else {
+                                "Checkbox click failed. Try 'recaptcha_audio' type"
+                            }
+                        }))
+                    }
+                    p if p.contains("turnstile") || p.contains("cloudflare") => {
+                        let passed = onecrawl_cdp::captcha::solve_turnstile_native(
+                            &page, timeout,
+                        ).await.unwrap_or(false);
+                        json_ok(&serde_json::json!({
+                            "solved": passed,
+                            "method": "auto_turnstile",
+                        }))
+                    }
+                    _ => {
+                        json_ok(&serde_json::json!({
+                            "solved": false,
+                            "detection": {
+                                "type": detection.captcha_type,
+                                "provider": detection.provider,
+                            },
+                            "error": "Unsupported CAPTCHA type for auto-solve",
+                        }))
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ── Human Behavior Simulation & Stealth Max ─────────────────────

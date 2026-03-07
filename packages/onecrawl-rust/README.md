@@ -154,6 +154,7 @@ Full network layer control:
 ### ⚙️ Workers & Iframes
 - Service Worker lifecycle management (register, unregister, inspect)
 - Iframe enumeration, content extraction, and JavaScript evaluation within frames
+- CDP cross-origin iframe interaction (frame tree, eval, click) for frames inaccessible via standard DOM
 
 ---
 

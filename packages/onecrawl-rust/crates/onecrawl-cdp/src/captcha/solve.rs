@@ -54,8 +54,8 @@ pub async fn solve_turnstile_native(page: &Page, timeout_ms: u64) -> Result<bool
 /// Solve a reCAPTCHA v2 challenge using the audio fallback + local Whisper STT.
 ///
 /// Strategy:
-/// 1. Click "I'm not a robot" checkbox
-/// 2. Switch to audio challenge
+/// 1. Click "I'm not a robot" checkbox (via CDP frame targeting for cross-origin)
+/// 2. Switch to audio challenge (via CDP frame targeting)
 /// 3. Download the audio file URL
 /// 4. Transcribe using local `whisper` CLI (must be installed: `pip install openai-whisper`)
 /// 5. Submit the transcription
@@ -63,41 +63,44 @@ pub async fn solve_turnstile_native(page: &Page, timeout_ms: u64) -> Result<bool
 /// Returns the transcription text if successful.
 pub async fn solve_recaptcha_audio(page: &Page) -> Result<String> {
     use crate::human;
+    use crate::iframe;
 
-    // Step 1: Click the reCAPTCHA checkbox
-    let checkbox_sel = r#"iframe[src*="recaptcha/api2/anchor"], iframe[title*="reCAPTCHA"]"#;
-    human::human_click(page, checkbox_sel).await.map_err(|e| {
-        Error::Cdp(format!("recaptcha checkbox click: {e}"))
-    })?;
+    // Step 1: Click the reCAPTCHA checkbox using CDP frame targeting
+    // The checkbox is inside a cross-origin iframe (recaptcha.net domain).
+    // We use human_click_in_frame which:
+    //   1. Finds the iframe element's viewport position
+    //   2. Creates an isolated world inside the frame to get the checkbox element rect
+    //   3. Computes absolute viewport coordinates (iframe offset + element offset)
+    //   4. Performs a bezier-curve mouse move + CDP Input.dispatchMouseEvent click
+    let checkbox_sel = ".recaptcha-checkbox-border, [role=\"checkbox\"], .recaptcha-checkbox";
+    let anchor_pattern = "recaptcha/api2/anchor";
+
+    match iframe::human_click_in_frame(page, anchor_pattern, checkbox_sel).await {
+        Ok(()) => {}
+        Err(_) => {
+            // Fallback: try clicking the iframe element center directly
+            let fallback_sel =
+                r#"iframe[src*="recaptcha/api2/anchor"], iframe[title*="reCAPTCHA"]"#;
+            human::human_click(page, fallback_sel).await.map_err(|e| {
+                Error::Cdp(format!("recaptcha checkbox click: {e}"))
+            })?;
+        }
+    }
 
     // Brief wait for challenge popup to appear
     tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
 
-    // Step 2: Switch to audio challenge
-    // The challenge opens in a new iframe
-    let audio_btn_js = r#"(() => {
-        // Find the challenge iframe
-        const frames = document.querySelectorAll('iframe[src*="recaptcha/api2/bframe"]');
-        for (const f of frames) {
-            try {
-                const doc = f.contentDocument || f.contentWindow?.document;
-                if (!doc) continue;
-                const btn = doc.querySelector('#recaptcha-audio-button, .rc-button-audio');
-                if (btn) { btn.click(); return 'clicked'; }
-            } catch(_) {}
-        }
-        return 'not_found';
-    })()"#;
+    // Step 2: Switch to audio challenge using CDP frame targeting
+    let bframe_pattern = "recaptcha/api2/bframe";
+    let audio_btn_sel = "#recaptcha-audio-button, .rc-button-audio";
 
-    let result: String = page
-        .evaluate(audio_btn_js)
-        .await
-        .map_err(|e| Error::Cdp(format!("audio button: {e}")))?
-        .into_value()
-        .unwrap_or_default();
+    let audio_clicked = match iframe::click_in_frame(page, bframe_pattern, audio_btn_sel).await {
+        Ok(clicked) => clicked,
+        Err(_) => false,
+    };
 
-    if result != "clicked" {
-        // Try cross-origin approach: click via selector in main frame
+    if !audio_clicked {
+        // Fallback: try same-origin approach
         let _ = page
             .evaluate(
                 r#"document.querySelector('#recaptcha-audio-button, .rc-button-audio')?.click()"#,
@@ -107,35 +110,12 @@ pub async fn solve_recaptcha_audio(page: &Page) -> Result<String> {
 
     tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
 
-    // Step 3: Get the audio URL
-    let audio_url: String = page
-        .evaluate(
-            r#"(() => {
-                const links = document.querySelectorAll('a.rc-audiochallenge-tdownload-link, audio source, #audio-source');
-                for (const el of links) {
-                    const href = el.href || el.src || el.getAttribute('src');
-                    if (href) return href;
-                }
-                // Try inside iframes
-                for (const f of document.querySelectorAll('iframe[src*="recaptcha"]')) {
-                    try {
-                        const doc = f.contentDocument || f.contentWindow?.document;
-                        if (!doc) continue;
-                        const link = doc.querySelector('.rc-audiochallenge-tdownload-link, audio source');
-                        if (link) return link.href || link.src || '';
-                    } catch(_) {}
-                }
-                return '';
-            })()"#,
-        )
-        .await
-        .map_err(|e| Error::Cdp(format!("audio url: {e}")))?
-        .into_value()
-        .unwrap_or_default();
+    // Step 3: Get the audio URL via CDP frame targeting
+    let audio_url = get_audio_url_from_frame(page, bframe_pattern).await?;
 
     if audio_url.is_empty() {
         return Err(Error::Cdp(
-            "Could not find reCAPTCHA audio URL. Challenge may be in a cross-origin iframe.".into(),
+            "Could not find reCAPTCHA audio URL.".into(),
         ));
     }
 
@@ -210,57 +190,100 @@ pub async fn solve_recaptcha_audio(page: &Page) -> Result<String> {
         return Err(Error::Cdp("Whisper produced empty transcription".into()));
     }
 
-    // Step 5: Submit the transcription
-    let submit_js = format!(
-        r#"(() => {{
-            const input = document.querySelector('#audio-response, input[id="audio-response"]');
-            if (!input) {{
-                // Try inside iframe
-                for (const f of document.querySelectorAll('iframe[src*="recaptcha"]')) {{
-                    try {{
-                        const doc = f.contentDocument || f.contentWindow?.document;
-                        if (!doc) continue;
-                        const inp = doc.querySelector('#audio-response');
-                        if (inp) {{ inp.value = {text}; return 'filled'; }}
-                    }} catch(_) {{}}
-                }}
-                return 'not_found';
-            }}
-            input.value = {text};
-            return 'filled';
-        }})()"#,
-        text = serde_json::to_string(&transcription).unwrap_or_default()
-    );
+    // Step 5: Submit the transcription (via CDP frame targeting)
+    let fill_result = fill_and_submit_in_frame(page, &transcription).await;
 
-    let fill_result: String = page
-        .evaluate(submit_js)
-        .await
-        .map_err(|e| Error::Cdp(format!("fill audio response: {e}")))?
-        .into_value()
-        .unwrap_or_default();
-
-    if fill_result == "filled" {
-        // Click verify button
-        let _ = page
-            .evaluate(
-                r#"(() => {
-                    const btn = document.querySelector('#recaptcha-verify-button, .rc-button-default');
-                    if (btn) { btn.click(); return 'clicked'; }
-                    for (const f of document.querySelectorAll('iframe[src*="recaptcha"]')) {
-                        try {
-                            const doc = f.contentDocument || f.contentWindow?.document;
-                            if (!doc) continue;
-                            const b = doc.querySelector('#recaptcha-verify-button, .rc-button-default');
-                            if (b) { b.click(); return 'clicked'; }
-                        } catch(_) {}
-                    }
-                    return 'not_found';
-                })()"#,
-            )
-            .await;
+    if fill_result {
+        // Click verify button via CDP frame targeting
+        let bframe_pattern = "recaptcha/api2/bframe";
+        let verify_sel = "#recaptcha-verify-button, .rc-button-default";
+        let _ = crate::iframe::click_in_frame(page, bframe_pattern, verify_sel).await;
     }
 
     Ok(transcription)
+}
+
+/// Extract the audio URL from the reCAPTCHA challenge frame using CDP frame targeting.
+async fn get_audio_url_from_frame(page: &Page, bframe_pattern: &str) -> Result<String> {
+    use crate::iframe;
+
+    // Try via CDP frame targeting first (works cross-origin)
+    if let Ok(Some(frame)) = iframe::find_frame_by_url(page, bframe_pattern).await {
+        let js = r#"(() => {
+            const links = document.querySelectorAll(
+                'a.rc-audiochallenge-tdownload-link, audio source, #audio-source'
+            );
+            for (const el of links) {
+                const href = el.href || el.src || el.getAttribute('src');
+                if (href) return href;
+            }
+            return '';
+        })()"#;
+
+        if let Ok(val) = iframe::eval_in_frame_cdp(page, &frame.frame_id, js).await {
+            if let Some(url) = val.as_str() {
+                if !url.is_empty() {
+                    return Ok(url.to_string());
+                }
+            }
+        }
+    }
+
+    // Fallback: try main frame (in case elements leaked into parent)
+    let fallback: String = page
+        .evaluate(
+            r#"(() => {
+                const links = document.querySelectorAll(
+                    'a.rc-audiochallenge-tdownload-link, audio source, #audio-source'
+                );
+                for (const el of links) {
+                    const href = el.href || el.src || el.getAttribute('src');
+                    if (href) return href;
+                }
+                return '';
+            })()"#,
+        )
+        .await
+        .map_err(|e| Error::Cdp(format!("audio url fallback: {e}")))?
+        .into_value()
+        .unwrap_or_default();
+
+    Ok(fallback)
+}
+
+/// Fill the audio response and submit via CDP frame targeting.
+async fn fill_and_submit_in_frame(page: &Page, transcription: &str) -> bool {
+    use crate::iframe;
+
+    let bframe_pattern = "recaptcha/api2/bframe";
+    let text_json = serde_json::to_string(transcription).unwrap_or_default();
+
+    let fill_js = format!(
+        r#"(() => {{
+            const input = document.querySelector('#audio-response, input[id="audio-response"]');
+            if (!input) return false;
+            input.value = {text};
+            input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            return true;
+        }})()"#,
+        text = text_json,
+    );
+
+    // Try CDP frame targeting
+    if let Ok(Some(frame)) = iframe::find_frame_by_url(page, bframe_pattern).await {
+        if let Ok(val) = iframe::eval_in_frame_cdp(page, &frame.frame_id, &fill_js).await {
+            if val.as_bool().unwrap_or(false) {
+                return true;
+            }
+        }
+    }
+
+    // Fallback: main frame
+    page.evaluate(fill_js)
+        .await
+        .ok()
+        .and_then(|v| v.into_value::<bool>().ok())
+        .unwrap_or(false)
 }
 
 /// Simple base64 decoder (standard alphabet, no padding required).

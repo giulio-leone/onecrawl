@@ -57,27 +57,41 @@ pub async fn mouse_move_bezier(
     x1: f64,
     y1: f64,
 ) -> Result<()> {
-    let mut rng = rand::rng();
-    let steps: usize = rng.random_range(15..28);
-    let path = bezier_path(x0, y0, x1, y1, steps);
+    let path = {
+        let mut rng = rand::rng();
+        let steps: usize = rng.random_range(15..28);
+        bezier_path(x0, y0, x1, y1, steps)
+    };
     let total = path.len().max(1) as f64;
+
+    // Pre-compute all per-step random values to avoid holding !Send RNG across .await
+    let step_randoms: Vec<(f64, bool, u64)> = {
+        let mut rng = rand::rng();
+        path.iter()
+            .enumerate()
+            .map(|(i, _)| {
+                let jitter = rng.random_range(-2.0f64..2.0);
+                let do_hesitate = rng.random_range(0u32..100) < 5;
+                let hesitate_ms = rng.random_range(30u64..80);
+                (jitter, do_hesitate, hesitate_ms)
+            })
+            .collect()
+    };
 
     for (i, (x, y)) in path.into_iter().enumerate() {
         page.move_mouse(Point { x, y })
             .await
             .map_err(|e| Error::Cdp(format!("mouse_move_bezier: {e}")))?;
 
-        // Variable speed via easing: slow at endpoints, fast in the middle
         let progress = i as f64 / total;
         let speed_factor = ease_in_out(progress);
-        let base_delay = 6.0 + (1.0 - speed_factor) * 18.0; // 6ms fast → 24ms slow
-        let jitter = rng.random_range(-2.0f64..2.0);
+        let base_delay = 6.0 + (1.0 - speed_factor) * 18.0;
+        let (jitter, do_hesitate, hesitate_ms) = step_randoms[i];
         let delay_ms = (base_delay + jitter).max(4.0) as u64;
         sleep(Duration::from_millis(delay_ms)).await;
 
-        // ~5% chance of a micro-hesitation (30–80ms pause)
-        if rng.random_range(0u32..100) < 5 {
-            sleep(Duration::from_millis(rng.random_range(30..80))).await;
+        if do_hesitate {
+            sleep(Duration::from_millis(hesitate_ms)).await;
         }
     }
     Ok(())
@@ -92,16 +106,24 @@ pub async fn mouse_move_bezier(
 /// Divides total `pixels` into a series of decreasing increments with
 /// variable timing, simulating flick + coast + stop physics.
 pub async fn human_scroll(page: &Page, dx_total: i64, dy_total: i64) -> Result<()> {
-    let mut rng = rand::rng();
     let total = ((dx_total as f64).powi(2) + (dy_total as f64).powi(2)).sqrt().max(1.0);
     let direction_x = dx_total as f64 / total;
     let direction_y = dy_total as f64 / total;
 
+    // Pre-compute random values (max ~200 steps is more than enough for any scroll)
+    let (initial_velocity, decel_factors, delays) = {
+        let mut rng = rand::rng();
+        let vel = rng.random_range(0.4..0.7);
+        let decels: Vec<f64> = (0..200).map(|_| rng.random_range(0.75..0.90)).collect();
+        let dls: Vec<u64> = (0..200).map(|_| rng.random_range(12u64..30)).collect();
+        (vel, decels, dls)
+    };
+
     let mut remaining = total;
-    let mut velocity = rng.random_range(0.4..0.7); // initial speed factor
+    let mut velocity = initial_velocity;
+    let mut step_idx = 0usize;
 
     while remaining > 1.0 {
-        // Each step scrolls a fraction of remaining distance
         let step = (remaining * velocity).max(1.0).min(remaining);
         let step_dx = (direction_x * step).round() as i64;
         let step_dy = (direction_y * step).round() as i64;
@@ -114,10 +136,10 @@ pub async fn human_scroll(page: &Page, dx_total: i64, dy_total: i64) -> Result<(
         }
 
         remaining -= step;
-        // Decelerate: reduce velocity each step
-        velocity *= rng.random_range(0.75..0.90);
-        // Timing: 12–30ms between scroll events
-        sleep(Duration::from_millis(rng.random_range(12..30))).await;
+        let idx = step_idx.min(199);
+        velocity *= decel_factors[idx];
+        sleep(Duration::from_millis(delays[idx])).await;
+        step_idx += 1;
     }
 
     Ok(())
@@ -151,24 +173,25 @@ pub async fn post_action_delay() {
 ///
 /// Falls back to `crate::element::click` directly if bounding box fails.
 pub async fn human_click(page: &Page, selector: &str) -> Result<()> {
-    let mut rng = rand::rng();
-
     // Try to get element center; fall back gracefully.
-    let (cx, cy) = match crate::input::bounding_box(page, selector).await {
-        Ok((x, y, w, h)) => {
-            let jx = x + w / 2.0 + if w > 0.0 { rng.random_range(-w * 0.15..w * 0.15) } else { 0.0 };
-            let jy = y + h / 2.0 + if h > 0.0 { rng.random_range(-h * 0.15..h * 0.15) } else { 0.0 };
-            (jx, jy)
-        }
+    let bbox = crate::input::bounding_box(page, selector).await;
+    let (x, y, w, h) = match bbox {
+        Ok(v) => v,
         Err(_) => {
             // Can't get bounding box — skip mouse move, click directly.
             return crate::element::click(page, selector).await;
         }
     };
 
-    // Move from a random near-by starting position.
-    let start_x = cx + rng.random_range(-250.0f64..250.0);
-    let start_y = cy + rng.random_range(-150.0f64..150.0);
+    // Compute all random values in a sync block to avoid !Send RNG across .await
+    let (cx, cy, start_x, start_y) = {
+        let mut rng = rand::rng();
+        let jx = x + w / 2.0 + if w > 0.0 { rng.random_range(-w * 0.15..w * 0.15) } else { 0.0 };
+        let jy = y + h / 2.0 + if h > 0.0 { rng.random_range(-h * 0.15..h * 0.15) } else { 0.0 };
+        let sx = jx + rng.random_range(-250.0f64..250.0);
+        let sy = jy + rng.random_range(-150.0f64..150.0);
+        (jx, jy, sx, sy)
+    };
 
     mouse_move_bezier(page, start_x, start_y, cx, cy).await?;
     pre_action_delay().await;

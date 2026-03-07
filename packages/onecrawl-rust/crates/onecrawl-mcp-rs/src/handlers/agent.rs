@@ -257,6 +257,71 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
+    pub(crate) async fn agent_iframe_eval_cdp(
+        &self,
+        p: IframeEvalCdpParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let frame = onecrawl_cdp::iframe::find_frame_by_url(&page, &p.frame_url)
+            .await
+            .mcp()?
+            .ok_or_else(|| mcp_err(format!("No frame found matching URL: {}", p.frame_url)))?;
+
+        let result = onecrawl_cdp::iframe::eval_in_frame_cdp(&page, &frame.frame_id, &p.expression)
+            .await
+            .mcp()?;
+
+        json_ok(&serde_json::json!({
+            "frame_id": frame.frame_id,
+            "frame_url": frame.url,
+            "result": result
+        }))
+    }
+
+    pub(crate) async fn agent_iframe_click_cdp(
+        &self,
+        p: IframeClickCdpParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let human = p.human_like.unwrap_or(true);
+
+        if human {
+            onecrawl_cdp::iframe::human_click_in_frame(&page, &p.frame_url, &p.selector)
+                .await
+                .mcp()?;
+        } else {
+            let clicked = onecrawl_cdp::iframe::click_in_frame(&page, &p.frame_url, &p.selector)
+                .await
+                .mcp()?;
+            if !clicked {
+                return Err(mcp_err(format!(
+                    "Element '{}' not found in frame matching '{}'",
+                    p.selector, p.frame_url
+                )));
+            }
+        }
+
+        json_ok(&serde_json::json!({
+            "clicked": true,
+            "selector": p.selector,
+            "frame_url_pattern": p.frame_url,
+            "method": if human { "human_like_cdp" } else { "direct_cdp" }
+        }))
+    }
+
+    pub(crate) async fn agent_iframe_frames(
+        &self,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let frames = onecrawl_cdp::iframe::list_all_frames(&page)
+            .await
+            .mcp()?;
+        json_ok(&serde_json::json!({
+            "total": frames.len(),
+            "frames": frames
+        }))
+    }
+
 
     pub(crate) async fn agent_connect_remote(
         &self,

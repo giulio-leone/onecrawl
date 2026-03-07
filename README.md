@@ -14,7 +14,7 @@ packages/onecrawl-rust/
 │   ├── onecrawl-cdp/        # Chrome DevTools Protocol — 63 modules (chromiumoxide)
 │   ├── onecrawl-server/     # HTTP REST API with multi-instance management (axum)
 │   ├── onecrawl-cli-rs/     # Native CLI — 200+ commands (clap v4)
-│   └── onecrawl-mcp-rs/     # MCP server — 10 super-tools, 246 actions (rmcp)
+│   └── onecrawl-mcp-rs/     # MCP server — 10 super-tools, 250 actions (rmcp)
 ├── bindings/
 │   ├── napi/                # Node.js via NAPI-RS → @onecrawl/native (307 methods)
 │   └── python/              # Python via PyO3 → onecrawl
@@ -41,7 +41,7 @@ packages/onecrawl-rust/
 | **Human Simulation** | Bézier mouse curves, natural typing with typos, human-like scrolling, behavior profiles |
 | **Service Workers** | SW register/unregister/update, Cache Storage management, push simulation, offline mode |
 | **Server** | Multi-instance Chrome, profiles, tabs, accessibility snapshots, action API |
-| **MCP** | 10 super-tools with 246 actions for AI agent orchestration |
+| **MCP** | 10 super-tools with 250 actions for AI agent orchestration |
 
 ## Installation
 
@@ -158,7 +158,7 @@ curl http://localhost:9867/instances/{id}/tabs/{tab}/text
 
 ## MCP Integration
 
-10 super-tools with 246 total actions, using action-based dispatch:
+10 super-tools with 250 total actions, using action-based dispatch:
 
 ```json
 {"action": "goto", "params": {"url": "https://example.com"}}
@@ -168,8 +168,8 @@ curl http://localhost:9867/instances/{id}/tabs/{tab}/text
 |------------|---------|------------|
 | **browser** | 95 | Navigation, interaction, extraction, multi-tab, DOM events, session, network interception, console/dialog, device emulation, drag/drop, file upload, shadow DOM, session context, smart forms, self-healing selectors, event reactions, service worker/PWA, offline mode, session config |
 | **crawl** | 5 | Spider, robots.txt, sitemap, DOM snapshot/diff |
-| **agent** | 37 | Stealth, fingerprint, anti-bot detection, proxy health, CAPTCHA, task decomposition, vision observation, WCAG auditing, accessibility tree, screen reader simulation |
-| **stealth** | 12 | Enable/disable stealth, rotate fingerprint, proxy health, human behavior simulation |
+| **agent** | 40 | Stealth, fingerprint, anti-bot detection, proxy health, CAPTCHA, CDP cross-origin iframe interaction, task decomposition, vision observation, WCAG auditing, accessibility tree, screen reader simulation |
+| **stealth** | 13 | Enable/disable stealth, rotate fingerprint, proxy health, CAPTCHA solving, human behavior simulation |
 | **data** | 26 | Cookies, storage, structured data extraction, entity extraction, feeds, WebSocket, SSE, GraphQL subscriptions |
 | **secure** | 21 | WebAuthn/Passkey, vault, OAuth2, session/form auth, MFA, credentials |
 | **computer** | 18 | AI computer-use, autonomous goal execution, smart element resolution, multi-browser fleet |
@@ -215,10 +215,10 @@ cargo build --release -p onecrawl-cli-rs
 | Node.js test suite | 33 files, 3,995 lines |
 | CDP modules | 63 |
 | CLI commands | 200+ |
-| MCP super-tools | 10 (246 actions) |
+| MCP super-tools | 10 (250 actions) |
 | NAPI methods | 307 |
 | Handler modules | 10 (split architecture) |
-| Enum-dispatched actions | 246 (compile-time exhaustive) |
+| Enum-dispatched actions | 250 (compile-time exhaustive) |
 
 ## License
 

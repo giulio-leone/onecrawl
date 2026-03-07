@@ -1,6 +1,6 @@
 # OneCrawl MCP API Reference
 
-> **10 consolidated tools • 246 actions • Action-based dispatch**
+> **10 consolidated tools • 250 actions • Action-based dispatch**
 
 All browser automation, crawling, scraping, security, and AI orchestration capabilities are accessed through 10 super-tools. Each tool accepts a uniform `{ action, params }` interface.
 
@@ -12,8 +12,8 @@ All browser automation, crawling, scraping, security, and AI orchestration capab
 |------|:-------:|-------------|
 | [`browser`](#1-browser) | 95 | Navigation, interaction, scraping, content extraction, offline HTML parsing, multi-tab, DOM events, cookies & storage, network interception, console & errors, device emulation, file operations, shadow DOM, session context, smart forms, self-healing selectors, event reactions, service worker/PWA, offline mode, session config |
 | [`crawl`](#2-crawl) | 5 | Web crawling, robots.txt, sitemaps, DOM snapshots |
-| [`agent`](#3-agent) | 37 | Command chains, API capture, iframes, remote CDP, safety, screencast, recording, iOS, task decomposition, vision observation, WCAG auditing, accessibility tree, screen reader simulation |
-| [`stealth`](#4-stealth) | 12 | Anti-detection patches, fingerprinting, CAPTCHA detection, human behavior simulation |
+| [`agent`](#3-agent) | 40 | Command chains, API capture, iframes, CDP cross-origin iframe interaction, remote CDP, safety, screencast, recording, iOS, task decomposition, vision observation, WCAG auditing, accessibility tree, screen reader simulation |
+| [`stealth`](#4-stealth) | 13 | Anti-detection patches, fingerprinting, CAPTCHA detection and solving, human behavior simulation |
 | [`data`](#5-data) | 26 | Data pipelines, HTTP client, link graphs, network intelligence, structured extraction, WebSocket, SSE, GraphQL subscriptions |
 | [`secure`](#6-secure) | 21 | Encryption, PKCE, TOTP, KV store, WebAuthn, OAuth2, session/form auth, MFA |
 | [`computer`](#7-computer) | 18 | AI computer-use, autonomous goal execution, smart element resolution, browser pool, multi-browser fleet |
@@ -1820,7 +1820,7 @@ Compare two previously taken DOM snapshots by label.
 
 ### 3. `agent`
 
-AI agent orchestration — command chains, element screenshots, API capture, iframes, remote CDP, safety policies, skills, screencast, recording, iOS automation, task decomposition, vision observation, and WCAG/accessibility auditing.
+AI agent orchestration — command chains, element screenshots, API capture, iframes, CDP cross-origin iframe interaction, remote CDP, safety policies, skills, screencast, recording, iOS automation, task decomposition, vision observation, and WCAG/accessibility auditing.
 
 #### Actions
 
@@ -1832,6 +1832,9 @@ AI agent orchestration — command chains, element screenshots, API capture, ifr
 | `api_capture_summary` | `{clear?}` | Get captured API call summary |
 | `iframe_list` | — | List all iframes on page |
 | `iframe_snapshot` | `{index, interactive_only?, compact?}` | Accessibility snapshot of an iframe |
+| `iframe_frames` | — | List all frames (including cross-origin) in the page frame tree |
+| `iframe_eval_cdp` | `{frame_id, expression}` | Evaluate JS in cross-origin iframes via CDP isolated worlds |
+| `iframe_click_cdp` | `{frame_id, selector}` | Click elements in cross-origin iframes via CDP frame targeting |
 | `connect_remote` | `{ws_url, headers?}` | Connect to remote CDP browser |
 | `safety_set` | `{allowed_domains?, blocked_domains?, ...}` | Set safety policy |
 | `safety_status` | — | Get current safety policy status |
@@ -1983,6 +1986,69 @@ Generate an accessibility snapshot inside a specific iframe.
 | `compact` | boolean | | Remove empty structural elements |
 
 **Response:** JSON with `snapshot`, `refs`, `total`, `iframe_index`.
+</details>
+
+<details>
+<summary><strong><code>iframe_frames</code></strong> — List all frames in frame tree</summary>
+
+List all frames in the page frame tree, including cross-origin iframes that are not accessible via standard DOM traversal. Uses CDP `Page.getFrameTree` to enumerate all frames regardless of origin.
+
+**Params:** None
+
+**Response:**
+```json
+{
+  "total": 3,
+  "frames": [
+    { "frame_id": "ABC123", "url": "https://example.com", "name": "", "security_origin": "https://example.com", "cross_origin": false },
+    { "frame_id": "DEF456", "url": "https://captcha.provider.com/widget", "name": "captcha-frame", "security_origin": "https://captcha.provider.com", "cross_origin": true }
+  ]
+}
+```
+</details>
+
+<details>
+<summary><strong><code>iframe_eval_cdp</code></strong> — Evaluate JS in cross-origin iframe</summary>
+
+Evaluate a JavaScript expression inside a cross-origin iframe using CDP isolated worlds. Bypasses same-origin restrictions by targeting the frame directly via CDP `Runtime.evaluate` with the frame's execution context.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `frame_id` | string | ✅ | Frame ID from `iframe_frames` response |
+| `expression` | string | ✅ | JavaScript expression to evaluate |
+
+**Response:**
+```json
+{
+  "result": "evaluated value",
+  "frame_id": "DEF456",
+  "type": "string"
+}
+```
+</details>
+
+<details>
+<summary><strong><code>iframe_click_cdp</code></strong> — Click element in cross-origin iframe</summary>
+
+Click an element inside a cross-origin iframe using CDP frame targeting. Resolves the element within the target frame's DOM and dispatches input events directly via CDP `Input.dispatchMouseEvent`.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `frame_id` | string | ✅ | Frame ID from `iframe_frames` response |
+| `selector` | string | ✅ | CSS selector of the element within the iframe |
+
+**Response:**
+```json
+{
+  "clicked": "#submit-btn",
+  "frame_id": "DEF456",
+  "bounds": { "x": 120, "y": 340, "width": 80, "height": 32 }
+}
+```
 </details>
 
 <details>
@@ -2569,7 +2635,7 @@ Simulate screen reader output for the page or a specific subtree, producing the 
 
 ### 4. `stealth`
 
-Anti-detection and bot evasion — stealth patches, fingerprinting, domain blocking, CAPTCHA detection, human behavior simulation.
+Anti-detection and bot evasion — stealth patches, fingerprinting, domain blocking, CAPTCHA detection and solving, human behavior simulation.
 
 #### Actions
 
@@ -2580,6 +2646,7 @@ Anti-detection and bot evasion — stealth patches, fingerprinting, domain block
 | `fingerprint` | `{user_agent?}` | Generate and apply browser fingerprint |
 | `block_domains` | `{domains?, category?}` | Block tracking/ad domains |
 | `detect_captcha` | — | Detect CAPTCHAs on page |
+| `solve_captcha` | `{type?, frame_id?, timeout_ms?}` | Auto-detect and solve reCAPTCHA/Turnstile CAPTCHAs via CDP frame targeting |
 | | | **Human Behavior Simulation** |
 | `human_delay` | `{min_ms?, max_ms?, pattern?}` | Random human-like delay |
 | `human_mouse` | `{target, speed?, curve?}` | Bézier curve mouse movement |
@@ -2656,6 +2723,30 @@ Detect the presence of CAPTCHAs (reCAPTCHA, hCaptcha, etc.) on the current page.
 **Params:** None
 
 **Response:** JSON with CAPTCHA detection results (type, location, confidence).
+</details>
+
+<details>
+<summary><strong><code>solve_captcha</code></strong> — Auto-solve CAPTCHAs</summary>
+
+Auto-detect and solve reCAPTCHA v2/v3 and Cloudflare Turnstile CAPTCHAs. Uses CDP frame targeting to interact with cross-origin CAPTCHA iframes directly. Detects the CAPTCHA type automatically if not specified.
+
+**Params:**
+
+| Name | Type | Required | Description |
+|------|------|:--------:|-------------|
+| `type` | string | | CAPTCHA type: `recaptcha_v2`, `recaptcha_v3`, `turnstile` (default: auto-detect) |
+| `frame_id` | string | | Target frame ID if CAPTCHA is in a specific iframe (default: auto-detect) |
+| `timeout_ms` | number | | Timeout in milliseconds (default `30000`) |
+
+**Response:**
+```json
+{
+  "solved": true,
+  "type": "recaptcha_v2",
+  "token": "03AGdBq24...",
+  "elapsed_ms": 4520
+}
+```
 </details>
 
 <details>
@@ -4800,10 +4891,14 @@ The old 108-tool interface mapped 1:1 to individual operations. The new interfac
 | `stealth.fingerprint` | `stealth` | `fingerprint` |
 | `stealth.block_domains` | `stealth` | `block_domains` |
 | `stealth.detect_captcha` | `stealth` | `detect_captcha` |
+| `stealth.solve_captcha` | `stealth` | `solve_captcha` |
 | `agent.api_capture_start` | `agent` | `api_capture_start` |
 | `agent.api_capture_summary` | `agent` | `api_capture_summary` |
 | `agent.iframe_list` | `agent` | `iframe_list` |
 | `agent.iframe_snapshot` | `agent` | `iframe_snapshot` |
+| `agent.iframe_frames` | `agent` | `iframe_frames` |
+| `agent.iframe_eval_cdp` | `agent` | `iframe_eval_cdp` |
+| `agent.iframe_click_cdp` | `agent` | `iframe_click_cdp` |
 | `agent.connect_remote` | `agent` | `connect_remote` |
 | `agent.safety_set` | `agent` | `safety_set` |
 | `agent.safety_status` | `agent` | `safety_status` |
@@ -4873,4 +4968,4 @@ All tools return errors in a consistent format:
 
 ---
 
-*Auto-generated from OneCrawl MCP server source (`onecrawl-mcp-rs`). Total: 10 tools, 246 actions.*
+*Auto-generated from OneCrawl MCP server source (`onecrawl-mcp-rs`). Total: 10 tools, 250 actions.*
