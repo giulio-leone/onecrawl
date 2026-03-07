@@ -100,15 +100,11 @@ impl OneCrawlMcp {
 
         let stream = {
             let state = self.browser.lock().await;
-            match state.vision_stream.clone() {
-                Some(s) => s,
-                None => {
-                    // Create a one-shot stream with defaults
-                    Arc::new(onecrawl_cdp::VisionStream::new(
-                        onecrawl_cdp::VisionConfig::default(),
-                    ))
-                }
-            }
+            state.vision_stream.clone().unwrap_or_else(|| {
+                Arc::new(onecrawl_cdp::VisionStream::new(
+                    onecrawl_cdp::VisionConfig::default(),
+                ))
+            })
         };
 
         let obs = stream

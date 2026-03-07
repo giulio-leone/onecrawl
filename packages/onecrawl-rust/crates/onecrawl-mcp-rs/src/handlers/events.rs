@@ -10,12 +10,11 @@ impl OneCrawlMcp {
     /// Ensure the event bus exists, creating it lazily if needed.
     async fn ensure_event_bus(&self) -> Arc<onecrawl_cdp::EventBus> {
         let mut state = self.browser.lock().await;
-        if state.event_bus.is_none() {
-            state.event_bus = Some(Arc::new(onecrawl_cdp::EventBus::new(
+        Arc::clone(state.event_bus.get_or_insert_with(|| {
+            Arc::new(onecrawl_cdp::EventBus::new(
                 onecrawl_cdp::EventBusConfig::default(),
-            )));
-        }
-        state.event_bus.clone().unwrap()
+            ))
+        }))
     }
 
     // ════════════════════════════════════════════════════════════════

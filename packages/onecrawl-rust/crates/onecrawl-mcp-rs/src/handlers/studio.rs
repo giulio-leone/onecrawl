@@ -49,12 +49,12 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let ws = self.studio_workspace()?;
 
-        let now = simple_iso_now();
+        let now = onecrawl_cdp::util::iso_now();
         let created_at = ws
             .load_project(&p.id)
             .ok()
             .map(|proj| proj.created_at)
-            .unwrap_or_else(|| now.clone());
+            .unwrap_or(now.clone());
 
         let project = StudioProject {
             id: p.id.clone(),
@@ -152,8 +152,4 @@ impl OneCrawlMcp {
             "project": project
         }))
     }
-}
-
-fn simple_iso_now() -> String {
-    onecrawl_cdp::util::iso_now()
 }

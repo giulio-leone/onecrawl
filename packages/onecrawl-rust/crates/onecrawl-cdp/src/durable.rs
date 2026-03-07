@@ -329,14 +329,12 @@ impl DurableSession {
             let now = Instant::now();
 
             // Check max uptime
-            if let Some(max_secs) = self.config.max_uptime_secs {
-                if let Some(started) = self.started_at {
-                    if started.elapsed().as_secs() >= max_secs {
-                        let _ = self.checkpoint(&page).await;
-                        self.state.status = DurableStatus::Stopped;
-                        self.save_state().ok();
-                        return Ok(());
-                    }
+            if let (Some(max_secs), Some(started)) = (self.config.max_uptime_secs, self.started_at) {
+                if started.elapsed().as_secs() >= max_secs {
+                    let _ = self.checkpoint(&page).await;
+                    self.state.status = DurableStatus::Stopped;
+                    self.save_state().ok();
+                    return Ok(());
                 }
             }
 
@@ -523,20 +521,13 @@ pub fn parse_duration(s: &str) -> std::result::Result<Duration, String> {
         return Err("empty duration string".to_string());
     }
 
-    let (num_str, suffix) = if s.ends_with('d') {
-        (&s[..s.len() - 1], "d")
-    } else if s.ends_with('h') {
-        (&s[..s.len() - 1], "h")
-    } else if s.ends_with('m') && !s.ends_with("ms") {
-        (&s[..s.len() - 1], "m")
-    } else if s.ends_with("ms") {
-        (&s[..s.len() - 2], "ms")
-    } else if s.ends_with('s') {
-        (&s[..s.len() - 1], "s")
-    } else {
-        // Try as plain seconds
-        (s, "s")
-    };
+    // Order matters: "ms" before "m" and "s"
+    const SUFFIXES: &[(&str, &str)] = &[("ms", "ms"), ("d", "d"), ("h", "h"), ("m", "m"), ("s", "s")];
+    let (num_str, suffix) = SUFFIXES
+        .iter()
+        .find(|(suf, _)| s.ends_with(suf))
+        .map(|(suf, tag)| (&s[..s.len() - suf.len()], *tag))
+        .unwrap_or((s, "s"));
 
     let num: u64 = num_str
         .parse()

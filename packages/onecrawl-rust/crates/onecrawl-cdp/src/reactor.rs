@@ -215,10 +215,16 @@ impl Reactor {
         }
 
         let rules = self.rules.read().await;
-        let needs_dom = rules.iter().any(|r| r.enabled && r.event_type == ReactorEventType::DomMutation);
-        let needs_console = rules.iter().any(|r| r.enabled && matches!(r.event_type, ReactorEventType::Console | ReactorEventType::PageError));
-        let needs_navigation = rules.iter().any(|r| r.enabled && r.event_type == ReactorEventType::Navigation);
-        let needs_ws = rules.iter().any(|r| r.enabled && r.event_type == ReactorEventType::WebSocket);
+        let (mut needs_dom, mut needs_console, mut needs_navigation, mut needs_ws) = (false, false, false, false);
+        for r in rules.iter().filter(|r| r.enabled) {
+            match r.event_type {
+                ReactorEventType::DomMutation => needs_dom = true,
+                ReactorEventType::Console | ReactorEventType::PageError => needs_console = true,
+                ReactorEventType::Navigation => needs_navigation = true,
+                ReactorEventType::WebSocket => needs_ws = true,
+                _ => {}
+            }
+        }
         drop(rules);
 
         // Start event sources

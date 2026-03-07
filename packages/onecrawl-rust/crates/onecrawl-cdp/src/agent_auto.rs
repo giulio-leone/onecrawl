@@ -812,12 +812,10 @@ fn action_to_parts(action: &task_planner::PlannedAction) -> (String, Option<Stri
 
 /// Guess output format from file extension.
 fn guess_format(path: &str) -> OutputFormat {
-    if path.ends_with(".csv") {
-        OutputFormat::Csv
-    } else if path.ends_with(".jsonl") {
-        OutputFormat::Jsonl
-    } else {
-        OutputFormat::Json
+    match std::path::Path::new(path).extension().and_then(|e| e.to_str()) {
+        Some("csv") => OutputFormat::Csv,
+        Some("jsonl") => OutputFormat::Jsonl,
+        _ => OutputFormat::Json,
     }
 }
 

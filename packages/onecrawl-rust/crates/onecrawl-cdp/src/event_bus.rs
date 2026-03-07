@@ -258,15 +258,8 @@ impl EventBus {
         let events: Vec<BusEvent> = journal
             .iter()
             .filter(|entry| {
-                if !matches_pattern(&entry.event.event_type, event_pattern) {
-                    return false;
-                }
-                if let Some(since_ts) = since {
-                    if entry.event.timestamp.as_str() < since_ts {
-                        return false;
-                    }
-                }
-                true
+                matches_pattern(&entry.event.event_type, event_pattern)
+                    && since.map_or(true, |ts| entry.event.timestamp.as_str() >= ts)
             })
             .map(|entry| entry.event.clone())
             .collect();

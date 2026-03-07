@@ -7,7 +7,7 @@ use crate::OneCrawlMcp;
 
 fn vault_path_or_default(path: &Option<String>) -> String {
     path.as_deref()
-        .map(|s| s.to_string())
+        .map(String::from)
         .unwrap_or_else(|| {
             onecrawl_crypto::vault::default_vault_path()
                 .to_string_lossy()

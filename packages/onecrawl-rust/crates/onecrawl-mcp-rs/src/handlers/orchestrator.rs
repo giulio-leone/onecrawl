@@ -5,6 +5,17 @@ use crate::cdp_tools::*;
 use crate::helpers::{mcp_err, json_ok, McpResult};
 use crate::OneCrawlMcp;
 
+fn load_orchestration(file: &Option<String>, config: &Option<String>) -> Result<onecrawl_cdp::orchestrator::Orchestration, McpError> {
+    if let Some(file) = file {
+        onecrawl_cdp::orchestrator::Orchestrator::from_file(file).mcp()
+    } else if let Some(config) = config {
+        serde_json::from_str(config)
+            .map_err(|e| mcp_err(format!("invalid orchestration JSON: {e}")))
+    } else {
+        Err(mcp_err("either 'file' or 'config' is required"))
+    }
+}
+
 impl OneCrawlMcp {
     // ════════════════════════════════════════════════════════════════
     //  Orchestrator handlers
@@ -14,14 +25,7 @@ impl OneCrawlMcp {
         &self,
         p: OrchestratorRunParams,
     ) -> Result<CallToolResult, McpError> {
-        let orchestration: onecrawl_cdp::orchestrator::Orchestration = if let Some(ref file) = p.file {
-            onecrawl_cdp::orchestrator::Orchestrator::from_file(file).mcp()?
-        } else if let Some(ref config) = p.config {
-            serde_json::from_str(config)
-                .map_err(|e| mcp_err(format!("invalid orchestration JSON: {e}")))?
-        } else {
-            return Err(mcp_err("either 'file' or 'config' is required"));
-        };
+        let orchestration = load_orchestration(&p.file, &p.config)?;
 
         if let Err(errors) = onecrawl_cdp::orchestrator::Orchestrator::validate(&orchestration) {
             return json_ok(&serde_json::json!({
@@ -44,14 +48,7 @@ impl OneCrawlMcp {
         &self,
         p: OrchestratorValidateParams,
     ) -> Result<CallToolResult, McpError> {
-        let orchestration: onecrawl_cdp::orchestrator::Orchestration = if let Some(ref file) = p.file {
-            onecrawl_cdp::orchestrator::Orchestrator::from_file(file).mcp()?
-        } else if let Some(ref config) = p.config {
-            serde_json::from_str(config)
-                .map_err(|e| mcp_err(format!("invalid orchestration JSON: {e}")))?
-        } else {
-            return Err(mcp_err("either 'file' or 'config' is required"));
-        };
+        let orchestration = load_orchestration(&p.file, &p.config)?;
 
         match onecrawl_cdp::orchestrator::Orchestrator::validate(&orchestration) {
             Ok(()) => json_ok(&serde_json::json!({

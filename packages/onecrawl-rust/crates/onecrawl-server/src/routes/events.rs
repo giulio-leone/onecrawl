@@ -194,6 +194,19 @@ impl Drop for BusEventStream {
     }
 }
 
+impl BusEventStream {
+    /// Convert a matching event to an SSE Event, or return None to skip.
+    fn try_as_sse(&self, event: &onecrawl_cdp::BusEvent) -> Option<Event> {
+        if onecrawl_cdp::event_bus::matches_pattern(&event.event_type, &self.pattern) {
+            serde_json::to_string(event)
+                .ok()
+                .map(|json| Event::default().event(event.event_type.clone()).data(json))
+        } else {
+            None
+        }
+    }
+}
+
 impl Stream for BusEventStream {
     type Item = Result<Event, Infallible>;
 
@@ -201,17 +214,11 @@ impl Stream for BusEventStream {
         loop {
             match self.rx.try_recv() {
                 Ok(event) => {
-                    if onecrawl_cdp::event_bus::matches_pattern(&event.event_type, &self.pattern) {
-                        if let Ok(json) = serde_json::to_string(&event) {
-                            return Poll::Ready(Some(Ok(Event::default()
-                                .event(event.event_type)
-                                .data(json))));
-                        }
+                    if let Some(sse) = self.try_as_sse(&event) {
+                        return Poll::Ready(Some(Ok(sse)));
                     }
-                    // Skip events that don't match — loop to next
                 }
                 Err(tokio::sync::broadcast::error::TryRecvError::Empty) => {
-                    // Abort previous waker task to prevent accumulation
                     if let Some(handle) = self.pending_waker.take() {
                         handle.abort();
                     }
@@ -222,24 +229,15 @@ impl Stream for BusEventStream {
                         waker.wake();
                     });
                     self.pending_waker = Some(handle);
-                    // Re-check after resubscribe to close TOCTOU race window:
-                    // an event may have arrived between try_recv() and resubscribe()
+                    // Re-check after resubscribe to close TOCTOU race window
                     match self.rx.try_recv() {
                         Ok(event) => {
                             if let Some(h) = self.pending_waker.take() {
                                 h.abort();
                             }
-                            if onecrawl_cdp::event_bus::matches_pattern(
-                                &event.event_type,
-                                &self.pattern,
-                            ) {
-                                if let Ok(json) = serde_json::to_string(&event) {
-                                    return Poll::Ready(Some(Ok(Event::default()
-                                        .event(event.event_type)
-                                        .data(json))));
-                                }
+                            if let Some(sse) = self.try_as_sse(&event) {
+                                return Poll::Ready(Some(Ok(sse)));
                             }
-                            // Non-matching event; loop to try more
                         }
                         Err(_) => {
                             return Poll::Pending;

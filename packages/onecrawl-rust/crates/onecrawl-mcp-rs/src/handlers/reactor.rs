@@ -9,6 +9,19 @@ use tokio::sync::RwLock;
 
 static REACTOR_RUNNING: Mutex<Option<Arc<RwLock<bool>>>> = Mutex::new(None);
 
+fn get_reactor_flag() -> Option<Arc<RwLock<bool>>> {
+    REACTOR_RUNNING.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+fn build_event_filter(f: &crate::cdp_tools::ReactorFilterParam) -> onecrawl_cdp::reactor::EventFilter {
+    onecrawl_cdp::reactor::EventFilter {
+        selector: f.selector.clone(),
+        url_pattern: f.url_pattern.clone(),
+        message_pattern: f.message_pattern.clone(),
+        event_subtype: f.event_subtype.clone(),
+    }
+}
+
 impl OneCrawlMcp {
     // ════════════════════════════════════════════════════════════════
     //  Reactor handlers
@@ -24,12 +37,7 @@ impl OneCrawlMcp {
         for r in &p.rules {
             let event_type = parse_reactor_event_type(&r.event_type)?;
             let handler = parse_reactor_handler(&r.handler)?;
-            let filter = r.filter.as_ref().map(|f| onecrawl_cdp::reactor::EventFilter {
-                selector: f.selector.clone(),
-                url_pattern: f.url_pattern.clone(),
-                message_pattern: f.message_pattern.clone(),
-                event_subtype: f.event_subtype.clone(),
-            });
+            let filter = r.filter.as_ref().map(build_event_filter);
             rules.push(onecrawl_cdp::reactor::ReactorRule {
                 id: r.id.clone(),
                 event_type,
@@ -88,10 +96,7 @@ impl OneCrawlMcp {
         &self,
         _p: ReactorStopParams,
     ) -> Result<CallToolResult, McpError> {
-        let flag = {
-            let guard = REACTOR_RUNNING.lock().unwrap_or_else(|e| e.into_inner());
-            guard.clone()
-        };
+        let flag = get_reactor_flag();
         if let Some(running) = flag {
             *running.write().await = false;
             json_ok(&serde_json::json!({
@@ -112,10 +117,7 @@ impl OneCrawlMcp {
         &self,
         _p: ReactorStatusParams,
     ) -> Result<CallToolResult, McpError> {
-        let flag = {
-            let guard = REACTOR_RUNNING.lock().unwrap_or_else(|e| e.into_inner());
-            guard.clone()
-        };
+        let flag = get_reactor_flag();
         let is_running = if let Some(running) = flag {
             *running.read().await
         } else {
@@ -133,12 +135,7 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let event_type = parse_reactor_event_type(&p.event_type)?;
         let handler = parse_reactor_handler(&p.handler)?;
-        let filter = p.filter.as_ref().map(|f| onecrawl_cdp::reactor::EventFilter {
-            selector: f.selector.clone(),
-            url_pattern: f.url_pattern.clone(),
-            message_pattern: f.message_pattern.clone(),
-            event_subtype: f.event_subtype.clone(),
-        });
+        let filter = p.filter.as_ref().map(build_event_filter);
 
         let rule = onecrawl_cdp::reactor::ReactorRule {
             id: p.id.clone(),
