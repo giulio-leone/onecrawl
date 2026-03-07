@@ -96,6 +96,7 @@ pub mod websocket;
 pub mod workers;
 pub mod vrt;
 pub mod pixel_diff;
+pub mod plugin;
 pub mod workflow;
 
 pub use browser_pool::{BrowserInstance, BrowserPool, BrowserStatus, SharedPool, new_shared_pool};
@@ -147,6 +148,7 @@ pub use skills::{SkillManifest, SkillRegistry, SkillTool};
 pub use workers::ServiceWorkerInfo;
 pub use vrt::{VrtComparisonResult, VrtStatus, VrtSuite, VrtSuiteResult, VrtTestCase};
 pub use workflow::{Workflow, WorkflowResult, Step, Action, StepResult, StepStatus, AgentStepContext, AgentDecision};
+pub use plugin::{PluginRegistry, PluginManifest, InstalledPlugin, PluginStatus, PluginCommand, PluginAction, PluginHook, PluginArg, PluginParam, builtin_templates, default_plugins_dir};
 pub use task_planner::{TaskPlan, PlannedStep, PlannedAction, TaskExecutionResult, TaskStatus, GoalCategory};
 pub use safety::{SafetyCheck, SafetyPolicy, SafetyState};
 pub use agent_auto::{AgentAuto, AgentAutoConfig, AgentAutoResult, AgentAutoState, AutoStep, StepStatus as AutoStepStatus, OutputFormat as AutoOutputFormat, agent_auto_run, agent_auto_plan};

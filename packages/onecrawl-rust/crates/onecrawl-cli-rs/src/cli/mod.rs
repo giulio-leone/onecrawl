@@ -22,6 +22,7 @@ mod media;
 mod monitoring;
 mod network;
 mod orchestrator;
+mod plugin;
 mod react;
 mod skills;
 mod spa;
@@ -30,6 +31,7 @@ mod streaming_video;
 mod tabs;
 mod utility;
 mod vault;
+mod vision;
 
 pub(crate) use agent::AgentCliAction;
 pub(crate) use android::AndroidAction;
@@ -48,6 +50,7 @@ pub(crate) use media::{SnapshotAction, ScreenshotDiffAction, PrintAction, Extrac
 pub(crate) use monitoring::{CoverageAction, AccessibilityAction, PerfAction, ConsoleAction, DialogAction, WorkerAction, PageWatcherAction};
 pub(crate) use network::{DomainAction, HttpAction, NetworkAction, HarAction, WsAction, ThrottleAction, NetworkLogAction, ProxyAction, ProxyHealthAction, InterceptCommandAction};
 pub(crate) use orchestrator::OrchestrateAction;
+pub(crate) use plugin::PluginCliAction;
 pub(crate) use skills::SkillsAction;
 pub(crate) use spa::SpaAction;
 pub(crate) use storage::{CookieJarAction, CookieAction, WebStorageAction};
@@ -55,6 +58,7 @@ pub(crate) use streaming_video::{StreamAction, RecordAction};
 pub(crate) use tabs::{TabAction, DownloadAction};
 pub(crate) use utility::{RateLimitAction, RetryAction, ScheduleAction, PoolAction, BenchAction, GeoAction, RequestAction};
 pub(crate) use vault::VaultAction;
+pub(crate) use vision::VisionAction;
 
 
 #[derive(Subcommand)]
@@ -996,11 +1000,25 @@ pub(crate) enum Commands {
         options: Option<String>,
     },
 
+    // ── Plugin System ────────────────────────────────────────────────
+    /// Plugin management (install, uninstall, enable, disable, list, info, create, run, config)
+    Plugin {
+        #[command(subcommand)]
+        action: PluginCliAction,
+    },
+
     // ── Multi-Device Orchestration ─────────────────────────────────
     /// Multi-device orchestration (browser + Android + iOS)
     Orchestrate {
         #[command(subcommand)]
         action: OrchestrateAction,
+    },
+
+    // ── Streaming AI Vision ─────────────────────────────────────────
+    /// Streaming AI vision — feed screencast frames to a vision-language model
+    Vision {
+        #[command(subcommand)]
+        action: VisionAction,
     },
 
     // ── Generic MCP Action Runner ──────────────────────────────────

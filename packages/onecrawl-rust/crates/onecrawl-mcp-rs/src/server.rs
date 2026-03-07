@@ -1991,6 +1991,58 @@ impl OneCrawlMcp {
         }
     }
 
+    #[tool(
+        name = "plugins",
+        description = "Plugin system — install, manage, and execute extensible plugins.\n\nActions:\n- install {path} — Install a plugin from a local directory\n- uninstall {name} — Uninstall a plugin\n- enable {name} — Enable a plugin\n- disable {name} — Disable a plugin\n- list — List all installed plugins\n- info {name} — Get detailed plugin info\n- create {name, path?} — Create a plugin scaffold\n- execute {plugin, action, params?} — Execute a plugin action\n- configure {name, config} — Set plugin configuration"
+    )]
+    async fn tool_plugins(
+        &self,
+        Parameters(p): Parameters<ToolAction>,
+    ) -> Result<CallToolResult, McpError> {
+        let action = p.action;
+        let v = p.params;
+        self.enforce_safety("plugins", &action).await?;
+        let action = PluginMcpAction::parse(&action)?;
+        match action {
+            PluginMcpAction::Install => {
+                let params: PluginInstallParams = parse_params(v, "plugin_install")?;
+                self.plugin_install(params)
+            }
+            PluginMcpAction::Uninstall => {
+                let params: PluginUninstallParams = parse_params(v, "plugin_uninstall")?;
+                self.plugin_uninstall(params)
+            }
+            PluginMcpAction::Enable => {
+                let params: PluginEnableParams = parse_params(v, "plugin_enable")?;
+                self.plugin_enable(params)
+            }
+            PluginMcpAction::Disable => {
+                let params: PluginDisableParams = parse_params(v, "plugin_disable")?;
+                self.plugin_disable(params)
+            }
+            PluginMcpAction::List => {
+                let _params: PluginListParams = parse_params(v, "plugin_list")?;
+                self.plugin_list()
+            }
+            PluginMcpAction::Info => {
+                let params: PluginInfoParams = parse_params(v, "plugin_info")?;
+                self.plugin_info(params)
+            }
+            PluginMcpAction::Create => {
+                let params: PluginCreateParams = parse_params(v, "plugin_create")?;
+                self.plugin_create(params)
+            }
+            PluginMcpAction::Execute => {
+                let params: PluginExecuteParams = parse_params(v, "plugin_execute")?;
+                self.plugin_execute(params).await
+            }
+            PluginMcpAction::Configure => {
+                let params: PluginConfigureParams = parse_params(v, "plugin_configure")?;
+                self.plugin_configure(params)
+            }
+        }
+    }
+
     /// Create an `OneCrawlMcp` reusing an existing browser session.
     /// Used by the CLI `run` command to delegate to MCP handlers directly.
     pub fn from_browser(
@@ -2034,8 +2086,9 @@ impl OneCrawlMcp {
             "orchestrator" => self.tool_orchestrator(ta).await,
             "vault" => self.tool_vault(ta).await,
             "events" => self.tool_events(ta).await,
+            "plugins" => self.tool_plugins(ta).await,
             _ => return Err(format!(
-                "unknown tool: '{tool}'. Available: browser, crawl, agent, stealth, data, secure, computer, memory, automate, perf, reactor, orchestrator, vault, events"
+                "unknown tool: '{tool}'. Available: browser, crawl, agent, stealth, data, secure, computer, memory, automate, perf, reactor, orchestrator, vault, events, plugins"
             )),
         };
 

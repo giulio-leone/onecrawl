@@ -15,3 +15,4 @@ mod orchestrator;
 mod reactor;
 mod events;
 mod vault;
+mod plugin;

@@ -506,6 +506,18 @@ action_enum!(VaultAction, "vault", [
     ImportEnv => "import_env",
 ]);
 
+action_enum!(PluginMcpAction, "plugins", [
+    Install => "install",
+    Uninstall => "uninstall",
+    Enable => "enable",
+    Disable => "disable",
+    List => "list",
+    Info => "info",
+    Create => "create",
+    Execute => "execute",
+    Configure => "configure",
+]);
+
 // ──────────────── Tests ─────────────────
 
 #[cfg(test)]
@@ -549,6 +561,9 @@ mod tests {
         assert_eq!(AutomateAction::parse("recovery_suggest").unwrap(), AutomateAction::RecoverySuggest);
         assert_eq!(AutomateAction::parse("error_history").unwrap(), AutomateAction::ErrorHistory);
         assert_eq!(PerfAction::parse("audit").unwrap(), PerfAction::Audit);
+        assert_eq!(PluginMcpAction::parse("install").unwrap(), PluginMcpAction::Install);
+        assert_eq!(PluginMcpAction::parse("list").unwrap(), PluginMcpAction::List);
+        assert_eq!(PluginMcpAction::parse("execute").unwrap(), PluginMcpAction::Execute);
     }
 
     #[test]

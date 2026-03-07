@@ -1431,7 +1431,13 @@ pub(crate) async fn dispatch(command: Commands) {
         }
         Commands::RunList => commands::browser::run::list_actions(),
 
+        // ── Plugin System ──────────────────────────────────────────────
+        Commands::Plugin { action } => commands::plugin::handle(action).await,
+
         // ── Multi-Device Orchestration ──────────────────────────────
         Commands::Orchestrate { action } => commands::orchestrator::handle(action).await,
-        }
+
+        // ── Streaming AI Vision ─────────────────────────────────────
+        Commands::Vision { action } => commands::vision::handle(action).await,
+    }
 }

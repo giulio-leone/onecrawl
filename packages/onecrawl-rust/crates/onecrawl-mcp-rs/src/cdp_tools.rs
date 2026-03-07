@@ -3289,3 +3289,69 @@ pub struct EventsStatsParams {}
 
 #[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
 pub struct EventsClearParams {}
+
+// ── Plugin param types ──
+
+pub(crate) fn default_empty_params() -> serde_json::Value {
+    serde_json::Value::Object(serde_json::Map::new())
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct PluginInstallParams {
+    #[schemars(description = "Local directory path containing the plugin (with plugin.json)")]
+    pub path: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct PluginUninstallParams {
+    #[schemars(description = "Plugin name to uninstall")]
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct PluginEnableParams {
+    #[schemars(description = "Plugin name to enable")]
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct PluginDisableParams {
+    #[schemars(description = "Plugin name to disable")]
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct PluginListParams {}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct PluginInfoParams {
+    #[schemars(description = "Plugin name")]
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct PluginCreateParams {
+    #[schemars(description = "Plugin name (alphanumeric + hyphens/underscores)")]
+    pub name: String,
+    #[schemars(description = "Directory path where the plugin scaffold will be created")]
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct PluginExecuteParams {
+    #[schemars(description = "Plugin name")]
+    pub plugin: String,
+    #[schemars(description = "Action name to execute")]
+    pub action: String,
+    #[schemars(description = "Parameters for the action")]
+    #[serde(default = "crate::cdp_tools::default_empty_params")]
+    pub params: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct PluginConfigureParams {
+    #[schemars(description = "Plugin name")]
+    pub name: String,
+    #[schemars(description = "Configuration JSON object")]
+    pub config: serde_json::Value,
+}
