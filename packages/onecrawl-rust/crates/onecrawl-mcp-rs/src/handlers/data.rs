@@ -412,28 +412,29 @@ impl OneCrawlMcp {
     pub(crate) async fn extract_schema(&self, p: ExtractSchemaParams) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let schema_type = p.schema_type.as_deref().unwrap_or("all");
+        let schema_type_js = json_escape(schema_type);
 
         let js = format!(r#"(() => {{
             const result = {{}};
 
-            if ("{schema_type}" === "all" || "{schema_type}" === "json_ld") {{
+            if ({schema_type_js} === "all" || {schema_type_js} === "json_ld") {{
                 const ld = [...document.querySelectorAll('script[type="application/ld+json"]')];
                 result.json_ld = ld.map(s => {{ try {{ return JSON.parse(s.textContent); }} catch(_) {{ return null; }} }}).filter(Boolean);
             }}
 
-            if ("{schema_type}" === "all" || "{schema_type}" === "open_graph") {{
+            if ({schema_type_js} === "all" || {schema_type_js} === "open_graph") {{
                 const og = [...document.querySelectorAll('meta[property^="og:"]')];
                 result.open_graph = {{}};
                 og.forEach(m => {{ result.open_graph[m.getAttribute('property')] = m.getAttribute('content'); }});
             }}
 
-            if ("{schema_type}" === "all" || "{schema_type}" === "twitter_card") {{
+            if ({schema_type_js} === "all" || {schema_type_js} === "twitter_card") {{
                 const tw = [...document.querySelectorAll('meta[name^="twitter:"]')];
                 result.twitter_card = {{}};
                 tw.forEach(m => {{ result.twitter_card[m.getAttribute('name')] = m.getAttribute('content'); }});
             }}
 
-            if ("{schema_type}" === "all" || "{schema_type}" === "microdata") {{
+            if ({schema_type_js} === "all" || {schema_type_js} === "microdata") {{
                 const items = [...document.querySelectorAll('[itemscope]')];
                 result.microdata = items.map(el => ({{
                     type: el.getAttribute('itemtype'),
@@ -762,18 +763,18 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let protocols = p.protocols.as_ref().map(|ps| ps.join(",")).unwrap_or_default();
         let js = format!(r#"(async () => {{
-            const protocols = "{}".split(",").filter(Boolean);
+            const protocols = {}.split(",").filter(Boolean);
             const ws = protocols.length
-                ? new WebSocket("{}", protocols)
-                : new WebSocket("{}");
+                ? new WebSocket({}, protocols)
+                : new WebSocket({});
             window._onecrawl_ws = window._onecrawl_ws || {{}};
             window._onecrawl_ws_msgs = window._onecrawl_ws_msgs || [];
             const id = "ws_" + Date.now();
-            ws.onmessage = (e) => window._onecrawl_ws_msgs.push({{ id, url: "{}", data: typeof e.data === 'string' ? e.data.substring(0, 1000) : '[binary]', ts: Date.now() }});
-            ws.onerror = (e) => window._onecrawl_ws_msgs.push({{ id, url: "{}", error: 'connection_error', ts: Date.now() }});
+            ws.onmessage = (e) => window._onecrawl_ws_msgs.push({{ id, url: {}, data: typeof e.data === 'string' ? e.data.substring(0, 1000) : '[binary]', ts: Date.now() }});
+            ws.onerror = (e) => window._onecrawl_ws_msgs.push({{ id, url: {}, error: 'connection_error', ts: Date.now() }});
             window._onecrawl_ws[id] = ws;
             await new Promise(r => {{ ws.onopen = r; setTimeout(r, 5000); }});
-            return {{ id, url: "{}", state: ws.readyState, protocol: ws.protocol }};
+            return {{ id, url: {}, state: ws.readyState, protocol: ws.protocol }};
         }})()"#, json_escape(&protocols), json_escape(&p.url), json_escape(&p.url), json_escape(&p.url), json_escape(&p.url), json_escape(&p.url));
         let result = page.evaluate(js).await.mcp()?;
         let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
@@ -788,7 +789,7 @@ impl OneCrawlMcp {
             window._onecrawl_ws_msgs = window._onecrawl_ws_msgs || [];
             const origWS = window._origWebSocket || window.WebSocket;
             window._origWebSocket = origWS;
-            const pattern = "{}";
+            const pattern = {};
             const captureOnly = {};
             window.WebSocket = function(url, protocols) {{
                 const ws = new origWS(url, protocols);
@@ -821,11 +822,11 @@ impl OneCrawlMcp {
     pub(crate) async fn ws_send(&self, p: WsSendParams) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
         let js = format!(r#"(() => {{
-            const ws = (window._onecrawl_ws || {{}})["{target}"];
-            if (!ws) return {{ error: "WebSocket connection not found", target: "{target}" }};
+            const ws = (window._onecrawl_ws || {{}})[{target}];
+            if (!ws) return {{ error: "WebSocket connection not found", target: {target} }};
             if (ws.readyState !== 1) return {{ error: "WebSocket not open", state: ws.readyState }};
-            ws.send("{}");
-            return {{ sent: true, target: "{target}", message_length: {len} }};
+            ws.send({});
+            return {{ sent: true, target: {target}, message_length: {len} }};
         }})()"#, json_escape(&p.message), target = json_escape(&p.target), len = p.message.len());
         let result = page.evaluate(js).await.mcp()?;
         let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
@@ -838,7 +839,7 @@ impl OneCrawlMcp {
         let filter = json_escape(p.url_filter.as_deref().unwrap_or(""));
         let js = format!(r#"(() => {{
             const msgs = window._onecrawl_ws_msgs || [];
-            const filter = "{}";
+            const filter = {};
             const filtered = filter ? msgs.filter(m => (m.url || '').includes(filter)) : msgs;
             return {{ total: msgs.length, returned: Math.min(filtered.length, {}), messages: filtered.slice(-{}) }};
         }})()"#, filter, limit, limit);
@@ -852,7 +853,7 @@ impl OneCrawlMcp {
         let target = json_escape(p.target.as_deref().unwrap_or(""));
         let js = format!(r#"(() => {{
             const wss = window._onecrawl_ws || {{}};
-            const target = "{}";
+            const target = {};
             let closed = 0;
             if (target) {{
                 const ws = wss[target];
@@ -874,7 +875,7 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let duration = p.duration_ms.unwrap_or(5000);
         let js = format!(r#"(async () => {{
-            const url = "{}";
+            const url = {};
             const messages = [];
             const es = new EventSource(url);
             await new Promise((resolve) => {{
@@ -897,7 +898,7 @@ impl OneCrawlMcp {
         let filter = json_escape(p.url_filter.as_deref().unwrap_or(""));
         let js = format!(r#"(() => {{
             const msgs = window._onecrawl_sse_msgs || [];
-            const filter = "{}";
+            const filter = {};
             const filtered = filter ? msgs.filter(m => m.type === 'message') : msgs;
             return {{ total: msgs.length, returned: Math.min(filtered.length, {}), messages: filtered.slice(-{}) }};
         }})()"#, filter, limit, limit);
@@ -911,8 +912,8 @@ impl OneCrawlMcp {
         let duration = p.duration_ms.unwrap_or(5000);
         let variables = p.variables.as_ref().map(|v| serde_json::to_string(v).unwrap_or_default()).unwrap_or_else(|| "{}".to_string());
         let js = format!(r#"(async () => {{
-            const url = "{}";
-            const query = "{}";
+            const url = {};
+            const query = {};
             const variables = {};
             const messages = [];
             

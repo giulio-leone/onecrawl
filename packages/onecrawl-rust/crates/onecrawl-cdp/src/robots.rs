@@ -195,7 +195,8 @@ pub fn get_sitemaps(robots: &RobotsTxt) -> Vec<String> {
 /// Fetch and parse robots.txt from a URL using browser `fetch()`.
 pub async fn fetch_robots(page: &Page, base_url: &str) -> Result<RobotsTxt> {
     let url = format!("{}/robots.txt", base_url.trim_end_matches('/'));
-    let js = format!(r#"fetch("{url}").then(r => r.ok ? r.text() : "").catch(() => "")"#,);
+    let url_js = serde_json::to_string(&url).unwrap_or_default();
+    let js = format!(r#"fetch({url_js}).then(r => r.ok ? r.text() : "").catch(() => "")"#);
     let body = page
         .evaluate(js)
         .await

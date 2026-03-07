@@ -1761,14 +1761,14 @@ impl OneCrawlMcp {
             }});
 
             return {{
-                level: "{level}",
+                level: {level_js},
                 total_issues: issues.length,
                 errors: issues.filter(i => i.type === "error").length,
                 warnings: issues.filter(i => i.type === "warning").length,
                 issues,
                 passes: {include_passes} ? passes : undefined
             }};
-        }})()"#, json_escape(selector));
+        }})()"#, json_escape(selector), level_js = json_escape(level));
         let result = page.evaluate(js).await.mcp()?;
         let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
         json_ok(&serde_json::json!({ "action": "wcag_audit", "audit": val }))

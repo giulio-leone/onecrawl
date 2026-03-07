@@ -267,8 +267,8 @@ impl OneCrawlMcp {
             
             window._lastMouseX = endX;
             window._lastMouseY = endY;
-            return {{ from: [startX, startY], to: [endX, endY], steps, speed: "{speed}" }};
-        }})()"#, x = p.x, y = p.y, speed = p.speed.as_deref().unwrap_or("normal"));
+            return {{ from: [startX, startY], to: [endX, endY], steps, speed: {speed_js} }};
+        }})()"#, x = p.x, y = p.y, speed_js = json_escape(p.speed.as_deref().unwrap_or("normal")));
         let result = page.evaluate(js).await.mcp()?;
         let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
         json_ok(&serde_json::json!({ "action": "human_mouse", "movement": val }))
@@ -337,11 +337,12 @@ impl OneCrawlMcp {
         let steps = p.steps.unwrap_or(5);
         let speed = p.speed.as_deref().unwrap_or("normal");
         let speed_mult = match speed { "slow" => 2.0f64, "fast" => 0.3, _ => 1.0 };
+        let direction_js = json_escape(direction);
         let js = format!(r#"(async () => {{
-            const dir = "{}";
-            const totalDist = {};
-            const steps = {};
-            const speedMult = {};
+            const dir = {direction_js};
+            const totalDist = {distance};
+            const steps = {steps};
+            const speedMult = {speed_mult};
             
             let scrolled = 0;
             for (let i = 0; i < steps; i++) {{
@@ -365,7 +366,7 @@ impl OneCrawlMcp {
             }}
             
             return {{ direction: dir, total_scrolled: scrolled, steps, final_position: {{ x: window.scrollX, y: window.scrollY }} }};
-        }})()"#, direction, distance, steps, speed_mult);
+        }})()"#);
         let result = page.evaluate(js).await.mcp()?;
         let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
         json_ok(&serde_json::json!({ "action": "human_scroll", "result": val }))
@@ -381,9 +382,9 @@ impl OneCrawlMcp {
                 careful: {{ mouse_speed: 'slow', type_min_ms: 100, type_max_ms: 400, scroll_speed: 'slow', delay_min: 800, delay_max: 3000, typos: true }},
                 elderly: {{ mouse_speed: 'slow', type_min_ms: 200, type_max_ms: 600, scroll_speed: 'slow', delay_min: 1500, delay_max: 5000, typos: true }}
             }};
-            const p = profiles["{}"] || profiles.normal;
+            const p = profiles[{}] || profiles.normal;
             window._onecrawl_human_profile = p;
-            return {{ profile: "{}", settings: p }};
+            return {{ profile: {}, settings: p }};
         }})()"#, json_escape(profile), json_escape(profile));
         let result = page.evaluate(js).await.mcp()?;
         let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
