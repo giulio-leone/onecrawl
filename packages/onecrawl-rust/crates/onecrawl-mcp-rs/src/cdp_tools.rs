@@ -2474,3 +2474,69 @@ pub struct InputReplayParams {
     /// Sequence of input events. Each event has "type" (click/type/scroll/wait) and params.
     pub events: Vec<serde_json::Value>,
 }
+
+// ──────────────── Enhanced agentic API params ──────────────────────────────
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct TokenBudgetParams {
+    /// Maximum token budget (approx 4 chars per token). Defaults to 4000.
+    pub max_tokens: Option<usize>,
+    /// Optional CSS selector to extract content from.
+    pub selector: Option<String>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct CompactStateParams {}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct PlanExecuteParams {
+    /// JavaScript expressions to execute in sequence.
+    pub steps: Vec<String>,
+    /// Stop execution on first error. Defaults to true.
+    pub stop_on_error: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct PageSummaryParams {}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ErrorContextParams {}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ElementInfoParams {
+    /// CSS selector of the element to inspect.
+    pub selector: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct BatchExecuteParams {
+    /// JavaScript commands to execute in sequence.
+    pub commands: Vec<String>,
+    /// Stop execution on first error. Defaults to false.
+    pub stop_on_error: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct PageAssertionsParams {
+    /// List of assertions to check.
+    pub assertions: Vec<AssertionCheck>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct AssertionCheck {
+    /// Type of check: url_contains, title_contains, element_exists, element_visible, text_contains.
+    pub check_type: String,
+    /// Expected value for the check.
+    pub expected: String,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct ExtractCompactParams {
+    /// Output format: "text" (default) or "markdown".
+    pub format: Option<String>,
+    /// Maximum token budget (approx 4 chars per token). Defaults to 8000.
+    pub max_tokens: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, rmcp::schemars::JsonSchema)]
+pub struct StealthStatusParams {}

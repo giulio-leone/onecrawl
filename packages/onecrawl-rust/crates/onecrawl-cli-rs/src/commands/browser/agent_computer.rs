@@ -206,3 +206,171 @@ pub async fn input_replay_file(events_file: &str) {
         }
     }).await;
 }
+
+// ── Enhanced Agentic CLI handlers ────────────────────────────────────
+
+pub async fn page_state_cli() {
+    with_page(|page| async move {
+        let js = r#"(() => {
+            return JSON.stringify({
+                url: location.href,
+                title: document.title,
+                ready: document.readyState,
+                counts: {
+                    forms: document.forms.length,
+                    links: document.links.length,
+                    images: document.images.length,
+                    inputs: document.querySelectorAll('input,textarea,select').length,
+                    buttons: document.querySelectorAll('button,[role=button]').length
+                }
+            });
+        })()"#;
+        let result = page.evaluate(js).await.map_err(|e| e.to_string())?;
+        let text: String = result.into_value().unwrap_or_default();
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
+        println!("{} Page state:", "✓".green());
+        println!("{}", serde_json::to_string_pretty(&parsed).unwrap_or_default());
+        Ok(())
+    }).await;
+}
+
+pub async fn plan_exec_cli(steps: &[String]) {
+    let steps = steps.to_vec();
+    with_page(|page| async move {
+        let mut success = 0u32;
+        let mut failed = 0u32;
+        for (i, step) in steps.iter().enumerate() {
+            match page.evaluate(step.clone()).await {
+                Ok(val) => {
+                    let v: serde_json::Value = val.into_value().unwrap_or(serde_json::Value::Null);
+                    println!("{} Step {}: {}", "✓".green(), i, serde_json::to_string(&v).unwrap_or_default());
+                    success += 1;
+                }
+                Err(e) => {
+                    println!("{} Step {}: {}", "✗".red(), i, e);
+                    failed += 1;
+                    break;
+                }
+            }
+        }
+        println!("\n{}/{} steps succeeded", success, steps.len());
+        if failed > 0 { println!("{} failures", failed); }
+        Ok(())
+    }).await;
+}
+
+pub async fn page_info_cli() {
+    with_page(|page| async move {
+        let js = r#"(() => {
+            const url = location.href;
+            const title = document.title;
+            const meta_desc = document.querySelector('meta[name="description"]')?.content || '';
+            const h1 = Array.from(document.querySelectorAll('h1')).map(e => e.textContent.trim()).filter(Boolean);
+            const h2 = Array.from(document.querySelectorAll('h2')).map(e => e.textContent.trim()).filter(Boolean).slice(0,10);
+            const forms = Array.from(document.forms).map(f => ({id: f.id, action: f.action, method: f.method, fields: f.elements.length}));
+            const errors = Array.from(document.querySelectorAll('.error,.alert-danger,[class*="error"]')).map(e => e.textContent.trim()).slice(0, 5);
+            return JSON.stringify({url, title, meta_desc, h1, h2, forms, errors, ready: document.readyState});
+        })()"#;
+        let result = page.evaluate(js).await.map_err(|e| e.to_string())?;
+        let text: String = result.into_value().unwrap_or_default();
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
+        println!("{} Page summary:", "✓".green());
+        println!("{}", serde_json::to_string_pretty(&parsed).unwrap_or_default());
+        Ok(())
+    }).await;
+}
+
+pub async fn assert_checks_cli(checks: &[String]) {
+    let checks = checks.to_vec();
+    with_page(|page| async move {
+        let mut all_pass = true;
+        for check in &checks {
+            let parts: Vec<&str> = check.splitn(2, ':').collect();
+            if parts.len() != 2 {
+                println!("{} Invalid format: {} (expected type:expected)", "✗".red(), check);
+                all_pass = false;
+                continue;
+            }
+            let (check_type, expected) = (parts[0], parts[1]);
+            let pass = match check_type {
+                "url_contains" => {
+                    let url: Option<String> = page.url().await.unwrap_or(None);
+                    url.unwrap_or_default().contains(expected)
+                }
+                "title_contains" => {
+                    let t: String = page.evaluate("document.title").await
+                        .map(|r| r.into_value().unwrap_or_default())
+                        .unwrap_or_default();
+                    t.contains(expected)
+                }
+                "element_exists" => {
+                    let js = format!("!!document.querySelector('{}')", expected.replace('\'', r"\'"));
+                    page.evaluate(js).await
+                        .map(|r| r.into_value().unwrap_or(false))
+                        .unwrap_or(false)
+                }
+                "text_contains" => {
+                    let t: String = page.evaluate("document.body?.innerText || ''").await
+                        .map(|r| r.into_value().unwrap_or_default())
+                        .unwrap_or_default();
+                    t.contains(expected)
+                }
+                _ => {
+                    println!("{} Unknown check type: {}", "✗".red(), check_type);
+                    false
+                }
+            };
+            if pass {
+                println!("{} {} = {}", "✓".green(), check_type, expected);
+            } else {
+                println!("{} {} ≠ {}", "✗".red(), check_type, expected);
+                all_pass = false;
+            }
+        }
+        if all_pass {
+            println!("\n{} All assertions passed", "✓".green());
+        } else {
+            println!("\n{} Some assertions failed", "✗".red());
+        }
+        Ok(())
+    }).await;
+}
+
+pub async fn element_detail_cli(selector: &str) {
+    let selector = selector.to_string();
+    with_page(|page| async move {
+        let js = format!(
+            r#"(() => {{
+                const el = document.querySelector(`{}`);
+                if (!el) return JSON.stringify({{found: false}});
+                const rect = el.getBoundingClientRect();
+                const style = getComputedStyle(el);
+                return JSON.stringify({{
+                    found: true,
+                    tag: el.tagName.toLowerCase(),
+                    id: el.id || null,
+                    classes: Array.from(el.classList),
+                    text: el.textContent?.trim().substring(0, 200) || '',
+                    value: el.value || null,
+                    href: el.href || null,
+                    disabled: el.disabled || false,
+                    visible: style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0,
+                    rect: {{x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height)}},
+                    aria: {{role: el.getAttribute('role'), label: el.getAttribute('aria-label')}}
+                }});
+            }})()"#,
+            selector.replace('`', r"\`").replace('\\', r"\\")
+        );
+        let result = page.evaluate(js).await.map_err(|e| e.to_string())?;
+        let text: String = result.into_value().unwrap_or_default();
+        let parsed: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
+        let found = parsed["found"].as_bool().unwrap_or(false);
+        if found {
+            println!("{} Element found: <{}>", "✓".green(), parsed["tag"].as_str().unwrap_or("?"));
+        } else {
+            println!("{} Element not found: {}", "✗".red(), selector);
+        }
+        println!("{}", serde_json::to_string_pretty(&parsed).unwrap_or_default());
+        Ok(())
+    }).await;
+}

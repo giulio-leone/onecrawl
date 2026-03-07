@@ -942,4 +942,33 @@ impl OneCrawlMcp {
         let val: serde_json::Value = result.into_value().unwrap_or(serde_json::json!(null));
         json_ok(&serde_json::json!({ "action": "graphql_subscribe", "result": val }))
     }
+
+    pub(crate) async fn extract_compact(
+        &self,
+        p: ExtractCompactParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let fmt = p.format.as_deref().unwrap_or("text");
+        let extract_format = match fmt {
+            "markdown" => onecrawl_cdp::ExtractFormat::Markdown,
+            _ => onecrawl_cdp::ExtractFormat::Text,
+        };
+        let result = onecrawl_cdp::extract::extract(&page, None, extract_format)
+            .await
+            .mcp()?;
+        let content = result.content;
+        let max_chars = p.max_tokens.unwrap_or(8000) * 4;
+        let truncated = if content.len() > max_chars {
+            content[..max_chars].to_string()
+        } else {
+            content.clone()
+        };
+        let chars = truncated.len();
+        json_ok(&serde_json::json!({
+            "content": truncated,
+            "format": fmt,
+            "tokens": chars / 4,
+            "truncated": content.len() > max_chars
+        }))
+    }
 }

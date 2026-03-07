@@ -28,5 +28,6 @@ fn default_session_name() -> Option<String> {
 
 pub const SOCKET_PATH: &str = "/tmp/onecrawl-daemon.sock";
 pub const PID_FILE: &str = "/tmp/onecrawl-daemon.pid";
+pub const STATE_FILE: &str = "/tmp/onecrawl-daemon-state.json";
 /// Default idle timeout before the daemon shuts itself down (seconds).
 pub const DEFAULT_IDLE_TIMEOUT_SECS: u64 = 1800; // 30 minutes

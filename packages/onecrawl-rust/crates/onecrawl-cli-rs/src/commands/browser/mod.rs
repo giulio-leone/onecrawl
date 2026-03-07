@@ -32,6 +32,11 @@ pub use agent_computer::{
     click_at_coords,
     multi_page_sync,
     input_replay_file,
+    page_state_cli,
+    plan_exec_cli,
+    page_info_cli,
+    assert_checks_cli,
+    element_detail_cli,
 };
 pub use auth::{
     passkey_enable,

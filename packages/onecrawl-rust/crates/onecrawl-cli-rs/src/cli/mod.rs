@@ -895,6 +895,28 @@ pub(crate) enum Commands {
     #[command(subcommand)]
     Computer(ComputerCliAction),
 
+    // ── Enhanced Agentic ────────────────────────────────────────
+    /// Get compact page state for AI agents
+    PageState,
+    /// Execute multi-step JS plan
+    PlanExec {
+        #[arg(required = true)]
+        steps: Vec<String>,
+    },
+    /// Get page summary optimized for AI
+    PageInfo,
+    /// Check multiple page assertions (format: "type:expected")
+    Assert {
+        /// Assertions in "type:expected" format (e.g., "url_contains:dashboard")
+        #[arg(required = true)]
+        checks: Vec<String>,
+    },
+    /// Get detailed element information
+    ElementDetail {
+        /// CSS selector of the element to inspect
+        selector: String,
+    },
+
     // ── Version ─────────────────────────────────────────────────
     /// Show version and build information
     Version,

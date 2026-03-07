@@ -148,6 +148,10 @@ action_enum!(BrowserAction, "browser", [
     FormWizardTrack => "form_wizard_track",
     DynamicImportWait => "dynamic_import_wait",
     ParallelExec => "parallel_exec",
+    // Enhanced agentic: token budget, compact state, page assertions
+    TokenBudget => "token_budget",
+    CompactState => "compact_state",
+    PageAssertions => "page_assertions",
 ]);
 
 action_enum!(CrawlAction, "crawl", [
@@ -210,6 +214,10 @@ action_enum!(AgentAction, "agent", [
     SessionContext => "session_context",
     AutoChain => "auto_chain",
     Think => "think",
+    // Enhanced agentic: plan execute, page summary, error context
+    PlanExecute => "plan_execute",
+    PageSummary => "page_summary",
+    ErrorContext => "error_context",
 ]);
 
 action_enum!(StealthAction, "stealth", [
@@ -238,6 +246,8 @@ action_enum!(StealthAction, "stealth", [
     BehaviorStop => "behavior_stop",
     StealthRotate => "stealth_rotate",
     DetectionAudit => "detection_audit",
+    // Enhanced agentic: stealth status report
+    StealthStatus => "stealth_status",
 ]);
 
 action_enum!(DataAction, "data", [
@@ -269,6 +279,8 @@ action_enum!(DataAction, "data", [
     SseListen => "sse_listen",
     SseMessages => "sse_messages",
     GraphqlSubscribe => "graphql_subscribe",
+    // Enhanced agentic: compact extraction
+    ExtractCompact => "extract_compact",
 ]);
 
 action_enum!(SecureAction, "secure", [
@@ -324,6 +336,8 @@ action_enum!(ComputerAction, "computer", [
     ClickAtCoords => "click_at_coords",
     MultiPageSync => "multi_page_sync",
     InputReplay => "input_replay",
+    // Enhanced agentic: element info
+    ElementInfo => "element_info",
 ]);
 
 action_enum!(MemoryAction, "memory", [
@@ -362,6 +376,8 @@ action_enum!(AutomateAction, "automate", [
     ReconnectCdp => "reconnect_cdp",
     GcTabs => "gc_tabs",
     Watchdog => "watchdog",
+    // Enhanced agentic: batch execute
+    BatchExecute => "batch_execute",
 ]);
 
 action_enum!(PerfAction, "perf", [

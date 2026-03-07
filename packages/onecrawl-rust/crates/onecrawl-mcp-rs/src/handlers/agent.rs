@@ -1450,4 +1450,97 @@ impl OneCrawlMcp {
         let result = onecrawl_cdp::agent::think(&page).await.mcp()?;
         json_ok(&result)
     }
+
+    pub(crate) async fn plan_execute(
+        &self,
+        p: PlanExecuteParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let mut results = Vec::new();
+        let mut success_count = 0u32;
+        let mut fail_count = 0u32;
+
+        for (i, step) in p.steps.iter().enumerate() {
+            let step_result = page.evaluate(step.clone()).await;
+            match step_result {
+                Ok(val) => {
+                    let v = val
+                        .into_value::<serde_json::Value>()
+                        .unwrap_or(serde_json::Value::Null);
+                    results.push(
+                        serde_json::json!({"step": i, "status": "ok", "result": v}),
+                    );
+                    success_count += 1;
+                }
+                Err(e) => {
+                    results.push(
+                        serde_json::json!({"step": i, "status": "error", "error": e.to_string()}),
+                    );
+                    fail_count += 1;
+                    if p.stop_on_error.unwrap_or(true) {
+                        break;
+                    }
+                }
+            }
+        }
+        json_ok(&serde_json::json!({
+            "steps": results,
+            "summary": { "total": p.steps.len(), "success": success_count, "failed": fail_count }
+        }))
+    }
+
+    pub(crate) async fn page_summary(
+        &self,
+        _p: PageSummaryParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"(() => {
+            const url = location.href;
+            const title = document.title;
+            const meta_desc = document.querySelector('meta[name="description"]')?.content || '';
+            const h1 = Array.from(document.querySelectorAll('h1')).map(e => e.textContent.trim()).filter(Boolean);
+            const h2 = Array.from(document.querySelectorAll('h2')).map(e => e.textContent.trim()).filter(Boolean);
+            const nav_links = Array.from(document.querySelectorAll('nav a')).map(a => ({text: a.textContent.trim(), href: a.href})).slice(0, 20);
+            const forms = Array.from(document.forms).map(f => ({id: f.id, action: f.action, method: f.method, fields: f.elements.length}));
+            const alerts = Array.from(document.querySelectorAll('[role="alert"],[role="status"]')).map(e => e.textContent.trim());
+            const errors = Array.from(document.querySelectorAll('.error,.alert-danger,[class*="error"]')).map(e => e.textContent.trim()).slice(0, 5);
+            return JSON.stringify({url, title, meta_desc, h1, h2: h2.slice(0,10), nav_links, forms, alerts, errors, ready: document.readyState});
+        })()"#;
+        let result = page.evaluate(js.to_string()).await.mcp()?;
+        let text = result
+            .into_value::<String>()
+            .unwrap_or_default();
+        let parsed: serde_json::Value =
+            serde_json::from_str(&text).unwrap_or(serde_json::json!({"raw": text}));
+        json_ok(&parsed)
+    }
+
+    pub(crate) async fn error_context(
+        &self,
+        _p: ErrorContextParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"(() => {
+            const consoleErrors = window.__onecrawl_console_errors || [];
+            const networkErrors = window.__onecrawl_network_errors || [];
+            const jsErrors = Array.from(document.querySelectorAll('[class*="error"],[role="alert"]'))
+                .map(e => ({selector: e.tagName + (e.id ? '#'+e.id : '') + (e.className ? '.'+e.className.split(' ')[0] : ''), text: e.textContent.trim().substring(0, 200)}))
+                .slice(0, 10);
+            return JSON.stringify({
+                url: location.href,
+                status: document.readyState,
+                js_errors: jsErrors,
+                console_errors: consoleErrors.slice(-10),
+                network_errors: networkErrors.slice(-10),
+                has_errors: jsErrors.length > 0 || consoleErrors.length > 0 || networkErrors.length > 0
+            });
+        })()"#;
+        let result = page.evaluate(js.to_string()).await.mcp()?;
+        let text = result
+            .into_value::<String>()
+            .unwrap_or_default();
+        let parsed: serde_json::Value =
+            serde_json::from_str(&text).unwrap_or(serde_json::json!({"raw": text}));
+        json_ok(&parsed)
+    }
 }

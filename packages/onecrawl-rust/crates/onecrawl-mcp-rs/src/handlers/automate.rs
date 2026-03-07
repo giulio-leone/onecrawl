@@ -1125,4 +1125,33 @@ impl OneCrawlMcp {
         let result = onecrawl_cdp::harness::watchdog_status(&page).await.mcp()?;
         json_ok(&result)
     }
+
+    pub(crate) async fn batch_execute(
+        &self,
+        p: BatchExecuteParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let mut results = Vec::new();
+        for (i, cmd) in p.commands.iter().enumerate() {
+            let result = page.evaluate(cmd.clone()).await;
+            match result {
+                Ok(val) => {
+                    let v = val
+                        .into_value::<serde_json::Value>()
+                        .unwrap_or(serde_json::Value::Null);
+                    results.push(serde_json::json!({"index": i, "status": "ok", "result": v}));
+                }
+                Err(e) => {
+                    results.push(
+                        serde_json::json!({"index": i, "status": "error", "error": e.to_string()}),
+                    );
+                    if p.stop_on_error.unwrap_or(false) {
+                        break;
+                    }
+                }
+            }
+        }
+        let executed = results.len();
+        json_ok(&serde_json::json!({"results": results, "total": p.commands.len(), "executed": executed}))
+    }
 }

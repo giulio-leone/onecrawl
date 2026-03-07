@@ -4,6 +4,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
 use tokio::sync::{Mutex, Notify};
 
+use serde::{Deserialize, Serialize};
+
 use onecrawl_cdp::{BrowserSession, Page};
 
 use super::protocol::*;
@@ -17,6 +19,12 @@ struct SessionState {
 /// Shared daemon state accessible from every connection handler.
 struct DaemonState {
     sessions: HashMap<String, SessionState>,
+    headless: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PersistedState {
+    sessions: Vec<String>,
     headless: bool,
 }
 
@@ -48,8 +56,19 @@ impl DaemonState {
                     page,
                 },
             );
+            self.save_state();
         }
         Ok(&self.sessions[name].page)
+    }
+
+    fn save_state(&self) {
+        let persisted = PersistedState {
+            sessions: self.sessions.keys().cloned().collect(),
+            headless: self.headless,
+        };
+        if let Ok(data) = serde_json::to_string_pretty(&persisted) {
+            let _ = std::fs::write(STATE_FILE, data);
+        }
     }
 }
 
@@ -130,6 +149,40 @@ pub async fn start_daemon(headless: bool) -> Result<(), Box<dyn std::error::Erro
         });
     }
 
+    // Health monitoring — check session liveness every 60 seconds.
+    {
+        let health_state = Arc::clone(&state);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            interval.tick().await; // skip immediate first tick
+            loop {
+                interval.tick().await;
+                let sessions_snapshot: Vec<(String, Page)> = {
+                    let ds = health_state.lock().await;
+                    ds.sessions
+                        .iter()
+                        .map(|(n, s)| (n.clone(), s.page.clone()))
+                        .collect()
+                };
+                let mut dead = Vec::new();
+                for (name, page) in &sessions_snapshot {
+                    if onecrawl_cdp::harness::health_check(page).await.is_err() {
+                        eprintln!("[daemon] session '{}' health check failed", name);
+                        dead.push(name.clone());
+                    }
+                }
+                if !dead.is_empty() {
+                    let mut ds = health_state.lock().await;
+                    for name in &dead {
+                        ds.sessions.remove(name);
+                        eprintln!("[daemon] removed dead session '{}'", name);
+                    }
+                    ds.save_state();
+                }
+            }
+        });
+    }
+
     // Accept loop — exits on shutdown notification.
     loop {
         tokio::select! {
@@ -148,7 +201,12 @@ pub async fn start_daemon(headless: bool) -> Result<(), Box<dyn std::error::Erro
         }
     }
 
+    {
+        let ds = state.lock().await;
+        ds.save_state();
+    }
     cleanup();
+    let _ = std::fs::remove_file(STATE_FILE);
     eprintln!("daemon shut down cleanly");
     Ok(())
 }
@@ -250,8 +308,52 @@ async fn dispatch_command(
             }
         }
 
+        "session_list" => {
+            let ds = state.lock().await;
+            let names: Vec<String> = ds.sessions.keys().cloned().collect();
+            DaemonResponse {
+                id,
+                success: true,
+                data: Some(serde_json::json!({"sessions": names, "count": names.len()})),
+                error: None,
+            }
+        }
+
+        "session_close" => {
+            let name = match req.args.get("name").and_then(|v| v.as_str()) {
+                Some(n) => n.to_string(),
+                None => {
+                    return DaemonResponse {
+                        id,
+                        success: false,
+                        data: None,
+                        error: Some("missing required argument: name".to_string()),
+                    };
+                }
+            };
+            let mut ds = state.lock().await;
+            if ds.sessions.remove(&name).is_some() {
+                ds.save_state();
+                DaemonResponse {
+                    id,
+                    success: true,
+                    data: Some(serde_json::json!({"closed": name})),
+                    error: None,
+                }
+            } else {
+                DaemonResponse {
+                    id,
+                    success: false,
+                    data: None,
+                    error: Some(format!("session not found: {name}")),
+                }
+            }
+        }
+
         // Browser commands that require a page.
-        "goto" | "snapshot" | "click" | "type" | "evaluate" | "screenshot" => {
+        "goto" | "snapshot" | "click" | "type" | "evaluate" | "screenshot"
+        | "fill" | "hover" | "scroll" | "keyboard" | "select" | "wait"
+        | "text" | "html" | "back" | "forward" | "reload" | "health" => {
             let mut st = state.lock().await;
             let page = match st.get_or_create_session(session_name).await {
                 Ok(p) => p.clone(),
@@ -275,6 +377,14 @@ async fn dispatch_command(
             error: Some(format!("unknown command: {other}")),
         },
     }
+}
+
+/// Extract a required string argument, returning a descriptive error if missing.
+fn args_str(key: &str, args: &serde_json::Value) -> Result<String, String> {
+    args.get(key)
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| format!("missing required argument: {key}"))
 }
 
 /// Execute a browser-level command on the given page.
@@ -351,6 +461,130 @@ async fn exec_browser_command(
                 use base64::Engine;
                 let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
                 Ok(serde_json::json!({ "screenshot_base64": b64, "bytes": data.len() }))
+            }
+
+            "fill" => {
+                let selector = args_str("selector", args)?;
+                let text = args_str("text", args)?;
+                onecrawl_cdp::keyboard::fill(page, &selector, &text)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({"filled": selector}))
+            }
+
+            "hover" => {
+                let selector = args_str("selector", args)?;
+                onecrawl_cdp::element::hover(page, &selector)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({"hovered": selector}))
+            }
+
+            "scroll" => {
+                let direction = args.get("direction").and_then(|v| v.as_str()).unwrap_or("down");
+                let amount = args.get("amount").and_then(|v| v.as_f64()).unwrap_or(300.0) as i64;
+                let (dx, dy) = match direction {
+                    "up" => (0, -amount),
+                    "down" => (0, amount),
+                    "left" => (-amount, 0),
+                    "right" => (amount, 0),
+                    _ => (0, amount),
+                };
+                onecrawl_cdp::human::human_scroll(page, dx, dy)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({"scrolled": direction, "amount": amount}))
+            }
+
+            "keyboard" => {
+                let keys = args_str("keys", args)?;
+                if keys.contains('+') {
+                    onecrawl_cdp::keyboard::keyboard_shortcut(page, &keys)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                } else {
+                    onecrawl_cdp::keyboard::press_key(page, &keys)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                }
+                Ok(serde_json::json!({"pressed": keys}))
+            }
+
+            "select" => {
+                let selector = args_str("selector", args)?;
+                let value = args_str("value", args)?;
+                onecrawl_cdp::element::select_option(page, &selector, &value)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({"selected": value, "in": selector}))
+            }
+
+            "wait" => {
+                let selector = args_str("selector", args)?;
+                let timeout = args.get("timeout_ms").and_then(|v| v.as_u64()).unwrap_or(5000);
+                onecrawl_cdp::navigation::wait_for_selector(page, &selector, timeout)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({"found": selector}))
+            }
+
+            "text" => {
+                let selector = args.get("selector").and_then(|v| v.as_str());
+                let text = if let Some(sel) = selector {
+                    onecrawl_cdp::element::get_text(page, sel)
+                        .await
+                        .map_err(|e| e.to_string())?
+                } else {
+                    let result = onecrawl_cdp::extract::extract(
+                        page,
+                        None,
+                        onecrawl_cdp::extract::ExtractFormat::Text,
+                    )
+                    .await
+                    .map_err(|e| e.to_string())?;
+                    result.content
+                };
+                Ok(serde_json::json!({"text": text}))
+            }
+
+            "html" => {
+                let selector = args.get("selector").and_then(|v| v.as_str());
+                let result = onecrawl_cdp::extract::extract(
+                    page,
+                    selector,
+                    onecrawl_cdp::extract::ExtractFormat::Html,
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({"html": result.content}))
+            }
+
+            "back" => {
+                onecrawl_cdp::navigation::go_back(page)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({"navigated": "back"}))
+            }
+
+            "forward" => {
+                onecrawl_cdp::navigation::go_forward(page)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({"navigated": "forward"}))
+            }
+
+            "reload" => {
+                onecrawl_cdp::navigation::reload(page)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::json!({"reloaded": true}))
+            }
+
+            "health" => {
+                let health = onecrawl_cdp::harness::health_check(page)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(health)
             }
 
             _ => Err(format!("unhandled browser command: {command}")),

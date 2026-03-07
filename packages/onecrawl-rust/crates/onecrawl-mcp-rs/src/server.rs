@@ -25,11 +25,34 @@ pub struct OneCrawlMcp {
 #[tool_router]
 impl OneCrawlMcp {
     pub fn new(store_path: String, store_password: String) -> Self {
+        let browser = new_shared_browser();
+
+        // Auto-load safety policy from env var or default path
+        let policy_path = std::env::var("ONECRAWL_POLICY")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::env::var("HOME")
+                    .map(|h| std::path::PathBuf::from(h).join(".onecrawl/policy.json"))
+                    .unwrap_or_default()
+            });
+        if policy_path.exists() {
+            match onecrawl_cdp::SafetyState::load_from_file(&policy_path) {
+                Ok(policy) => {
+                    if let Ok(mut state) = browser.try_lock() {
+                        state.safety = Some(onecrawl_cdp::SafetyState::new(policy));
+                    }
+                }
+                Err(e) => {
+                    eprintln!("warning: failed to load safety policy: {e}");
+                }
+            }
+        }
+
         Self {
             tool_router: Self::tool_router(),
             store_path: Arc::new(store_path),
             store_password: Arc::new(store_password),
-            browser: new_shared_browser(),
+            browser,
         }
     }
 
@@ -39,6 +62,50 @@ impl OneCrawlMcp {
             &self.store_password,
         )
         .mcp()
+    }
+
+    /// Enforce safety policy before executing an action.
+    /// Returns Ok(()) if allowed, Err(McpError) if denied or over rate limit.
+    async fn enforce_safety(&self, tool_name: &str, action_name: &str) -> Result<(), McpError> {
+        let mut state = self.browser.lock().await;
+        if let Some(ref mut safety) = state.safety {
+            let cmd = format!("{}.{}", tool_name, action_name);
+            match safety.check_command(&cmd) {
+                onecrawl_cdp::SafetyCheck::Allowed => {}
+                onecrawl_cdp::SafetyCheck::Denied(reason) => {
+                    return Err(McpError::invalid_params(
+                        format!("safety policy denied: {reason}"),
+                        None,
+                    ));
+                }
+                onecrawl_cdp::SafetyCheck::RequiresConfirmation(reason) => {
+                    return Err(McpError::invalid_params(
+                        format!("safety policy requires confirmation: {reason}"),
+                        None,
+                    ));
+                }
+            }
+            match safety.check_rate_limit() {
+                onecrawl_cdp::SafetyCheck::Allowed => {}
+                onecrawl_cdp::SafetyCheck::Denied(reason) => {
+                    return Err(McpError::invalid_params(
+                        format!("rate limit: {reason}"),
+                        None,
+                    ));
+                }
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Record a successful action for safety policy counters.
+    #[allow(dead_code)]
+    async fn record_safety_action(&self) {
+        let mut state = self.browser.lock().await;
+        if let Some(ref mut safety) = state.safety {
+            safety.record_action();
+        }
     }
 
     /// Internal dispatch for `agent.execute_chain`.
@@ -176,7 +243,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "browser",
-        description = "Browser navigation, interaction, extraction, multi-tab, DOM events, session, network interception, console/dialog, device emulation, drag/drop, file upload, shadow DOM, Service Worker/PWA.\n\nActions:\n- goto {url} — Navigate to URL\n- click {selector} — Click element\n- type {selector, text} — Type into input\n- screenshot {selector?, full_page?} — Screenshot\n- pdf {landscape?} — Export PDF\n- back / forward / reload — Navigation\n- wait {selector, timeout_ms?} — Wait for element\n- evaluate {js} — Execute JavaScript\n- snapshot {interactive_only?, compact?, depth?} — A11y snapshot\n- css / xpath / find_text — Query elements\n- text / html / markdown / structured — Extract content\n- stream — Paginated extraction\n- detect_forms / fill_form — Forms\n- snapshot_diff — Diff snapshots\n- parse_a11y / parse_selector / parse_text / parse_links — Offline\n- new_tab / list_tabs / switch_tab / close_tab — Multi-tab\n- observe_mutations / get_mutations / stop_mutations / wait_for_event — DOM\n- cookies_get / cookies_set / cookies_clear — Cookies\n- storage_get / storage_set / export_session / import_session — Storage\n- intercept_enable / intercept_add_rule / intercept_remove_rule / intercept_list / intercept_disable / block_requests — Network\n- console_start / console_get / console_clear / dialog_handle / dialog_get / errors_get — Debug\n- emulate_device / emulate_geolocation / emulate_timezone / emulate_media / emulate_network — Emulation\n- drag {source, target} — Drag and drop\n- hover {selector} — Mouse hover\n- keyboard {keys, selector?} — Keyboard shortcuts\n- select {selector, value?, text?, index?} — Select dropdown option\n- upload {selector, file_path} — File upload\n- download_wait / download_list / download_set_dir — Downloads\n- shadow_query / shadow_text {host_selector, inner_selector} — Shadow DOM\n- deep_query {selector} — Pierce shadow DOM with >>>\n- context_set {key, value} / context_get {key} / context_list / context_clear / context_transfer {from_tab, to_tab, keys?} — Page context\n- form_infer {selector?} / form_auto_fill {data, selector?, confidence_threshold?} / form_validate — Smart form mapping\n- selector_heal {selector, context?} / selector_alternatives {selector, max_alternatives?} / selector_validate {selector, expected_role?, expected_text?} — Self-healing selectors\n- event_subscribe {event_type, filter?} / event_unsubscribe {event_type} / event_poll {event_type?, limit?, clear?} / event_clear — Event reactions\n- sw_register {script_url, scope?} / sw_unregister {scope?} / sw_list / sw_update {scope?} — Service Worker\n- cache_list / cache_clear — Cache Storage\n- push_simulate {title, body?, icon?, data?} — Push notifications\n- offline_mode {enabled, bypass_for?} — Offline simulation\n- set_mode {mode} — Set browser mode: 'headed' or 'headless'\n- set_stealth {enabled} — Enable/disable stealth (ON by default)\n- session_info — Get session status, mode, stealth, tabs\n- virtual_scroll_detect — Detect virtual/infinite scroll containers\n- virtual_scroll_extract {container, item_selector, max_items?} — Extract items from virtual scroll\n- wait_hydration {timeout_ms?} — Wait for SPA framework hydration\n- wait_animation {selector, timeout_ms?} — Wait for CSS/JS animations to complete\n- wait_network_idle {idle_ms?, timeout_ms?} — Wait until network is idle\n- trigger_lazy_load {selector?} — Trigger lazy-loaded elements\n- health_check — Browser health diagnostics\n- circuit_breaker {command, error?, threshold?} — Circuit breaker state management"
+        description = "Browser navigation, interaction, extraction, multi-tab, DOM events, session, network interception, console/dialog, device emulation, drag/drop, file upload, shadow DOM, Service Worker/PWA.\n\nActions:\n- goto {url} — Navigate to URL\n- click {selector} — Click element\n- type {selector, text} — Type into input\n- screenshot {selector?, full_page?} — Screenshot\n- pdf {landscape?} — Export PDF\n- back / forward / reload — Navigation\n- wait {selector, timeout_ms?} — Wait for element\n- evaluate {js} — Execute JavaScript\n- snapshot {interactive_only?, compact?, depth?} — A11y snapshot\n- css / xpath / find_text — Query elements\n- text / html / markdown / structured — Extract content\n- stream — Paginated extraction\n- detect_forms / fill_form — Forms\n- snapshot_diff — Diff snapshots\n- parse_a11y / parse_selector / parse_text / parse_links — Offline\n- new_tab / list_tabs / switch_tab / close_tab — Multi-tab\n- observe_mutations / get_mutations / stop_mutations / wait_for_event — DOM\n- cookies_get / cookies_set / cookies_clear — Cookies\n- storage_get / storage_set / export_session / import_session — Storage\n- intercept_enable / intercept_add_rule / intercept_remove_rule / intercept_list / intercept_disable / block_requests — Network\n- console_start / console_get / console_clear / dialog_handle / dialog_get / errors_get — Debug\n- emulate_device / emulate_geolocation / emulate_timezone / emulate_media / emulate_network — Emulation\n- drag {source, target} — Drag and drop\n- hover {selector} — Mouse hover\n- keyboard {keys, selector?} — Keyboard shortcuts\n- select {selector, value?, text?, index?} — Select dropdown option\n- upload {selector, file_path} — File upload\n- download_wait / download_list / download_set_dir — Downloads\n- shadow_query / shadow_text {host_selector, inner_selector} — Shadow DOM\n- deep_query {selector} — Pierce shadow DOM with >>>\n- context_set {key, value} / context_get {key} / context_list / context_clear / context_transfer {from_tab, to_tab, keys?} — Page context\n- form_infer {selector?} / form_auto_fill {data, selector?, confidence_threshold?} / form_validate — Smart form mapping\n- selector_heal {selector, context?} / selector_alternatives {selector, max_alternatives?} / selector_validate {selector, expected_role?, expected_text?} — Self-healing selectors\n- event_subscribe {event_type, filter?} / event_unsubscribe {event_type} / event_poll {event_type?, limit?, clear?} / event_clear — Event reactions\n- sw_register {script_url, scope?} / sw_unregister {scope?} / sw_list / sw_update {scope?} — Service Worker\n- cache_list / cache_clear — Cache Storage\n- push_simulate {title, body?, icon?, data?} — Push notifications\n- offline_mode {enabled, bypass_for?} — Offline simulation\n- set_mode {mode} — Set browser mode: 'headed' or 'headless'\n- set_stealth {enabled} — Enable/disable stealth (ON by default)\n- session_info — Get session status, mode, stealth, tabs\n- virtual_scroll_detect — Detect virtual/infinite scroll containers\n- virtual_scroll_extract {container, item_selector, max_items?} — Extract items from virtual scroll\n- wait_hydration {timeout_ms?} — Wait for SPA framework hydration\n- wait_animation {selector, timeout_ms?} — Wait for CSS/JS animations to complete\n- wait_network_idle {idle_ms?, timeout_ms?} — Wait until network is idle\n- trigger_lazy_load {selector?} — Trigger lazy-loaded elements\n- health_check — Browser health diagnostics\n- circuit_breaker {command, error?, threshold?} — Circuit breaker state management\n- token_budget {max_tokens?, selector?} — Truncate page content to token budget\n- compact_state — Minimal page state for AI agents (URL, title, element counts)\n- page_assertions {assertions} — Verify multiple page conditions at once"
     )]
     async fn tool_browser(
         &self,
@@ -184,6 +251,7 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
+        self.enforce_safety("browser", &action).await?;
         let action = BrowserAction::parse(&action)?;
         match action {
             BrowserAction::Goto => {
@@ -569,6 +637,18 @@ impl OneCrawlMcp {
                 let params: ParallelExecParams = parse_params(v, "parallel_exec")?;
                 self.parallel_exec(params).await
             }
+            BrowserAction::TokenBudget => {
+                let params: TokenBudgetParams = parse_params(v, "token_budget")?;
+                self.token_budget(params).await
+            }
+            BrowserAction::CompactState => {
+                let params: CompactStateParams = parse_params(v, "compact_state")?;
+                self.compact_state(params).await
+            }
+            BrowserAction::PageAssertions => {
+                let params: PageAssertionsParams = parse_params(v, "page_assertions")?;
+                self.page_assertions(params).await
+            }
         }
     }
 
@@ -582,6 +662,7 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
+        self.enforce_safety("crawl", &action).await?;
         let action = CrawlAction::parse(&action)?;
         match action {
             CrawlAction::Spider => {
@@ -609,7 +690,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "agent",
-        description = "AI agent orchestration — command chains, element screenshots, API capture, iframes (same-origin + cross-origin CDP), remote CDP, safety policies, skills, screencast, recording, iOS automation, WCAG accessibility auditing, session context, auto-chain, and structured reasoning.\n\nActions:\n- execute_chain {commands} — Execute multiple commands in sequence\n- element_screenshot {selector} — Screenshot a specific element\n- api_capture_start — Start capturing API calls\n- api_capture_summary — Get captured API call summary\n- iframe_list — List all iframes on page (DOM-based)\n- iframe_snapshot {index, interactive_only?} — Snapshot an iframe\n- iframe_eval_cdp {frame_url, expression} — Evaluate JS in cross-origin iframe via CDP (bypasses SOP)\n- iframe_click_cdp {frame_url, selector, human_like?} — Click element inside cross-origin iframe\n- iframe_frames — List all frames via CDP (includes cross-origin)\n- connect_remote {ws_url, headers?} — Connect to remote CDP\n- safety_set {policy} — Set safety policy JSON\n- safety_status — Get current safety policy status\n- skills_list — List available skills\n- screencast_start {quality?, max_width?, max_height?} — Start screencast\n- screencast_stop — Stop screencast\n- screencast_frame — Get latest screencast frame\n- recording_start {output?, fps?, quality?} — Start video recording\n- recording_stop — Stop recording and save\n- recording_status — Get recording status\n- ios_devices — List iOS devices\n- ios_connect {device_id, wda_url?} — Connect to iOS device\n- ios_navigate {url} — Navigate iOS Safari\n- ios_tap {x, y} — Tap on iOS screen\n- ios_screenshot — Take iOS screenshot\n- task_decompose {goal, context?, max_depth?} — Decompose goal into subtasks\n- task_plan {tasks, strategy?} — Generate execution plan\n- task_status — Get current task plans status\n- vision_describe {selector?, format?} — Describe page/element visually\n- vision_locate {description, strategy?} — Find element by description\n- vision_compare {baseline, current?, threshold?} — Compare page states\n- wcag_audit {level?, selector?} — Full WCAG compliance audit\n- aria_tree — Build ARIA accessibility tree\n- contrast_check {selector?, threshold?} — Color contrast ratio check\n- landmark_nav — List ARIA landmark regions\n- focus_order — Map tab/focus order of interactive elements\n- alt_text_audit {selector?, include_decorative?} — Audit image alt text\n- heading_structure — Validate heading hierarchy (h1-h6)\n- role_validate {selector?, roles?} — Validate ARIA roles and properties\n- keyboard_trap_detect — Detect keyboard focus traps\n- screen_reader_sim {selector?, max_elements?} — Simulate screen reader output\n- session_context {command, key?, value?} — Store/retrieve persistent context (set/get/get_all/clear)\n- auto_chain {actions, on_error?, max_retries?} — Execute JS chain with error recovery\n- think {context?} — Structured reasoning: observe page state and recommend actions"
+        description = "AI agent orchestration — command chains, element screenshots, API capture, iframes (same-origin + cross-origin CDP), remote CDP, safety policies, skills, screencast, recording, iOS automation, WCAG accessibility auditing, session context, auto-chain, and structured reasoning.\n\nActions:\n- execute_chain {commands} — Execute multiple commands in sequence\n- element_screenshot {selector} — Screenshot a specific element\n- api_capture_start — Start capturing API calls\n- api_capture_summary — Get captured API call summary\n- iframe_list — List all iframes on page (DOM-based)\n- iframe_snapshot {index, interactive_only?} — Snapshot an iframe\n- iframe_eval_cdp {frame_url, expression} — Evaluate JS in cross-origin iframe via CDP (bypasses SOP)\n- iframe_click_cdp {frame_url, selector, human_like?} — Click element inside cross-origin iframe\n- iframe_frames — List all frames via CDP (includes cross-origin)\n- connect_remote {ws_url, headers?} — Connect to remote CDP\n- safety_set {policy} — Set safety policy JSON\n- safety_status — Get current safety policy status\n- skills_list — List available skills\n- screencast_start {quality?, max_width?, max_height?} — Start screencast\n- screencast_stop — Stop screencast\n- screencast_frame — Get latest screencast frame\n- recording_start {output?, fps?, quality?} — Start video recording\n- recording_stop — Stop recording and save\n- recording_status — Get recording status\n- ios_devices — List iOS devices\n- ios_connect {device_id, wda_url?} — Connect to iOS device\n- ios_navigate {url} — Navigate iOS Safari\n- ios_tap {x, y} — Tap on iOS screen\n- ios_screenshot — Take iOS screenshot\n- task_decompose {goal, context?, max_depth?} — Decompose goal into subtasks\n- task_plan {tasks, strategy?} — Generate execution plan\n- task_status — Get current task plans status\n- vision_describe {selector?, format?} — Describe page/element visually\n- vision_locate {description, strategy?} — Find element by description\n- vision_compare {baseline, current?, threshold?} — Compare page states\n- wcag_audit {level?, selector?} — Full WCAG compliance audit\n- aria_tree — Build ARIA accessibility tree\n- contrast_check {selector?, threshold?} — Color contrast ratio check\n- landmark_nav — List ARIA landmark regions\n- focus_order — Map tab/focus order of interactive elements\n- alt_text_audit {selector?, include_decorative?} — Audit image alt text\n- heading_structure — Validate heading hierarchy (h1-h6)\n- role_validate {selector?, roles?} — Validate ARIA roles and properties\n- keyboard_trap_detect — Detect keyboard focus traps\n- screen_reader_sim {selector?, max_elements?} — Simulate screen reader output\n- session_context {command, key?, value?} — Store/retrieve persistent context (set/get/get_all/clear)\n- auto_chain {actions, on_error?, max_retries?} — Execute JS chain with error recovery\n- think {context?} — Structured reasoning: observe page state and recommend actions\n- plan_execute {steps, stop_on_error?} — Execute multi-step JS plan with reporting\n- page_summary — AI-optimized page summary (headings, nav, forms, errors)\n- error_context — Get error info for debugging (console, network, DOM errors)"
     )]
     async fn tool_agent(
         &self,
@@ -617,6 +698,10 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
+        // Don't enforce safety on safety management commands themselves
+        if action != "safety_set" && action != "safety_status" {
+            self.enforce_safety("agent", &action).await?;
+        }
         let action = AgentAction::parse(&action)?;
         match action {
             AgentAction::ExecuteChain => {
@@ -786,12 +871,24 @@ impl OneCrawlMcp {
                 let params: ThinkParams = parse_params(v, "think")?;
                 self.think(params).await
             }
+            AgentAction::PlanExecute => {
+                let params: PlanExecuteParams = parse_params(v, "plan_execute")?;
+                self.plan_execute(params).await
+            }
+            AgentAction::PageSummary => {
+                let params: PageSummaryParams = parse_params(v, "page_summary")?;
+                self.page_summary(params).await
+            }
+            AgentAction::ErrorContext => {
+                let params: ErrorContextParams = parse_params(v, "error_context")?;
+                self.error_context(params).await
+            }
         }
     }
 
     #[tool(
         name = "stealth",
-        description = "Anti-detection, bot evasion, stealth patches, fingerprinting, CAPTCHA detection/solving, and human behavior simulation.\n\nActions:\n- inject — Inject stealth patches into page\n- test — Test if current page detects bot\n- fingerprint {user_agent?} — Generate and apply browser fingerprint\n- block_domains {domains} — Block tracking domains\n- detect_captcha — Detect CAPTCHAs on page\n- solve_captcha {captcha_type?, timeout_ms?} — Solve CAPTCHA: 'recaptcha_checkbox' (CDP cross-origin frame click), 'recaptcha_audio' (Whisper STT), 'turnstile', 'auto'\n- human_delay {min_ms?, max_ms?, pattern?} — Random human-like delay\n- human_mouse {target, speed?, curve?} — Bézier curve mouse movement\n- human_type {selector, text, speed?, mistakes?} — Natural typing with typos\n- human_scroll {direction?, amount?, speed?} — Human-like scroll behavior\n- human_profile {profile?} — Set human behavior profile (casual/fast/careful)\n- stealth_max {features?} — Enable maximum stealth (all patches + human sim)\n- stealth_score — Score current page stealth level\n- tls_apply {profile?} — Apply TLS fingerprint profile (chrome-win/mac, firefox-win, safari-mac, edge-win, random, detect)\n- webrtc_block {mode?} — Block WebRTC leaks ('block' or 'turn_only')\n- battery_spoof {charging?, level?} — Spoof Battery API (desktop disguise)\n- sensor_block {sensors?} — Block device sensor APIs (gyroscope, accelerometer, etc.)\n- canvas_advanced {intensity?} — Advanced canvas fingerprint noise (Gaussian, 0.0-10.0)\n- timezone_sync {timezone} — Spoof IANA timezone across all JS APIs\n- font_protect — Limit font enumeration to cross-platform subset\n- behavior_sim {interval_ms?, command?} — Start/stop continuous human behavior simulation\n- behavior_stop — Stop behavior simulation\n- stealth_rotate {per_page?} — Auto-rotate fingerprint + stealth profile (fresh identity)\n- detection_audit {detailed?} — Comprehensive bot detection test suite (12 tests, A+ to F grade)"
+        description = "Anti-detection, bot evasion, stealth patches, fingerprinting, CAPTCHA detection/solving, and human behavior simulation.\n\nActions:\n- inject — Inject stealth patches into page\n- test — Test if current page detects bot\n- fingerprint {user_agent?} — Generate and apply browser fingerprint\n- block_domains {domains} — Block tracking domains\n- detect_captcha — Detect CAPTCHAs on page\n- solve_captcha {captcha_type?, timeout_ms?} — Solve CAPTCHA: 'recaptcha_checkbox' (CDP cross-origin frame click), 'recaptcha_audio' (Whisper STT), 'turnstile', 'auto'\n- human_delay {min_ms?, max_ms?, pattern?} — Random human-like delay\n- human_mouse {target, speed?, curve?} — Bézier curve mouse movement\n- human_type {selector, text, speed?, mistakes?} — Natural typing with typos\n- human_scroll {direction?, amount?, speed?} — Human-like scroll behavior\n- human_profile {profile?} — Set human behavior profile (casual/fast/careful)\n- stealth_max {features?} — Enable maximum stealth (all patches + human sim)\n- stealth_score — Score current page stealth level\n- tls_apply {profile?} — Apply TLS fingerprint profile (chrome-win/mac, firefox-win, safari-mac, edge-win, random, detect)\n- webrtc_block {mode?} — Block WebRTC leaks ('block' or 'turn_only')\n- battery_spoof {charging?, level?} — Spoof Battery API (desktop disguise)\n- sensor_block {sensors?} — Block device sensor APIs (gyroscope, accelerometer, etc.)\n- canvas_advanced {intensity?} — Advanced canvas fingerprint noise (Gaussian, 0.0-10.0)\n- timezone_sync {timezone} — Spoof IANA timezone across all JS APIs\n- font_protect — Limit font enumeration to cross-platform subset\n- behavior_sim {interval_ms?, command?} — Start/stop continuous human behavior simulation\n- behavior_stop — Stop behavior simulation\n- stealth_rotate {per_page?} — Auto-rotate fingerprint + stealth profile (fresh identity)\n- detection_audit {detailed?} — Comprehensive bot detection test suite (12 tests, A+ to F grade)\n- stealth_status — Comprehensive stealth status report (webdriver, plugins, fingerprint details)"
     )]
     async fn tool_stealth(
         &self,
@@ -799,6 +896,7 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
+        self.enforce_safety("stealth", &action).await?;
         let action = StealthAction::parse(&action)?;
         match action {
             StealthAction::Inject => {
@@ -896,12 +994,16 @@ impl OneCrawlMcp {
                 let params: DetectionAuditParams = parse_params(v, "detection_audit")?;
                 self.stealth_detection_audit(params).await
             }
+            StealthAction::StealthStatus => {
+                let params: StealthStatusParams = parse_params(v, "stealth_status")?;
+                self.stealth_status(params).await
+            }
         }
     }
 
     #[tool(
         name = "data",
-        description = "Data processing, HTTP requests, link analysis, network intelligence, structured data extraction, WebSocket/SSE/GraphQL real-time protocols.\n\nActions:\n- pipeline {input, steps} — Multi-step data pipeline\n- http_get {url, headers?} — HTTP GET request\n- http_post {url, body?, content_type?, headers?} — HTTP POST request\n- links {base_url?} — Extract link graph from page\n- graph {edges} — Analyze link graph\n- net_capture {duration_ms?} — Capture network traffic\n- net_analyze {traffic?} — Analyze captured API traffic\n- net_sdk {traffic, language?} — Generate API SDK code\n- net_mock {traffic?} — Generate mock server config\n- net_replay {sequence} — Replay captured requests\n- extract_schema {schema_type?} — Extract JSON-LD, OpenGraph, Twitter Card, microdata\n- extract_tables {selector?, format?, headers?} — Extract HTML tables to JSON/CSV\n- extract_entities {types?, selector?} — Extract emails, phones, URLs, dates, prices\n- classify_content {strategy?, selector?} — Classify page content type and structure\n- transform_json {data, transform, output_format?} — Transform JSON data (flatten, keys, values, unique, field access)\n- export_csv {data, columns?, delimiter?} — Export JSON array to CSV\n- extract_metadata {include_og?, include_twitter?, include_all?} — Extract page metadata\n- extract_feeds {feed_type?} — Discover RSS, Atom, JSON feeds\n- ws_connect {url, protocols?} — Connect to WebSocket server\n- ws_intercept {url_pattern?, capture_only?} — Intercept WebSocket traffic\n- ws_send {target, message} — Send WebSocket message\n- ws_messages {url_filter?, limit?} — Get captured WebSocket messages\n- ws_close {target?} — Close WebSocket connections\n- sse_listen {url, duration_ms?} — Listen to Server-Sent Events\n- sse_messages {url_filter?, limit?} — Get captured SSE messages\n- graphql_subscribe {url, query, variables?, duration_ms?} — GraphQL subscription"
+        description = "Data processing, HTTP requests, link analysis, network intelligence, structured data extraction, WebSocket/SSE/GraphQL real-time protocols.\n\nActions:\n- pipeline {input, steps} — Multi-step data pipeline\n- http_get {url, headers?} — HTTP GET request\n- http_post {url, body?, content_type?, headers?} — HTTP POST request\n- links {base_url?} — Extract link graph from page\n- graph {edges} — Analyze link graph\n- net_capture {duration_ms?} — Capture network traffic\n- net_analyze {traffic?} — Analyze captured API traffic\n- net_sdk {traffic, language?} — Generate API SDK code\n- net_mock {traffic?} — Generate mock server config\n- net_replay {sequence} — Replay captured requests\n- extract_schema {schema_type?} — Extract JSON-LD, OpenGraph, Twitter Card, microdata\n- extract_tables {selector?, format?, headers?} — Extract HTML tables to JSON/CSV\n- extract_entities {types?, selector?} — Extract emails, phones, URLs, dates, prices\n- classify_content {strategy?, selector?} — Classify page content type and structure\n- transform_json {data, transform, output_format?} — Transform JSON data (flatten, keys, values, unique, field access)\n- export_csv {data, columns?, delimiter?} — Export JSON array to CSV\n- extract_metadata {include_og?, include_twitter?, include_all?} — Extract page metadata\n- extract_feeds {feed_type?} — Discover RSS, Atom, JSON feeds\n- ws_connect {url, protocols?} — Connect to WebSocket server\n- ws_intercept {url_pattern?, capture_only?} — Intercept WebSocket traffic\n- ws_send {target, message} — Send WebSocket message\n- ws_messages {url_filter?, limit?} — Get captured WebSocket messages\n- ws_close {target?} — Close WebSocket connections\n- sse_listen {url, duration_ms?} — Listen to Server-Sent Events\n- sse_messages {url_filter?, limit?} — Get captured SSE messages\n- graphql_subscribe {url, query, variables?, duration_ms?} — GraphQL subscription\n- extract_compact {format?, max_tokens?} — Extract page content in agent-optimized format with token budget"
     )]
     async fn tool_data(
         &self,
@@ -909,6 +1011,7 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
+        self.enforce_safety("data", &action).await?;
         let action = DataAction::parse(&action)?;
         match action {
             DataAction::Pipeline => {
@@ -1016,6 +1119,10 @@ impl OneCrawlMcp {
                 let params: GraphqlSubscribeParams = parse_params(v, "graphql_subscribe")?;
                 self.graphql_subscribe(params).await
             }
+            DataAction::ExtractCompact => {
+                let params: ExtractCompactParams = parse_params(v, "extract_compact")?;
+                self.extract_compact(params).await
+            }
         }
     }
 
@@ -1029,6 +1136,7 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
+        self.enforce_safety("secure", &action).await?;
         let action = SecureAction::parse(&action)?;
         match action {
             SecureAction::Encrypt => {
@@ -1109,7 +1217,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "computer",
-        description = "AI computer use protocol, smart element resolution, browser pool, multi-browser fleet, autonomous goal execution, coordinate clicks, multi-page sync, and input replay.\n\nActions:\n- act {action_type, coordinate?, text?, key?} — Perform computer action\n- observe {observation_type?} — Observe screen state\n- batch {actions} — Execute multiple actions in sequence\n- smart_find {description, strategy?} — Find element by description\n- smart_click {description} — Click element by description\n- smart_fill {description, value} — Fill input by description\n- pool_list — List browser pool instances\n- pool_status — Get pool status and stats\n- fleet_spawn {count?, fleet_name?} — Launch multi-browser fleet\n- fleet_broadcast {fleet_name, action} — Send action to all fleet instances\n- fleet_collect {fleet_name, selector?, attribute?} — Collect data from all instances\n- fleet_destroy {fleet_name} — Terminate fleet\n- fleet_status — Get all fleet statuses\n- fleet_balance {fleet_name, urls} — Distribute URLs across fleet\n- computer_use {goal, url?, max_steps?, screenshots?} — Autonomous goal execution with planning\n- goal_execute {plan_id, from_step?, until_step?} — Execute plan steps\n- step_verify {plan_id, step_id, expect?} — Verify step completion\n- auto_recover {plan_id, step_id, error?, max_retries?} — Auto-recover from failed steps\n- click_at_coords {x, y} — Click at viewport coordinates with element feedback\n- multi_page_sync {tab_indices?} — Get synchronized state from all pages\n- input_replay {events} — Replay a sequence of input events (click/type/scroll/wait)"
+        description = "AI computer use protocol, smart element resolution, browser pool, multi-browser fleet, autonomous goal execution, coordinate clicks, multi-page sync, and input replay.\n\nActions:\n- act {action_type, coordinate?, text?, key?} — Perform computer action\n- observe {observation_type?} — Observe screen state\n- batch {actions} — Execute multiple actions in sequence\n- smart_find {description, strategy?} — Find element by description\n- smart_click {description} — Click element by description\n- smart_fill {description, value} — Fill input by description\n- pool_list — List browser pool instances\n- pool_status — Get pool status and stats\n- fleet_spawn {count?, fleet_name?} — Launch multi-browser fleet\n- fleet_broadcast {fleet_name, action} — Send action to all fleet instances\n- fleet_collect {fleet_name, selector?, attribute?} — Collect data from all instances\n- fleet_destroy {fleet_name} — Terminate fleet\n- fleet_status — Get all fleet statuses\n- fleet_balance {fleet_name, urls} — Distribute URLs across fleet\n- computer_use {goal, url?, max_steps?, screenshots?} — Autonomous goal execution with planning\n- goal_execute {plan_id, from_step?, until_step?} — Execute plan steps\n- step_verify {plan_id, step_id, expect?} — Verify step completion\n- auto_recover {plan_id, step_id, error?, max_retries?} — Auto-recover from failed steps\n- click_at_coords {x, y} — Click at viewport coordinates with element feedback\n- multi_page_sync {tab_indices?} — Get synchronized state from all pages\n- input_replay {events} — Replay a sequence of input events (click/type/scroll/wait)\n- element_info {selector} — Detailed element inspection (tag, classes, rect, ARIA, visibility)"
     )]
     async fn tool_computer(
         &self,
@@ -1117,6 +1225,7 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
+        self.enforce_safety("computer", &action).await?;
         let action = ComputerAction::parse(&action)?;
         match action {
             ComputerAction::Act => {
@@ -1209,6 +1318,10 @@ impl OneCrawlMcp {
                 let params: InputReplayParams = parse_params(v, "input_replay")?;
                 self.input_replay(params).await
             }
+            ComputerAction::ElementInfo => {
+                let params: ElementInfoParams = parse_params(v, "element_info")?;
+                self.element_info(params).await
+            }
         }
     }
 
@@ -1222,6 +1335,7 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
+        self.enforce_safety("memory", &action).await?;
         let action = MemoryAction::parse(&action)?;
         match action {
             MemoryAction::Store => {
@@ -1253,7 +1367,7 @@ impl OneCrawlMcp {
 
     #[tool(
         name = "automate",
-        description = "Workflow automation, AI task planning, and execution control.\n\nActions:\n- workflow_validate {workflow} — Validate a workflow definition\n- workflow_run {workflow} — Execute a workflow\n- plan {goal, context?} — Generate automation plan from goal\n- execute {plan, max_retries?} — Execute a generated plan\n- patterns — List available automation patterns\n- rate_limit {action?, max_per_minute?} — Check/configure rate limiter\n- retry {url?, operation?, reason?} — Enqueue retry with backoff\n- retry_adapt {action, params, max_retries?, strategy?} — Smart retry with adaptive strategy\n- error_classify {error_message} — Classify error into categories\n- recovery_suggest {error_type, context?} — Suggest recovery steps\n- error_history — List recent error history\n- checkpoint_save {name, include_cookies?, include_storage?, include_context?} — Save browser state checkpoint\n- checkpoint_restore {name, restore_url?, restore_cookies?} — Restore from checkpoint\n- checkpoint_list — List all checkpoints\n- checkpoint_delete {name} — Delete a checkpoint\n- workflow_while {condition, actions, max_iterations?} — Loop while condition is true\n- workflow_for_each {collection, variable_name?, actions} — Iterate over collection\n- workflow_if {condition, then_actions, else_actions?} — Conditional execution\n- workflow_variable {name, value?} — Get or set workflow variable\n- reconnect_cdp {max_retries?} — Auto-reconnect CDP with exponential backoff\n- gc_tabs {max_count?} — Garbage collect tabs / report tab info"
+        description = "Workflow automation, AI task planning, and execution control.\n\nActions:\n- workflow_validate {workflow} — Validate a workflow definition\n- workflow_run {workflow} — Execute a workflow\n- plan {goal, context?} — Generate automation plan from goal\n- execute {plan, max_retries?} — Execute a generated plan\n- patterns — List available automation patterns\n- rate_limit {action?, max_per_minute?} — Check/configure rate limiter\n- retry {url?, operation?, reason?} — Enqueue retry with backoff\n- retry_adapt {action, params, max_retries?, strategy?} — Smart retry with adaptive strategy\n- error_classify {error_message} — Classify error into categories\n- recovery_suggest {error_type, context?} — Suggest recovery steps\n- error_history — List recent error history\n- checkpoint_save {name, include_cookies?, include_storage?, include_context?} — Save browser state checkpoint\n- checkpoint_restore {name, restore_url?, restore_cookies?} — Restore from checkpoint\n- checkpoint_list — List all checkpoints\n- checkpoint_delete {name} — Delete a checkpoint\n- workflow_while {condition, actions, max_iterations?} — Loop while condition is true\n- workflow_for_each {collection, variable_name?, actions} — Iterate over collection\n- workflow_if {condition, then_actions, else_actions?} — Conditional execution\n- workflow_variable {name, value?} — Get or set workflow variable\n- reconnect_cdp {max_retries?} — Auto-reconnect CDP with exponential backoff\n- gc_tabs {max_count?} — Garbage collect tabs / report tab info\n- batch_execute {commands, stop_on_error?} — Execute multiple JS commands in sequence"
     )]
     async fn tool_automate(
         &self,
@@ -1261,6 +1375,7 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
+        self.enforce_safety("automate", &action).await?;
         let action = AutomateAction::parse(&action)?;
         match action {
             AutomateAction::WorkflowValidate => {
@@ -1349,6 +1464,10 @@ impl OneCrawlMcp {
                 let params: WatchdogParams = parse_params(v, "watchdog")?;
                 self.watchdog(params).await
             }
+            AutomateAction::BatchExecute => {
+                let params: BatchExecuteParams = parse_params(v, "batch_execute")?;
+                self.batch_execute(params).await
+            }
         }
     }
 
@@ -1362,6 +1481,7 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let action = p.action;
         let v = p.params;
+        self.enforce_safety("perf", &action).await?;
         let action = PerfAction::parse(&action)?;
         match action {
             PerfAction::Audit => {

@@ -936,4 +936,34 @@ impl OneCrawlMcp {
             }))
         }
     }
+
+    pub(crate) async fn stealth_status(
+        &self,
+        _p: StealthStatusParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let js = r#"(() => {
+            const checks = {};
+            checks.webdriver = navigator.webdriver;
+            checks.chrome_runtime = !!window.chrome?.runtime?.id;
+            checks.plugins = navigator.plugins.length;
+            checks.languages = navigator.languages;
+            checks.platform = navigator.platform;
+            checks.hardware_concurrency = navigator.hardwareConcurrency;
+            checks.device_memory = navigator.deviceMemory;
+            checks.webgl_vendor = (() => { try { const c = document.createElement('canvas'); const gl = c.getContext('webgl'); return gl?.getParameter(gl.VENDOR); } catch(e) { return null; } })();
+            checks.webgl_renderer = (() => { try { const c = document.createElement('canvas'); const gl = c.getContext('webgl'); const d = gl?.getExtension('WEBGL_debug_renderer_info'); return d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : null; } catch(e) { return null; } })();
+            checks.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+            checks.screen = { width: screen.width, height: screen.height, depth: screen.colorDepth };
+            checks.touch = navigator.maxTouchPoints;
+            return JSON.stringify(checks);
+        })()"#;
+        let result = page.evaluate(js.to_string()).await.mcp()?;
+        let text = result
+            .into_value::<String>()
+            .unwrap_or_default();
+        let parsed: serde_json::Value =
+            serde_json::from_str(&text).unwrap_or(serde_json::json!({"raw": text}));
+        json_ok(&serde_json::json!({"stealth_report": parsed}))
+    }
 }

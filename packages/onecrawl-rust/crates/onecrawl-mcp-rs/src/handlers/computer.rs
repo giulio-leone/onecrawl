@@ -754,4 +754,43 @@ impl OneCrawlMcp {
         json_ok(&result)
     }
 
+    pub(crate) async fn element_info(
+        &self,
+        p: ElementInfoParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let selector = &p.selector;
+        let js = format!(
+            r#"(() => {{
+                const el = document.querySelector(`{}`);
+                if (!el) return JSON.stringify({{found: false}});
+                const rect = el.getBoundingClientRect();
+                const style = getComputedStyle(el);
+                return JSON.stringify({{
+                    found: true,
+                    tag: el.tagName.toLowerCase(),
+                    id: el.id || null,
+                    classes: Array.from(el.classList),
+                    text: el.textContent?.trim().substring(0, 200) || '',
+                    value: el.value || null,
+                    href: el.href || null,
+                    type: el.type || null,
+                    disabled: el.disabled || false,
+                    visible: style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0,
+                    rect: {{x: rect.x, y: rect.y, width: rect.width, height: rect.height}},
+                    aria: {{role: el.getAttribute('role'), label: el.getAttribute('aria-label'), expanded: el.getAttribute('aria-expanded')}},
+                    interactive: el.matches('a,button,input,select,textarea,[tabindex],[role="button"],[role="link"]')
+                }});
+            }})()"#,
+            selector.replace('`', r"\`").replace('\\', r"\\")
+        );
+        let result = page.evaluate(js).await.mcp()?;
+        let text = result
+            .into_value::<String>()
+            .unwrap_or_default();
+        let parsed: serde_json::Value =
+            serde_json::from_str(&text).unwrap_or(serde_json::json!({"raw": text}));
+        json_ok(&parsed)
+    }
+
 }

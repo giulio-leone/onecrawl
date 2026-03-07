@@ -17,6 +17,21 @@ impl OneCrawlMcp {
         &self,
         p: NavigateParams,
     ) -> Result<CallToolResult, McpError> {
+        // Enforce URL safety policy
+        {
+            let state = self.browser.lock().await;
+            if let Some(ref safety) = state.safety {
+                match safety.check_url(&p.url) {
+                    onecrawl_cdp::SafetyCheck::Denied(reason) => {
+                        return Err(McpError::invalid_params(
+                            format!("safety policy denied URL: {reason}"),
+                            None,
+                        ));
+                    }
+                    _ => {}
+                }
+            }
+        }
         let page = ensure_page(&self.browser).await?;
         onecrawl_cdp::navigation::goto(&page, &p.url)
             .await
@@ -2745,5 +2760,157 @@ impl OneCrawlMcp {
         let page = ensure_page(&self.browser).await?;
         let result = onecrawl_cdp::spa::parallel_exec(&page, &p.actions).await.mcp()?;
         json_ok(&result)
+    }
+
+    pub(crate) async fn token_budget(
+        &self,
+        p: TokenBudgetParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let result = onecrawl_cdp::extract::extract(
+            &page,
+            p.selector.as_deref(),
+            onecrawl_cdp::ExtractFormat::Text,
+        )
+        .await
+        .mcp()?;
+        let content = result.content;
+        let max_chars = p.max_tokens.unwrap_or(4000) * 4;
+        let truncated = if content.len() > max_chars {
+            format!(
+                "{}...[truncated, {} total chars]",
+                &content[..max_chars],
+                content.len()
+            )
+        } else {
+            content.clone()
+        };
+        let chars = truncated.len();
+        json_ok(&serde_json::json!({
+            "content": truncated,
+            "stats": {
+                "chars": chars,
+                "estimated_tokens": chars / 4,
+                "truncated": content.len() > max_chars,
+                "original_chars": content.len()
+            }
+        }))
+    }
+
+    pub(crate) async fn compact_state(
+        &self,
+        _p: CompactStateParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let url = page.url().await.mcp()?.unwrap_or_default();
+        let title = page
+            .evaluate("document.title")
+            .await
+            .mcp()?
+            .into_value::<String>()
+            .unwrap_or_default();
+        let ready_state = page
+            .evaluate("document.readyState")
+            .await
+            .mcp()?
+            .into_value::<String>()
+            .unwrap_or_default();
+        let forms = page
+            .evaluate("document.forms.length")
+            .await
+            .mcp()?
+            .into_value::<u64>()
+            .unwrap_or(0);
+        let links = page
+            .evaluate("document.links.length")
+            .await
+            .mcp()?
+            .into_value::<u64>()
+            .unwrap_or(0);
+        let images = page
+            .evaluate("document.images.length")
+            .await
+            .mcp()?
+            .into_value::<u64>()
+            .unwrap_or(0);
+        let inputs = page
+            .evaluate("document.querySelectorAll('input,textarea,select').length")
+            .await
+            .mcp()?
+            .into_value::<u64>()
+            .unwrap_or(0);
+        let buttons = page
+            .evaluate("document.querySelectorAll('button,[role=button]').length")
+            .await
+            .mcp()?
+            .into_value::<u64>()
+            .unwrap_or(0);
+        json_ok(&serde_json::json!({
+            "url": url, "title": title, "ready": ready_state,
+            "counts": { "forms": forms, "links": links, "images": images, "inputs": inputs, "buttons": buttons }
+        }))
+    }
+
+    pub(crate) async fn page_assertions(
+        &self,
+        p: PageAssertionsParams,
+    ) -> Result<CallToolResult, McpError> {
+        let page = ensure_page(&self.browser).await?;
+        let mut results = Vec::new();
+        let mut all_pass = true;
+        for assertion in &p.assertions {
+            let pass = match assertion.check_type.as_str() {
+                "url_contains" => {
+                    let url = page.url().await.mcp()?.unwrap_or_default();
+                    url.contains(&assertion.expected)
+                }
+                "title_contains" => {
+                    let title = page
+                        .evaluate("document.title".to_string())
+                        .await
+                        .mcp()?
+                        .into_value::<String>()
+                        .unwrap_or_default();
+                    title.contains(&assertion.expected)
+                }
+                "element_exists" => {
+                    let js = format!(
+                        "!!document.querySelector(`{}`)",
+                        assertion.expected.replace('`', r"\`")
+                    );
+                    page.evaluate(js)
+                        .await
+                        .mcp()?
+                        .into_value::<bool>()
+                        .unwrap_or(false)
+                }
+                "element_visible" => {
+                    let js = format!(
+                        "(() => {{ const el = document.querySelector(`{}`); if (!el) return false; const s = getComputedStyle(el); return s.display !== 'none' && s.visibility !== 'hidden'; }})()",
+                        assertion.expected.replace('`', r"\`")
+                    );
+                    page.evaluate(js)
+                        .await
+                        .mcp()?
+                        .into_value::<bool>()
+                        .unwrap_or(false)
+                }
+                "text_contains" => {
+                    let text = page
+                        .evaluate("document.body?.innerText || ''".to_string())
+                        .await
+                        .mcp()?
+                        .into_value::<String>()
+                        .unwrap_or_default();
+                    text.contains(&assertion.expected)
+                }
+                _ => false,
+            };
+            if !pass {
+                all_pass = false;
+            }
+            results.push(serde_json::json!({"check": assertion.check_type, "expected": assertion.expected, "pass": pass}));
+        }
+        json_ok(&serde_json::json!({"assertions": results, "all_pass": all_pass, "total": p.assertions.len()}))
     }
 }

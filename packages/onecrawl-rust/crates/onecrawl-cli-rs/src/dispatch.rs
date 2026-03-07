@@ -1202,5 +1202,12 @@ pub(crate) async fn dispatch(command: Commands) {
                 commands::browser::input_replay_file(&events_file).await
             }
         },
+
+        // ── Enhanced Agentic ────────────────────────────────────────
+        Commands::PageState => commands::browser::page_state_cli().await,
+        Commands::PlanExec { steps } => commands::browser::plan_exec_cli(&steps).await,
+        Commands::PageInfo => commands::browser::page_info_cli().await,
+        Commands::Assert { checks } => commands::browser::assert_checks_cli(&checks).await,
+        Commands::ElementDetail { selector } => commands::browser::element_detail_cli(&selector).await,
         }
 }
