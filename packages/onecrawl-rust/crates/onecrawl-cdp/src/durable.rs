@@ -137,9 +137,7 @@ pub struct DurableSession {
 impl DurableSession {
     /// Create a new durable session with the given configuration.
     pub fn new(config: DurableConfig) -> Result<Self> {
-        if config.name.contains('/') || config.name.contains('\\') || config.name.contains("..") {
-            return Err(Error::Cdp("Invalid session name".into()));
-        }
+        crate::util::validate_safe_name(&config.name)?;
         let state = DurableState::new(&config.name);
         Ok(Self {
             config,
@@ -431,9 +429,7 @@ impl DurableSession {
     // ── Persistence helpers ─────────────────────────────────────────
 
     fn state_file_path(&self) -> Result<PathBuf> {
-        if self.config.name.contains('/') || self.config.name.contains('\\') || self.config.name.contains("..") {
-            return Err(Error::Cdp("Invalid session name: contains path traversal characters".into()));
-        }
+        crate::util::validate_safe_name(&self.config.name)?;
         Ok(self.config
             .state_path
             .join(format!("{}.state", self.config.name)))
@@ -492,9 +488,7 @@ impl DurableSession {
 
     /// Delete a saved session state file.
     pub fn delete_session(state_dir: &Path, name: &str) -> Result<()> {
-        if name.contains('/') || name.contains('\\') || name.contains("..") {
-            return Err(Error::Cdp("Invalid session name".into()));
-        }
+        crate::util::validate_safe_name(name)?;
         let path = state_dir.join(format!("{}.state", name));
         if path.exists() {
             std::fs::remove_file(&path)
@@ -505,9 +499,7 @@ impl DurableSession {
 
     /// Get the status of a named session from disk.
     pub fn get_status(state_dir: &Path, name: &str) -> Result<DurableState> {
-        if name.contains('/') || name.contains('\\') || name.contains("..") {
-            return Err(Error::Cdp("Invalid session name".into()));
-        }
+        crate::util::validate_safe_name(name)?;
         let path = state_dir.join(format!("{}.state", name));
         let content = std::fs::read_to_string(&path)
             .map_err(|e| Error::Cdp(format!("get status {}: {e}", name)))?;

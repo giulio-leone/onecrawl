@@ -5,6 +5,24 @@ use crate::cdp_tools::*;
 use crate::helpers::{mcp_err, ensure_page, json_ok, text_ok, McpResult};
 use crate::OneCrawlMcp;
 
+/// Build a `DurableConfig` for the given session name, using the default state dir.
+fn config_for_name(name: &str) -> onecrawl_cdp::DurableConfig {
+    onecrawl_cdp::DurableConfig {
+        name: name.to_string(),
+        state_path: onecrawl_cdp::DurableSession::default_state_dir(),
+        ..onecrawl_cdp::DurableConfig::default()
+    }
+}
+
+/// Parse crash-policy string to enum.
+fn parse_crash_policy(s: Option<&str>) -> onecrawl_cdp::CrashPolicy {
+    match s {
+        Some("stop") => onecrawl_cdp::CrashPolicy::Stop,
+        Some("notify") => onecrawl_cdp::CrashPolicy::Notify,
+        _ => onecrawl_cdp::CrashPolicy::Restart,
+    }
+}
+
 impl OneCrawlMcp {
     // ════════════════════════════════════════════════════════════════
     //  Durable Session handlers
@@ -16,11 +34,7 @@ impl OneCrawlMcp {
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
 
-        let on_crash = match p.on_crash.as_deref() {
-            Some("stop") => onecrawl_cdp::CrashPolicy::Stop,
-            Some("notify") => onecrawl_cdp::CrashPolicy::Notify,
-            _ => onecrawl_cdp::CrashPolicy::Restart,
-        };
+        let on_crash = parse_crash_policy(p.on_crash.as_deref());
 
         let mut config = onecrawl_cdp::DurableConfig {
             name: p.name.clone(),
@@ -73,11 +87,7 @@ impl OneCrawlMcp {
 
         // Perform a final checkpoint if possible
         if let Ok(page) = ensure_page(&self.browser).await {
-            let config = onecrawl_cdp::DurableConfig {
-                name: p.name.clone(),
-                state_path: state_dir.clone(),
-                ..onecrawl_cdp::DurableConfig::default()
-            };
+            let config = config_for_name(&p.name);
             let mut durable = onecrawl_cdp::DurableSession::new(config).mcp()?;
             let _ = durable.checkpoint(&page).await;
             state = durable.state.clone();
@@ -97,13 +107,8 @@ impl OneCrawlMcp {
         p: DurableCheckpointParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
-        let state_dir = onecrawl_cdp::DurableSession::default_state_dir();
 
-        let config = onecrawl_cdp::DurableConfig {
-            name: p.name.clone(),
-            state_path: state_dir,
-            ..onecrawl_cdp::DurableConfig::default()
-        };
+        let config = config_for_name(&p.name);
         let mut session = onecrawl_cdp::DurableSession::new(config).mcp()?;
         let state = session.checkpoint(&page).await.mcp()?;
 
@@ -123,13 +128,8 @@ impl OneCrawlMcp {
         p: DurableRestoreParams,
     ) -> Result<CallToolResult, McpError> {
         let page = ensure_page(&self.browser).await?;
-        let state_dir = onecrawl_cdp::DurableSession::default_state_dir();
 
-        let config = onecrawl_cdp::DurableConfig {
-            name: p.name.clone(),
-            state_path: state_dir,
-            ..onecrawl_cdp::DurableConfig::default()
-        };
+        let config = config_for_name(&p.name);
         let mut session = onecrawl_cdp::DurableSession::new(config).mcp()?;
         session.restore(&page).await.mcp()?;
 
@@ -201,11 +201,7 @@ impl OneCrawlMcp {
         let state = onecrawl_cdp::DurableSession::get_status(&state_dir, &p.name)
             .map_err(|e| mcp_err(format!("durable_config: {e}")))?;
 
-        let mut config = onecrawl_cdp::DurableConfig {
-            name: p.name.clone(),
-            state_path: state_dir,
-            ..onecrawl_cdp::DurableConfig::default()
-        };
+        let mut config = config_for_name(&p.name);
 
         if let Some(interval) = p.checkpoint_interval_secs {
             config.checkpoint_interval_secs = interval;
@@ -214,11 +210,7 @@ impl OneCrawlMcp {
             config.auto_reconnect = ar;
         }
         if let Some(on_crash) = &p.on_crash {
-            config.on_crash = match on_crash.as_str() {
-                "stop" => onecrawl_cdp::CrashPolicy::Stop,
-                "notify" => onecrawl_cdp::CrashPolicy::Notify,
-                _ => onecrawl_cdp::CrashPolicy::Restart,
-            };
+            config.on_crash = parse_crash_policy(Some(on_crash.as_str()));
         }
         config.max_uptime_secs = p.max_uptime_secs;
 

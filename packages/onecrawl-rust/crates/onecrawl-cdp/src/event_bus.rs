@@ -544,50 +544,7 @@ pub fn generate_id() -> String {
 
 /// ISO 8601 timestamp (UTC).
 pub fn iso_now() -> String {
-    let d = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = d.as_secs();
-    let millis = d.subsec_millis();
-    // Simple ISO format without chrono dependency
-    format_unix_timestamp(secs, millis)
-}
-
-fn format_unix_timestamp(secs: u64, millis: u32) -> String {
-    const SECS_PER_DAY: u64 = 86_400;
-    const DAYS_PER_400Y: u64 = 146_097;
-    const DAYS_PER_100Y: u64 = 36_524;
-    const DAYS_PER_4Y: u64 = 1_461;
-
-    let days = secs / SECS_PER_DAY;
-    let time_of_day = secs % SECS_PER_DAY;
-    let h = time_of_day / 3600;
-    let m = (time_of_day % 3600) / 60;
-    let s = time_of_day % 60;
-
-    // Days since 1970-01-01, shift to 2000-03-01 epoch
-    let days_from_epoch = days as i64 + 719_468; // shift to 0000-03-01
-    let era = if days_from_epoch >= 0 {
-        days_from_epoch / DAYS_PER_400Y as i64
-    } else {
-        (days_from_epoch - (DAYS_PER_400Y as i64 - 1)) / DAYS_PER_400Y as i64
-    };
-    let doe = (days_from_epoch - era * DAYS_PER_400Y as i64) as u64;
-    let yoe = (doe - doe / (DAYS_PER_4Y - 1) + doe / DAYS_PER_100Y
-        - doe / (DAYS_PER_400Y - 1))
-        / 365;
-    let y = yoe as i64 + era * 400;
-    let doy = doe
-        - (365 * yoe + yoe / 4 - yoe / 100 + yoe / 400);
-    let mp = (5 * doy + 2) / 153;
-    let d_val = doy - (153 * mp + 2) / 5 + 1;
-    let m_val = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y_val = if m_val <= 2 { y + 1 } else { y };
-
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
-        y_val, m_val, d_val, h, m, s, millis
-    )
+    crate::util::iso_now_millis()
 }
 
 /// HMAC-SHA256 using the `ring` crate.

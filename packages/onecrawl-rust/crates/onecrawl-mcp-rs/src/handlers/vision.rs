@@ -12,6 +12,18 @@ impl OneCrawlMcp {
     //  Streaming AI Vision Handlers
     // ════════════════════════════════════════════════════════════════
 
+    /// Retrieve the active vision stream, or return an error.
+    async fn require_vision_stream(
+        &self,
+        ctx: &str,
+    ) -> Result<Arc<onecrawl_cdp::VisionStream>, McpError> {
+        let state = self.browser.lock().await;
+        state
+            .vision_stream
+            .clone()
+            .ok_or_else(|| mcp_err(format!("no vision stream {ctx}")))
+    }
+
     pub(crate) async fn vision_stream_start(
         &self,
         p: VisionStreamStartParams,
@@ -66,14 +78,7 @@ impl OneCrawlMcp {
         &self,
         _p: VisionStreamStopParams,
     ) -> Result<CallToolResult, McpError> {
-        let stream = {
-            let state = self.browser.lock().await;
-            state
-                .vision_stream
-                .clone()
-                .ok_or_else(|| mcp_err("no vision stream is running"))?
-        };
-
+        let stream = self.require_vision_stream("is running").await?;
         let status = stream.stop().await.map_err(|e| mcp_err(e))?;
         json_ok(&status)
     }
@@ -82,14 +87,7 @@ impl OneCrawlMcp {
         &self,
         _p: VisionStreamStatusParams,
     ) -> Result<CallToolResult, McpError> {
-        let stream = {
-            let state = self.browser.lock().await;
-            state
-                .vision_stream
-                .clone()
-                .ok_or_else(|| mcp_err("no vision stream has been started"))?
-        };
-
+        let stream = self.require_vision_stream("has been started").await?;
         let status = stream.status().await;
         json_ok(&status)
     }
@@ -106,10 +104,9 @@ impl OneCrawlMcp {
                 Some(s) => s,
                 None => {
                     // Create a one-shot stream with defaults
-                    let s = Arc::new(onecrawl_cdp::VisionStream::new(
+                    Arc::new(onecrawl_cdp::VisionStream::new(
                         onecrawl_cdp::VisionConfig::default(),
-                    ));
-                    s
+                    ))
                 }
             }
         };
@@ -137,14 +134,7 @@ impl OneCrawlMcp {
         &self,
         p: VisionStreamObservationsParams,
     ) -> Result<CallToolResult, McpError> {
-        let stream = {
-            let state = self.browser.lock().await;
-            state
-                .vision_stream
-                .clone()
-                .ok_or_else(|| mcp_err("no vision stream has been started"))?
-        };
-
+        let stream = self.require_vision_stream("has been started").await?;
         let limit = p.limit.unwrap_or(10);
         let obs = stream.observations(limit).await;
         json_ok(&serde_json::json!({
@@ -157,14 +147,7 @@ impl OneCrawlMcp {
         &self,
         p: VisionStreamSetFpsParams,
     ) -> Result<CallToolResult, McpError> {
-        let stream = {
-            let state = self.browser.lock().await;
-            state
-                .vision_stream
-                .clone()
-                .ok_or_else(|| mcp_err("no vision stream has been started"))?
-        };
-
+        let stream = self.require_vision_stream("has been started").await?;
         stream.set_fps(p.fps).await.map_err(|e| mcp_err(e))?;
         json_ok(&serde_json::json!({
             "fps": p.fps,
@@ -176,14 +159,7 @@ impl OneCrawlMcp {
         &self,
         p: VisionStreamReactParams,
     ) -> Result<CallToolResult, McpError> {
-        let stream = {
-            let state = self.browser.lock().await;
-            state
-                .vision_stream
-                .clone()
-                .ok_or_else(|| mcp_err("no vision stream has been started"))?
-        };
-
+        let stream = self.require_vision_stream("has been started").await?;
         let obs = stream
             .parse_vision_response(&p.response_text, p.frame_index.unwrap_or(0))
             .map_err(|e| mcp_err(e))?;
