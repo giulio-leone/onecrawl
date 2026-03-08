@@ -596,8 +596,8 @@ fn execute_step<'a>(
                     }
                 };
                 let mut last_output = None;
-                for item in &values {
-                    variables.insert(variable.clone(), item.clone());
+                for item in values {
+                    variables.insert(variable.clone(), item);
                     for step in steps {
                         if let Some(ref cond) = step.condition {
                             let interpolated = interpolate(cond, variables);
@@ -657,12 +657,11 @@ fn execute_step<'a>(
                 }
                 let sub = load_from_file(resolved.to_str().unwrap_or(&p))?;
                 let sub_result = Box::pin(execute_workflow(page, &sub)).await?;
-                // Merge sub-workflow variables back
-                for (k, v) in &sub_result.variables {
-                    variables.insert(k.clone(), v.clone());
-                }
-                Ok(Some(serde_json::to_value(&sub_result)
-                    .unwrap_or(serde_json::Value::Null)))
+                let out = serde_json::to_value(&sub_result)
+                    .unwrap_or(serde_json::Value::Null);
+                // Move sub-workflow variables (avoids per-key clone)
+                variables.extend(sub_result.variables);
+                Ok(Some(out))
             }
             Action::HttpRequest { url, method, headers, body } => {
                 let url = interpolate(url, variables);
@@ -700,7 +699,7 @@ fn execute_step<'a>(
                     prompt: prompt.clone(),
                     options: options.clone().unwrap_or_default(),
                     url,
-                    variables: variables.iter().map(|(k,v)| (k.clone(), v.clone())).collect(),
+                    variables: variables.clone(),
                 };
                 Ok(Some(serde_json::to_value(&context).unwrap_or(serde_json::Value::Null)))
             }

@@ -105,32 +105,23 @@ pub fn add_session(pool: &mut SessionPool, name: &str, tags: Option<Vec<String>>
 
 /// Get the next available session per the configured rotation strategy.
 pub fn get_next(pool: &mut SessionPool) -> Option<&mut SessionInfo> {
-    let available: Vec<usize> = pool
-        .sessions
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| s.status == "idle")
-        .map(|(i, _)| i)
-        .collect();
-
-    if available.is_empty() {
+    let has_idle = pool.sessions.iter().any(|s| s.status == "idle");
+    if !has_idle {
         return None;
     }
 
     let idx = match pool.config.rotation_strategy.as_str() {
         "least-used" => {
-            let mut min_idx = available[0];
-            let mut min_count = pool.sessions[available[0]].request_count;
-            for &i in &available[1..] {
-                if pool.sessions[i].request_count < min_count {
-                    min_count = pool.sessions[i].request_count;
-                    min_idx = i;
-                }
-            }
-            min_idx
+            pool.sessions.iter().enumerate()
+                .filter(|(_, s)| s.status == "idle")
+                .min_by_key(|(_, s)| s.request_count)
+                .map(|(i, _)| i)?
         }
         "random" => {
-            // Deterministic pseudo-random: use timestamp modulo
+            let available: Vec<usize> = pool.sessions.iter().enumerate()
+                .filter(|(_, s)| s.status == "idle")
+                .map(|(i, _)| i)
+                .collect();
             let ts = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
@@ -140,13 +131,12 @@ pub fn get_next(pool: &mut SessionPool) -> Option<&mut SessionInfo> {
         _ => {
             // round-robin (default)
             let start = pool.current_index;
-            let mut chosen = available[0];
-            for &i in &available {
-                if i >= start {
-                    chosen = i;
-                    break;
-                }
-            }
+            let chosen = pool.sessions.iter().enumerate()
+                .filter(|(_, s)| s.status == "idle")
+                .find(|(i, _)| *i >= start)
+                .or_else(|| pool.sessions.iter().enumerate()
+                    .find(|(_, s)| s.status == "idle"))
+                .map(|(i, _)| i)?;
             pool.current_index = chosen + 1;
             chosen
         }

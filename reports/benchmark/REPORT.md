@@ -1,29 +1,29 @@
 # OneCrawl E2E Benchmark Report
 
-**Date:** 2026-03-08T04:22:43+0100
+**Date:** 2026-03-08T05:14:26+0100
 **Platform:** macos aarch64
 
 ## Results
 
 | Metric | Value |
 |--------|-------|
-| onecrawl_browser_launch_ms | 424 |
+| onecrawl_browser_launch_ms | 426 |
 | onecrawl_browser_nav_ms | 503 |
-| onecrawl_browser_screenshot_ms | 71 |
+| onecrawl_browser_screenshot_ms | 36 |
 | onecrawl_browser_screenshot_bytes | 16567 |
 | stealth_injection_ms | 1 |
 | stealth_checks_passed | 6/6 |
-| crypto_encrypt_avg_us | 8406 |
-| crypto_decrypt_avg_us | 8383 |
-| crypto_pkce_us | 2 |
-| crypto_totp_us | 2 |
-| parser_a11y_us | 184 |
-| parser_query_us | 49 |
-| parser_text_us | 24 |
-| parser_links_us | 12 |
-| storage_write_avg_us | 8474 |
-| storage_read_avg_us | 8464 |
-| storage_list_us | 52 |
+| crypto_encrypt_avg_us | 8415 |
+| crypto_decrypt_avg_us | 8363 |
+| crypto_pkce_us | 1 |
+| crypto_totp_us | 4 |
+| parser_a11y_us | 186 |
+| parser_query_us | 47 |
+| parser_text_us | 29 |
+| parser_links_us | 13 |
+| storage_write_avg_us | 8408 |
+| storage_read_avg_us | 8316 |
+| storage_list_us | 56 |
 
 ## Screenshots
 

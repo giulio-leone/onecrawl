@@ -211,14 +211,11 @@ impl AgentMemory {
     }
 
     pub fn clear_domain(&mut self, domain: &str) -> usize {
-        let keys: Vec<String> = self.entries.iter()
-            .filter(|(_, e)| e.domain.as_deref() == Some(domain))
-            .map(|(k, _)| k.clone())
-            .collect();
-        let count = keys.len();
-        for key in keys { self.entries.remove(&key); }
-        if count > 0 { let _ = self.save(); }
-        count
+        let before = self.entries.len();
+        self.entries.retain(|_, e| e.domain.as_deref() != Some(domain));
+        let removed = before - self.entries.len();
+        if removed > 0 { let _ = self.save(); }
+        removed
     }
 
     pub fn clear_all(&mut self) -> usize {
