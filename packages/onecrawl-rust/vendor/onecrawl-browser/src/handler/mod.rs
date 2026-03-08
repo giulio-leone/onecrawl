@@ -257,6 +257,7 @@ impl Handler {
     }
 
     /// Submit a command initiated via channel
+    #[inline]
     pub(crate) fn submit_external_command(
         &mut self,
         msg: CommandMessage,
@@ -272,6 +273,7 @@ impl Handler {
         Ok(())
     }
 
+    #[inline]
     pub(crate) fn submit_internal_command(
         &mut self,
         target_id: TargetId,
@@ -304,6 +306,7 @@ impl Handler {
 
     /// Send the Request over to the server and store its identifier to handle
     /// the response once received.
+    #[inline]
     fn submit_navigation(&mut self, id: NavigationId, req: CdpRequest, now: Instant) {
         let call_id = self
             .conn
@@ -336,6 +339,7 @@ impl Handler {
     }
 
     /// Process a message received by the target's page via channel
+    #[inline]
     fn on_target_message(&mut self, target: &mut Target, msg: CommandMessage, now: Instant) {
         // if let some
         if msg.is_navigation() {

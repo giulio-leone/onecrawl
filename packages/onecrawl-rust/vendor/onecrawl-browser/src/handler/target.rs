@@ -225,6 +225,7 @@ impl Target {
         }
     }
 
+    #[inline]
     pub fn on_event(&mut self, event: CdpEventMessage) {
         let CdpEventMessage { params, method, .. } = event;
         match &params {
