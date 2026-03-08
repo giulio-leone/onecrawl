@@ -81,17 +81,12 @@ impl EventListeners {
     /// part of a subscription is dropped
     pub fn poll(&mut self, cx: &mut Context<'_>) {
         for subscriptions in self.listeners.values_mut() {
-            for n in (0..subscriptions.len()).rev() {
-                let mut sub = subscriptions.swap_remove(n);
+            subscriptions.retain_mut(|sub| {
                 match sub.poll(cx) {
-                    Poll::Ready(Err(err)) => {
-                        if !err.is_disconnected() {
-                            subscriptions.push(sub)
-                        }
-                    }
-                    _ => subscriptions.push(sub),
+                    Poll::Ready(Err(err)) if err.is_disconnected() => false,
+                    _ => true,
                 }
-            }
+            });
         }
     }
 }

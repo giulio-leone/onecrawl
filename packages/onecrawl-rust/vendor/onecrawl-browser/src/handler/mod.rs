@@ -217,9 +217,11 @@ impl Handler {
                     match to_command_response::<GetTargetsParams>(resp, method) {
                         Ok(resp) => {
                             let targets: Vec<TargetInfo> = resp.result.target_infos;
-                            for target_info in &targets {
+                            // Send a clone for the response, then consume originals
+                            let _ = tx.send(Ok(targets.clone())).ok();
+                            for target_info in targets {
                                 let target_id = target_info.target_id.clone();
-                                let event: EventTargetCreated = EventTargetCreated { target_info: target_info.clone() };
+                                let event = EventTargetCreated { target_info };
                                 self.on_target_created(event);
                                 let attach = AttachToTargetParams::new(target_id);
                                 let _ = self.conn.submit_command(
@@ -228,8 +230,6 @@ impl Handler {
                                     serde_json::to_value(attach).unwrap(),
                                 );
                             }
-
-                            let _ = tx.send(Ok(targets)).ok();
                         }
                         Err(err) => {
                             let _ = tx.send(Err(err)).ok();
@@ -440,8 +440,9 @@ impl Handler {
             },
             browser_ctx,
         );
-        self.target_ids.push(target.target_id().clone());
-        self.targets.insert(target.target_id().clone(), target);
+        let id = target.target_id().clone();
+        self.target_ids.push(id.clone());
+        self.targets.insert(id, target);
     }
 
     /// A new session is attached to a target

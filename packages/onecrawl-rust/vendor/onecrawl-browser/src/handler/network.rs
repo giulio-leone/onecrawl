@@ -164,9 +164,9 @@ impl NetworkManager {
         };
 
         let mut auth = AuthChallengeResponse::new(response);
-        if let Some(creds) = self.credentials.clone() {
-            auth.username = Some(creds.username);
-            auth.password = Some(creds.password);
+        if let Some(creds) = self.credentials.as_ref() {
+            auth.username = Some(creds.username.clone());
+            auth.password = Some(creds.password.clone());
         }
         self.push_cdp_request(ContinueWithAuthParams::new(event.request_id.clone(), auth));
     }
