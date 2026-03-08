@@ -19,15 +19,23 @@ pub fn query_selector(html: &str, css_selector: &str) -> Result<Vec<ElementInfo>
 
     let elements: Vec<ElementInfo> = document
         .select(&selector)
-        .map(|el| ElementInfo {
-            tag: el.value().name().to_string(),
-            text: el.text().collect::<Vec<_>>().join(" ").trim().to_string(),
-            attributes: el
-                .value()
-                .attrs()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect(),
-            inner_html: el.inner_html(),
+        .map(|el| {
+            let text = el.text().fold(String::new(), |mut acc, t| {
+                if !acc.is_empty() { acc.push(' '); }
+                acc.push_str(t);
+                acc
+            });
+            let text = text.trim().to_string();
+            ElementInfo {
+                tag: el.value().name().to_string(),
+                text,
+                attributes: el
+                    .value()
+                    .attrs()
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .collect(),
+                inner_html: el.inner_html(),
+            }
         })
         .collect();
 

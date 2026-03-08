@@ -9,7 +9,13 @@ pub fn extract_text(html: &str, css_selector: &str) -> Result<Vec<String>> {
 
     let texts: Vec<String> = document
         .select(&selector)
-        .map(|el| el.text().collect::<Vec<_>>().join(" ").trim().to_string())
+        .map(|el| {
+            el.text().fold(String::new(), |mut acc, t| {
+                if !acc.is_empty() { acc.push(' '); }
+                acc.push_str(t);
+                acc
+            }).trim().to_string()
+        })
         .filter(|t| !t.is_empty())
         .collect();
 
@@ -26,7 +32,11 @@ pub fn extract_links(html: &str) -> Result<Vec<(String, String)>> {
         .select(&selector)
         .filter_map(|el| {
             let href = el.value().attr("href")?.to_string();
-            let text = el.text().collect::<Vec<_>>().join(" ").trim().to_string();
+            let text = el.text().fold(String::new(), |mut acc, t| {
+                if !acc.is_empty() { acc.push(' '); }
+                acc.push_str(t);
+                acc
+            }).trim().to_string();
             Some((href, text))
         })
         .collect();

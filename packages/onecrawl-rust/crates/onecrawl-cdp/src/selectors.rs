@@ -51,14 +51,14 @@ pub async fn css_select(page: &Page, selector: &str) -> Result<SelectorResult> {
     match pseudo.as_deref() {
         Some("text") => {
             for el in &mut elements {
-                el.html = el.text.clone();
+                el.html.clone_from(&el.text);
             }
         }
         Some(attr) if attr.starts_with("attr(") && attr.ends_with(')') => {
             let attr_name = &attr[5..attr.len() - 1];
             for el in &mut elements {
                 el.text = el.attributes.get(attr_name).cloned().unwrap_or_default();
-                el.html = el.text.clone();
+                el.html.clone_from(&el.text);
             }
         }
         _ => {}

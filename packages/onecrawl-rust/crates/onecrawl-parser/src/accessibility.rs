@@ -66,33 +66,34 @@ fn infer_role_and_name(el: scraper::ElementRef, tag: &str) -> (String, String) {
     let role = if !explicit_role.is_empty() {
         explicit_role.to_string()
     } else {
-        match tag {
-            "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => "heading".to_string(),
-            "a" => "link".to_string(),
-            "button" => "button".to_string(),
+        let role_str = match tag {
+            "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => "heading",
+            "a" => "link",
+            "button" => "button",
             "input" => {
                 let input_type = el.value().attr("type").unwrap_or("text");
                 match input_type {
-                    "checkbox" => "checkbox".to_string(),
-                    "radio" => "radio".to_string(),
-                    "submit" | "button" => "button".to_string(),
-                    _ => "textbox".to_string(),
+                    "checkbox" => "checkbox",
+                    "radio" => "radio",
+                    "submit" | "button" => "button",
+                    _ => "textbox",
                 }
             }
-            "textarea" => "textbox".to_string(),
-            "select" => "combobox".to_string(),
-            "img" => "img".to_string(),
-            "nav" => "navigation".to_string(),
-            "main" => "main".to_string(),
-            "footer" => "contentinfo".to_string(),
-            "header" => "banner".to_string(),
-            "aside" => "complementary".to_string(),
-            "form" => "form".to_string(),
-            "table" => "table".to_string(),
-            "ul" | "ol" => "list".to_string(),
-            "li" => "listitem".to_string(),
-            _ => "generic".to_string(),
-        }
+            "textarea" => "textbox",
+            "select" => "combobox",
+            "img" => "img",
+            "nav" => "navigation",
+            "main" => "main",
+            "footer" => "contentinfo",
+            "header" => "banner",
+            "aside" => "complementary",
+            "form" => "form",
+            "table" => "table",
+            "ul" | "ol" => "list",
+            "li" => "listitem",
+            _ => "generic",
+        };
+        role_str.to_string()
     };
 
     let name = if !aria_label.is_empty() {
