@@ -422,7 +422,11 @@ fn apply_transform(val: &str, transform: &str) -> String {
         "lowercase" => val.to_lowercase(),
         "uppercase" => val.to_uppercase(),
         "strip_html" => strip_html_tags(val),
-        "strip_whitespace" => val.split_whitespace().collect::<Vec<_>>().join(" "),
+        "strip_whitespace" => val.split_whitespace().fold(String::new(), |mut acc, w| {
+            if !acc.is_empty() { acc.push(' '); }
+            acc.push_str(w);
+            acc
+        }),
         "truncate" => {
             let n: usize = parts.get(1).and_then(|s| s.parse().ok()).unwrap_or(100);
             if val.len() <= n {

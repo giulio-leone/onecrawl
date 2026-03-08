@@ -356,9 +356,15 @@ pub async fn inject_persistent_stealth(
         .await?;
 
     // Force Accept-Language HTTP header to match navigator.languages (avoids inconsistency detection)
-    let accept_lang_val = fp.languages.iter().enumerate().map(|(i, lang)| {
-        if i == 0 { lang.clone() } else { format!("{};q={:.1}", lang, 1.0 - i as f64 * 0.1) }
-    }).collect::<Vec<_>>().join(",");
+    let mut accept_lang_val = String::new();
+    for (i, lang) in fp.languages.iter().enumerate() {
+        if i > 0 { accept_lang_val.push(','); }
+        accept_lang_val.push_str(lang);
+        if i > 0 {
+            use std::fmt::Write;
+            write!(accept_lang_val, ";q={:.1}", 1.0 - i as f64 * 0.1).ok();
+        }
+    }
     use onecrawl_browser::cdp::browser_protocol::network::Headers;
     let _ = page
         .execute(
