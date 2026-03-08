@@ -89,7 +89,7 @@ impl NetworkManager {
 
     pub fn set_extra_headers(&mut self, headers: HashMap<String, String>) {
         self.extra_headers = headers;
-        let headers = serde_json::to_value(self.extra_headers.clone()).unwrap();
+        let headers = serde_json::to_value(&self.extra_headers).unwrap();
         self.push_cdp_request(SetExtraHttpHeadersParams::new(Headers::new(headers)));
     }
 
@@ -258,17 +258,18 @@ impl NetworkManager {
                 redirect_chain.push(request);
             }
         }
+        let request_id = event.request_id.clone();
         let request = HttpRequest::new(
-            event.request_id.clone(),
+            request_id.clone(),
             event.frame_id.clone(),
             interception_id,
             self.user_request_interception_enabled,
             redirect_chain,
         );
 
-        self.requests.insert(event.request_id.clone(), request);
         self.queued_events
-            .push_back(NetworkEvent::Request(event.request_id.clone()));
+            .push_back(NetworkEvent::Request(request_id.clone()));
+        self.requests.insert(request_id, request);
     }
 
     fn handle_request_redirect(&mut self, request: &mut HttpRequest, response: Response) {
