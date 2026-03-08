@@ -79,18 +79,21 @@ pub enum ChannelError {
 }
 
 impl From<Canceled> for CdpError {
+    #[cold]
     fn from(err: Canceled) -> Self {
         ChannelError::from(err).into()
     }
 }
 
 impl From<SendError> for CdpError {
+    #[cold]
     fn from(err: SendError) -> Self {
         ChannelError::from(err).into()
     }
 }
 
 impl From<NavigationError> for CdpError {
+    #[cold]
     fn from(err: NavigationError) -> Self {
         match err {
             NavigationError::Timeout { .. } => CdpError::Timeout,

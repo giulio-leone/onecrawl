@@ -306,6 +306,7 @@ impl Target {
     }
 
     /// Called when a init command timed out
+    #[cold]
     fn on_initialization_failed(&mut self) -> TargetEvent {
         if let Some(initiator) = self.initiator.take() {
             let _ = initiator.send(Err(CdpError::Timeout));
