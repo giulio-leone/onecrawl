@@ -1,9 +1,8 @@
 use std::collections::VecDeque;
-use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use fnv::FnvHashMap;
+use fnv::{FnvHashMap, FnvHashSet};
 use serde_json::map::Entry;
 
 use onecrawl_protocol::cdp::browser_protocol::network::LoaderId;
@@ -43,10 +42,10 @@ pub struct Frame {
     /// The http request that loaded this with this frame
     http_request: ArcHttpRequest,
     /// The frames contained in this frame
-    child_frames: HashSet<FrameId>,
+    child_frames: FnvHashSet<FrameId>,
     name: Option<String>,
     /// The received lifecycle events
-    lifecycle_events: HashSet<MethodId>,
+    lifecycle_events: FnvHashSet<MethodId>,
 }
 
 impl Frame {
@@ -105,7 +104,7 @@ impl Frame {
         &self.secondary_world
     }
 
-    pub fn lifecycle_events(&self) -> &HashSet<MethodId> {
+    pub fn lifecycle_events(&self) -> &FnvHashSet<MethodId> {
         &self.lifecycle_events
     }
 
@@ -189,7 +188,7 @@ pub struct FrameManager {
     frames: FnvHashMap<FrameId, Frame>,
     /// The contexts mapped with their frames
     context_ids: FnvHashMap<String, FrameId>,
-    isolated_worlds: HashSet<String>,
+    isolated_worlds: FnvHashSet<String>,
     /// Timeout after which an anticipated event (related to navigation) doesn't
     /// arrive results in an error
     request_timeout: Duration,
@@ -609,7 +608,7 @@ impl NavigationOk {
 #[derive(Debug)]
 pub struct NavigationWatcher {
     id: NavigationId,
-    expected_lifecycle: HashSet<MethodId>,
+    expected_lifecycle: FnvHashSet<MethodId>,
     frame_id: FrameId,
     loader_id: Option<LoaderId>,
     /// Once we receive the response to the issued `Page.navigate` request we

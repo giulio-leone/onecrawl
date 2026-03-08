@@ -16,8 +16,8 @@ use onecrawl_browser_types::{Command, Method, MethodId};
 use crate::auth::Credentials;
 use crate::cmd::CommandChain;
 use crate::handler::http::HttpRequest;
-use fnv::FnvHashMap;
-use std::collections::{HashMap, HashSet, VecDeque};
+use fnv::{FnvHashMap, FnvHashSet};
+use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
 
 #[derive(Debug)]
@@ -30,7 +30,7 @@ pub struct NetworkManager {
     extra_headers: HashMap<String, String>,
     request_id_to_interception_id: FnvHashMap<RequestId, InterceptionId>,
     user_cache_disabled: bool,
-    attempted_authentications: HashSet<RequestId>,
+    attempted_authentications: FnvHashSet<RequestId>,
     credentials: Option<Credentials>,
     user_request_interception_enabled: bool,
     protocol_request_interception_enabled: bool,

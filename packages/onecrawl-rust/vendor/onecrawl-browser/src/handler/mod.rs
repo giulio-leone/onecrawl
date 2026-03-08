@@ -1,8 +1,7 @@
-use std::collections::HashSet;
 use std::pin::Pin;
 use std::time::{Duration, Instant};
 
-use fnv::FnvHashMap;
+use fnv::{FnvHashMap, FnvHashSet};
 use futures::channel::mpsc::Receiver;
 use futures::channel::oneshot::Sender as OneshotSender;
 use futures::stream::{Fuse, Stream, StreamExt};
@@ -60,7 +59,7 @@ pub struct Handler {
     /// Connection to the browser instance
     from_browser: Fuse<Receiver<HandlerMessage>>,
     default_browser_context: BrowserContext,
-    browser_contexts: HashSet<BrowserContext>,
+    browser_contexts: FnvHashSet<BrowserContext>,
     /// Used to loop over all targets in a consistent manner
     target_ids: Vec<TargetId>,
     /// The created and attached targets
@@ -447,8 +446,8 @@ impl Handler {
             browser_ctx,
         );
         let id = target.target_id().clone();
-        self.target_ids.push(id.clone());
-        self.targets.insert(id, target);
+        self.targets.insert(id.clone(), target);
+        self.target_ids.push(id);
     }
 
     /// A new session is attached to a target
@@ -552,7 +551,7 @@ impl Stream for Handler {
             while let Poll::Ready(Some(msg)) = Pin::new(&mut pin.from_browser).poll_next(cx) {
                 match msg {
                     HandlerMessage::Command(cmd) => {
-                        pin.submit_external_command(cmd, now)?;
+                        pin.submit_external_command(*cmd, now)?;
                     }
                     HandlerMessage::FetchTargets(tx) => {
                         pin.submit_fetch_targets(tx, now);
@@ -778,7 +777,7 @@ pub(crate) enum HandlerMessage {
     InsertContext(BrowserContext),
     DisposeContext(BrowserContext),
     GetPages(OneshotSender<Vec<Page>>),
-    Command(CommandMessage),
+    Command(Box<CommandMessage>),
     GetPage(TargetId, OneshotSender<Option<Page>>),
     AddEventListener(EventListenerRequest),
     CloseBrowser(OneshotSender<Result<CloseReturns>>),

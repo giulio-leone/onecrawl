@@ -161,9 +161,9 @@ impl Target {
 
     fn create_page(&mut self) {
         if self.page.is_none() {
-            if let Some(session) = self.session_id.clone() {
+            if let Some(ref session) = self.session_id {
                 let handle =
-                    PageHandle::new(self.target_id().clone(), session, self.opener_id().cloned());
+                    PageHandle::new(self.target_id().clone(), session.clone(), self.opener_id().cloned());
                 self.page = Some(handle);
             }
         }

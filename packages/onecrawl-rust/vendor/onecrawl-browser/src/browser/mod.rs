@@ -186,7 +186,7 @@ impl Browser {
 
         self.sender
             .clone()
-            .send(HandlerMessage::Command(msg))
+            .send(HandlerMessage::Command(Box::new(msg)))
             .await?;
         let resp = rx.await??;
         to_command_response::<T>(resp, method)
