@@ -896,12 +896,21 @@ impl OneCrawlMcp {
         let resource_types = p.resource_types.unwrap_or_default();
         let patterns_js = p.patterns.iter()
             .map(|p| format!("new RegExp({})", json_escape(&p.replace('*', ".*"))))
-            .collect::<Vec<_>>()
-            .join(",");
+            .fold(String::new(), |mut acc, s| {
+                if !acc.is_empty() { acc.push(','); }
+                acc.push_str(&s);
+                acc
+            });
         let types_js = if resource_types.is_empty() {
             "null".to_string()
         } else {
-            format!("[{}]", resource_types.iter().map(|t| json_escape(t)).collect::<Vec<_>>().join(","))
+            let inner = resource_types.iter().map(|t| json_escape(t))
+                .fold(String::new(), |mut acc, s| {
+                    if !acc.is_empty() { acc.push(','); }
+                    acc.push_str(&s);
+                    acc
+                });
+            format!("[{}]", inner)
         };
         let js = format!(
             r#"(() => {{
