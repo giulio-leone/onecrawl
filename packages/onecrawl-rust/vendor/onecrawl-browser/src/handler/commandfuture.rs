@@ -9,7 +9,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use crate::cmd::{to_command_response, CommandMessage};
-use crate::error::Result;
+use crate::error::{CdpError, Result};
 use crate::handler::target::TargetMessage;
 use onecrawl_protocol::cdp::browser_protocol::target::SessionId;
 use onecrawl_browser_types::{Command, CommandResponse, MethodId, Response};
@@ -19,14 +19,7 @@ pin_project! {
         #[pin]
         rx_command: oneshot::Receiver<M>,
         #[pin]
-        target_sender: mpsc::Sender<TargetMessage>,
-        // We need delay to be pinned because it's a future
-        // and we need to be able to poll it
-        // it is used to timeout the command if page was closed while waiting for response
-        #[pin]
         delay: futures_timer::Delay,
-
-        message: Option<TargetMessage>,
 
         method: MethodId,
 
@@ -37,24 +30,27 @@ pin_project! {
 impl<T: Command> CommandFuture<T> {
     pub fn new(
         cmd: T,
-        target_sender: mpsc::Sender<TargetMessage>,
+        sender: &mpsc::UnboundedSender<TargetMessage>,
         session: Option<SessionId>,
     ) -> Result<Self> {
         let (tx, rx_command) = oneshot_channel::<Result<Response>>();
         let method = cmd.identifier();
 
-        let message = Some(TargetMessage::Command(CommandMessage::with_session(
+        let message = TargetMessage::Command(CommandMessage::with_session(
             cmd, tx, session,
-        )?));
+        )?);
+
+        // Send eagerly — unbounded channel never blocks
+        sender
+            .unbounded_send(message)
+            .map_err(|e| CdpError::from(e.into_send_error()))?;
 
         let delay = futures_timer::Delay::new(std::time::Duration::from_millis(
             crate::handler::REQUEST_TIMEOUT,
         ));
 
         Ok(Self {
-            target_sender,
             rx_command,
-            message,
             delay,
             method,
             _marker: PhantomData,
@@ -71,20 +67,8 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
 
-        if this.message.is_some() {
-            match this.target_sender.poll_ready(cx) {
-                Poll::Ready(Err(e)) => Poll::Ready(Err(e.into())),
-                Poll::Ready(Ok(_)) => {
-                    let message = this.message.take().expect("existence checked above");
-                    this.target_sender.start_send(message)?;
-
-                    cx.waker().wake_by_ref();
-                    Poll::Pending
-                }
-                Poll::Pending => Poll::Pending,
-            }
-        } else if this.delay.poll(cx).is_ready() {
-            Poll::Ready(Err(crate::error::CdpError::Timeout))
+        if this.delay.poll(cx).is_ready() {
+            Poll::Ready(Err(CdpError::Timeout))
         } else {
             match this.rx_command.as_mut().poll(cx) {
                 Poll::Ready(Ok(Ok(response))) => {

@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::channel::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use futures::channel::oneshot::channel as oneshot_channel;
 use futures::stream::Fuse;
-use futures::{SinkExt, StreamExt};
+use futures::StreamExt;
 
 use onecrawl_protocol::cdp::browser_protocol::browser::{GetVersionParams, GetVersionReturns};
 use onecrawl_protocol::cdp::browser_protocol::dom::{
@@ -41,13 +41,13 @@ use crate::{keys, utils, ArcHttpRequest};
 
 #[derive(Debug)]
 pub struct PageHandle {
-    pub(crate) rx: Fuse<Receiver<TargetMessage>>,
+    pub(crate) rx: Fuse<UnboundedReceiver<TargetMessage>>,
     page: Arc<PageInner>,
 }
 
 impl PageHandle {
     pub fn new(target_id: TargetId, session_id: SessionId, opener_id: Option<TargetId>) -> Self {
-        let (commands, rx) = channel(1);
+        let (commands, rx) = unbounded();
         let page = PageInner {
             target_id,
             session_id,
@@ -70,32 +70,32 @@ pub(crate) struct PageInner {
     target_id: TargetId,
     session_id: SessionId,
     opener_id: Option<TargetId>,
-    sender: Sender<TargetMessage>,
+    sender: UnboundedSender<TargetMessage>,
 }
 
 impl PageInner {
     /// Execute a PDL command and return its response
     pub(crate) async fn execute<T: Command>(&self, cmd: T) -> Result<CommandResponse<T::Response>> {
-        execute(cmd, self.sender.clone(), Some(self.session_id.clone())).await
+        execute(cmd, &self.sender, Some(self.session_id.clone())).await
     }
 
     /// Create a PDL command future
     pub(crate) fn command_future<T: Command>(&self, cmd: T) -> Result<CommandFuture<T>> {
-        CommandFuture::new(cmd, self.sender.clone(), Some(self.session_id.clone()))
+        CommandFuture::new(cmd, &self.sender, Some(self.session_id.clone()))
     }
 
     /// This creates navigation future with the final http response when the page is loaded
-    pub(crate) fn wait_for_navigation(&self) -> TargetMessageFuture<ArcHttpRequest> {
-        TargetMessageFuture::<ArcHttpRequest>::wait_for_navigation(self.sender.clone())
+    pub(crate) fn wait_for_navigation(&self) -> Result<TargetMessageFuture<ArcHttpRequest>> {
+        TargetMessageFuture::<ArcHttpRequest>::wait_for_navigation(&self.sender)
     }
 
     /// This creates HTTP future with navigation and responds with the final
     /// http response when the page is loaded
     pub(crate) fn http_future<T: Command>(&self, cmd: T) -> Result<HttpFuture<T>> {
-        Ok(HttpFuture::new(
-            self.sender.clone(),
+        HttpFuture::new(
+            &self.sender,
             self.command_future(cmd)?,
-        ))
+        )
     }
 
     /// The identifier of this page's target
@@ -113,7 +113,7 @@ impl PageInner {
         &self.opener_id
     }
 
-    pub(crate) fn sender(&self) -> &Sender<TargetMessage> {
+    pub(crate) fn sender(&self) -> &UnboundedSender<TargetMessage> {
         &self.sender
     }
 
@@ -365,13 +365,12 @@ impl PageInner {
     ) -> Result<Option<ExecutionContextId>> {
         let (tx, rx) = oneshot_channel();
         self.sender
-            .clone()
-            .send(TargetMessage::GetExecutionContext(GetExecutionContext {
+            .unbounded_send(TargetMessage::GetExecutionContext(GetExecutionContext {
                 dom_world,
                 frame_id,
                 tx,
             }))
-            .await?;
+            .map_err(|e| CdpError::from(e.into_send_error()))?;
         Ok(rx.await?)
     }
 
@@ -442,14 +441,16 @@ impl PageInner {
 
 pub(crate) async fn execute<T: Command>(
     cmd: T,
-    mut sender: Sender<TargetMessage>,
+    sender: &UnboundedSender<TargetMessage>,
     session: Option<SessionId>,
 ) -> Result<CommandResponse<T::Response>> {
     let (tx, rx) = oneshot_channel();
     let method = cmd.identifier();
     let msg = CommandMessage::with_session(cmd, tx, session)?;
 
-    sender.send(TargetMessage::Command(msg)).await?;
+    sender
+        .unbounded_send(TargetMessage::Command(msg))
+        .map_err(|e| CdpError::from(e.into_send_error()))?;
     let resp = rx.await??;
     to_command_response::<T>(resp, method)
 }

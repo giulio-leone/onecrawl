@@ -24,11 +24,11 @@ pin_project! {
 }
 
 impl<T: Command> HttpFuture<T> {
-    pub fn new(sender: mpsc::Sender<TargetMessage>, command: CommandFuture<T>) -> Self {
-        Self {
+    pub fn new(sender: &mpsc::UnboundedSender<TargetMessage>, command: CommandFuture<T>) -> Result<Self> {
+        Ok(Self {
             command: command.fuse(),
-            navigation: TargetMessageFuture::<T>::wait_for_navigation(sender),
-        }
+            navigation: TargetMessageFuture::<T>::wait_for_navigation(sender)?,
+        })
     }
 }
 
