@@ -29,7 +29,7 @@ enum FlushState {
     /// No message is in flight.
     Idle,
     /// A message has been enqueued via `start_send` and awaits `poll_ready`.
-    Pending(MethodCall),
+    Pending,
     /// `poll_ready` succeeded; the sink needs a `poll_flush`.
     NeedsFlush,
 }
@@ -112,7 +112,7 @@ impl<T: EventMessage> Connection<T> {
                 tracing::trace!("Sending {:?}", cmd);
                 let msg = serde_json::to_string(&cmd)?;
                 self.ws.start_send_unpin(msg.into())?;
-                self.flush_state = FlushState::Pending(cmd);
+                self.flush_state = FlushState::Pending;
             }
         }
         Ok(())
@@ -134,13 +134,12 @@ impl<T: EventMessage + Unpin> Stream for Connection<T> {
                 return Poll::Ready(Some(Err(err)));
             }
 
-            if let FlushState::Pending(call) = std::mem::replace(&mut pin.flush_state, FlushState::Idle) {
+            if matches!(pin.flush_state, FlushState::Pending) {
                 if pin.ws.poll_ready_unpin(cx).is_ready() {
                     pin.flush_state = FlushState::NeedsFlush;
                     continue;
-                } else {
-                    pin.flush_state = FlushState::Pending(call);
                 }
+                // Sink not ready — stay in Pending and break to read inbound.
             }
 
             break;
@@ -155,9 +154,9 @@ impl<T: EventMessage + Unpin> Stream for Connection<T> {
                         Ok(msg)
                     }
                     Err(err) => {
-                        let msg = text.as_str().to_string();
+                        let msg = text.to_string();
                         tracing::debug!(target: "onecrawl_browser::conn::raw_ws::parse_errors", msg, "Failed to parse raw WS message {}", err);
-                        Err(CdpError::InvalidMessage(text.as_str().to_string(), err))
+                        Err(CdpError::InvalidMessage(msg, err))
                     }
                 };
                 Poll::Ready(Some(ready))

@@ -1,8 +1,9 @@
 use std::collections::VecDeque;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use fnv::FnvHashMap;
 use serde_json::map::Entry;
 
 use onecrawl_protocol::cdp::browser_protocol::network::LoaderId;
@@ -185,9 +186,9 @@ impl From<CdpFrame> for Frame {
 #[derive(Debug)]
 pub struct FrameManager {
     main_frame: Option<FrameId>,
-    frames: HashMap<FrameId, Frame>,
+    frames: FnvHashMap<FrameId, Frame>,
     /// The contexts mapped with their frames
-    context_ids: HashMap<String, FrameId>,
+    context_ids: FnvHashMap<String, FrameId>,
     isolated_worlds: HashSet<String>,
     /// Timeout after which an anticipated event (related to navigation) doesn't
     /// arrive results in an error

@@ -1,10 +1,11 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::fmt;
 use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
+use fnv::FnvHashMap;
 use futures::channel::mpsc::{SendError, UnboundedReceiver, UnboundedSender};
 use futures::{Sink, Stream};
 
@@ -15,7 +16,7 @@ use onecrawl_browser_types::MethodId;
 #[derive(Debug, Default)]
 pub struct EventListeners {
     /// Tracks the listeners for each event identified by the key
-    listeners: HashMap<MethodId, Vec<EventListener>>,
+    listeners: FnvHashMap<MethodId, Vec<EventListener>>,
 }
 
 impl EventListeners {

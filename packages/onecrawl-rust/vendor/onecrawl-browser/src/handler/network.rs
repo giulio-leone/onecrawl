@@ -16,6 +16,7 @@ use onecrawl_browser_types::{Command, Method, MethodId};
 use crate::auth::Credentials;
 use crate::cmd::CommandChain;
 use crate::handler::http::HttpRequest;
+use fnv::FnvHashMap;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::Duration;
 
@@ -23,11 +24,11 @@ use std::time::Duration;
 pub struct NetworkManager {
     queued_events: VecDeque<NetworkEvent>,
     ignore_httpserrors: bool,
-    requests: HashMap<RequestId, HttpRequest>,
+    requests: FnvHashMap<RequestId, HttpRequest>,
     // TODO put event in an Arc?
-    requests_will_be_sent: HashMap<RequestId, EventRequestWillBeSent>,
+    requests_will_be_sent: FnvHashMap<RequestId, EventRequestWillBeSent>,
     extra_headers: HashMap<String, String>,
-    request_id_to_interception_id: HashMap<RequestId, InterceptionId>,
+    request_id_to_interception_id: FnvHashMap<RequestId, InterceptionId>,
     user_cache_disabled: bool,
     attempted_authentications: HashSet<RequestId>,
     credentials: Option<Credentials>,

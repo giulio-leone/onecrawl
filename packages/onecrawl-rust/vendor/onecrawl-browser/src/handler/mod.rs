@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::pin::Pin;
 use std::time::{Duration, Instant};
 
@@ -64,13 +64,13 @@ pub struct Handler {
     /// Used to loop over all targets in a consistent manner
     target_ids: Vec<TargetId>,
     /// The created and attached targets
-    targets: HashMap<TargetId, Target>,
+    targets: FnvHashMap<TargetId, Target>,
     /// Currently queued in navigations for targets
     navigations: FnvHashMap<NavigationId, NavigationRequest>,
     /// Keeps track of all the current active sessions
     ///
     /// There can be multiple sessions per target.
-    sessions: HashMap<SessionId, Session>,
+    sessions: FnvHashMap<SessionId, Session>,
     /// The websocket connection to the chromium instance
     conn: Connection<CdpEventMessage>,
     /// Evicts timed out requests periodically
@@ -217,10 +217,9 @@ impl Handler {
                     match to_command_response::<GetTargetsParams>(resp, method) {
                         Ok(resp) => {
                             let targets: Vec<TargetInfo> = resp.result.target_infos;
-                            let results = targets.clone();
-                            for target_info in targets {
+                            for target_info in &targets {
                                 let target_id = target_info.target_id.clone();
-                                let event: EventTargetCreated = EventTargetCreated { target_info };
+                                let event: EventTargetCreated = EventTargetCreated { target_info: target_info.clone() };
                                 self.on_target_created(event);
                                 let attach = AttachToTargetParams::new(target_id);
                                 let _ = self.conn.submit_command(
@@ -230,7 +229,7 @@ impl Handler {
                                 );
                             }
 
-                            let _ = tx.send(Ok(results)).ok();
+                            let _ = tx.send(Ok(targets)).ok();
                         }
                         Err(err) => {
                             let _ = tx.send(Err(err)).ok();
@@ -405,17 +404,18 @@ impl Handler {
             }
         }
         let CdpEventMessage { params, method, .. } = event;
-        match &params {
-            CdpEvent::TargetTargetCreated(ev) => self.on_target_created((**ev).clone()),
-            CdpEvent::TargetAttachedToTarget(ev) => self.on_attached_to_target(ev.clone()),
-            CdpEvent::TargetTargetDestroyed(ev) => self.on_target_destroyed(ev.clone()),
-            CdpEvent::TargetDetachedFromTarget(ev) => self.on_detached_from_target(ev.clone()),
-            _ => {}
+        match params {
+            CdpEvent::TargetTargetCreated(ev) => self.on_target_created(*ev),
+            CdpEvent::TargetAttachedToTarget(ev) => self.on_attached_to_target(ev),
+            CdpEvent::TargetTargetDestroyed(ev) => self.on_target_destroyed(ev),
+            CdpEvent::TargetDetachedFromTarget(ev) => self.on_detached_from_target(ev),
+            other => {
+                onecrawl_protocol::consume_event!(match other {
+                    |ev| self.event_listeners.start_send(ev),
+                    |json| { let _ = self.event_listeners.try_send_custom(&method, json);}
+                });
+            }
         }
-        onecrawl_protocol::consume_event!(match params {
-            |ev| self.event_listeners.start_send(ev),
-            |json| { let _ = self.event_listeners.try_send_custom(&method, json);}
-        });
     }
 
     /// Fired when a new target was created on the chromium instance
