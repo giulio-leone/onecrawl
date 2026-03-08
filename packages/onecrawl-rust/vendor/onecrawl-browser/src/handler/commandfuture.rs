@@ -88,7 +88,8 @@ where
         } else {
             match this.rx_command.as_mut().poll(cx) {
                 Poll::Ready(Ok(Ok(response))) => {
-                    Poll::Ready(to_command_response::<T>(response, this.method.clone()))
+                    // Move the method out — this future won't be polled again after Ready.
+                    Poll::Ready(to_command_response::<T>(response, std::mem::take(this.method)))
                 }
                 Poll::Ready(Ok(Err(e))) => Poll::Ready(Err(e)),
                 Poll::Ready(Err(e)) => Poll::Ready(Err(e.into())),

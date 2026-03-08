@@ -36,6 +36,7 @@ impl EventListeners {
     }
 
     /// Queue in a event that should be send to all listeners
+    #[inline]
     pub fn start_send<T: Event>(&mut self, event: T) {
         if let Some(subscriptions) = self.listeners.get_mut(&T::method_id()) {
             let event: Arc<dyn Event> = Arc::new(event);
@@ -47,26 +48,24 @@ impl EventListeners {
 
     /// Try to queue in a new custom event if a listener is registered and the
     /// converting the json value to the registered event type succeeds
+    #[inline]
     pub fn try_send_custom(
         &mut self,
         method: &str,
         val: serde_json::Value,
     ) -> serde_json::Result<()> {
         if let Some(subscriptions) = self.listeners.get_mut(method) {
-            let mut event = None;
-            if let Some(json_to_arc_event) = subscriptions
+            let event = subscriptions
                 .iter()
-                .filter_map(|sub| {
+                .find_map(|sub| {
                     if let EventKind::Custom(conv) = &sub.kind {
                         Some(conv)
                     } else {
                         None
                     }
                 })
-                .next()
-            {
-                event = Some(json_to_arc_event(val)?);
-            }
+                .map(|json_to_arc_event| json_to_arc_event(val))
+                .transpose()?;
             if let Some(event) = event {
                 subscriptions
                     .iter_mut()

@@ -82,6 +82,7 @@ impl<T: EventMessage> Connection<T> {
 
     /// Queue in the command to send over the socket and return the id for this
     /// command
+    #[inline]
     pub fn submit_command(
         &mut self,
         method: &MethodId,

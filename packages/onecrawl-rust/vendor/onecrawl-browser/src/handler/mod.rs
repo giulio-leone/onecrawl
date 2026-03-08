@@ -193,6 +193,7 @@ impl Handler {
     }
 
     /// Received a response to a request.
+    #[inline]
     fn on_response(&mut self, resp: Response) {
         if let Some((req, method, _)) = self.pending_commands.remove(&resp.id) {
             match req {
@@ -395,6 +396,7 @@ impl Handler {
     }
 
     /// Process an incoming event read from the websocket
+    #[inline]
     fn on_event(&mut self, event: CdpEventMessage) {
         if let Some(ref session_id) = event.session_id {
             if let Some(session) = self.sessions.get(session_id.as_str()) {
