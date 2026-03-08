@@ -358,8 +358,10 @@ impl Orchestrator {
 
             // ── Capture variables (save_as) ──
             if let Some(ref save_map) = step.save_as {
+                let result_map: std::collections::HashMap<&str, &DeviceActionResult> =
+                    device_results.iter().map(|r| (r.device.as_str(), r)).collect();
                 for (var_name, device_id) in save_map {
-                    if let Some(dr) = device_results.iter().find(|r| r.device == *device_id) {
+                    if let Some(dr) = result_map.get(device_id.as_str()) {
                         if let Some(ref val) = dr.result {
                             let val_str = match val {
                                 serde_json::Value::String(s) => s.clone(),

@@ -166,15 +166,14 @@ pub fn mark_success(queue: &mut RetryQueue, id: &str) {
 
 /// Mark an item as failed. Schedules a retry or moves to completed if max retries reached.
 pub fn mark_failure(queue: &mut RetryQueue, id: &str, error: &str) {
-    if let Some(item) = queue.items.iter_mut().find(|item| item.id == id) {
+    if let Some(pos) = queue.items.iter().position(|item| item.id == id) {
+        let item = &mut queue.items[pos];
         item.retries += 1;
         item.last_error = Some(error.to_string());
 
         if item.retries >= queue.config.max_retries {
-            item.status = "failed".to_string();
-            // Move to completed
-            let pos = queue.items.iter().position(|i| i.id == id).unwrap();
-            let done = queue.items.remove(pos);
+            let mut done = queue.items.remove(pos);
+            done.status = "failed".to_string();
             queue.completed.push(done);
         } else {
             let delay = calculate_delay(&queue.config, item.retries);
