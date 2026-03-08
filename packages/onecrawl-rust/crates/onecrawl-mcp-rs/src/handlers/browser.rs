@@ -1723,14 +1723,10 @@ impl OneCrawlMcp {
         _v: serde_json::Value,
     ) -> Result<CallToolResult, McpError> {
         let state = self.browser.lock().await;
-        let entries: serde_json::Map<String, serde_json::Value> = state
-            .page_context
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
+        let total = state.page_context.len();
         json_ok(&serde_json::json!({
-            "context": entries,
-            "total_keys": entries.len()
+            "context": state.page_context,
+            "total_keys": total
         }))
     }
 
@@ -2142,7 +2138,7 @@ impl OneCrawlMcp {
         if !state.event_subscriptions.contains(&event_type) {
             state.event_subscriptions.push(event_type.clone());
         }
-        let subs = state.event_subscriptions.clone();
+        let subs = &state.event_subscriptions;
         json_ok(&serde_json::json!({
             "event_type": event_type,
             "subscribed": true,
@@ -2168,7 +2164,7 @@ impl OneCrawlMcp {
 
         let mut state = self.browser.lock().await;
         state.event_subscriptions.retain(|s| s != &p.event_type);
-        let remaining = state.event_subscriptions.clone();
+        let remaining = &state.event_subscriptions;
         json_ok(&serde_json::json!({
             "event_type": p.event_type,
             "unsubscribed": true,

@@ -313,8 +313,10 @@ impl OneCrawlMcp {
             let path = parts.get(1).unwrap_or(&"/");
             let (template, params) = onecrawl_cdp::network_intel::extract_path_params(path);
 
-            let status_codes: Vec<u16> = eps.iter().map(|e| e.status_code).collect::<std::collections::HashSet<_>>().into_iter().collect();
-            let content_types: Vec<String> = eps.iter().filter_map(|e| e.content_type.clone()).collect::<std::collections::HashSet<_>>().into_iter().collect();
+            let mut status_set = std::collections::HashSet::new();
+            let status_codes: Vec<u16> = eps.iter().map(|e| e.status_code).filter(|s| status_set.insert(*s)).collect();
+            let mut ct_set = std::collections::HashSet::new();
+            let content_types: Vec<String> = eps.iter().filter_map(|e| e.content_type.as_ref()).filter(|ct| ct_set.insert(*ct)).cloned().collect();
             let avg_latency = eps.iter().filter_map(|e| e.timing_ms).sum::<f64>() / eps.len().max(1) as f64;
 
             let response_schema = eps.iter().find_map(|e| e.response_body.as_ref())
