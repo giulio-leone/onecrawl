@@ -38,8 +38,8 @@ enum FlushState {
 #[must_use = "streams do nothing unless polled"]
 #[derive(Debug)]
 pub struct Connection<T: EventMessage> {
-    /// Queue of commands to send.
-    pending_commands: VecDeque<MethodCall>,
+    /// Queue of pre-serialized JSON messages ready to send.
+    pending_commands: VecDeque<String>,
     /// The websocket of the chromium instance
     ws: WebSocketStream<ConnectStream>,
     /// The identifier for a specific command
@@ -96,7 +96,9 @@ impl<T: EventMessage> Connection<T> {
             session_id: session_id.map(Into::into),
             params,
         };
-        self.pending_commands.push_back(call);
+        tracing::trace!("Queuing {:?}", call);
+        let msg = serde_json::to_string(&call)?;
+        self.pending_commands.push_back(msg);
         Ok(id)
     }
 
@@ -109,9 +111,7 @@ impl<T: EventMessage> Connection<T> {
             }
         }
         if matches!(self.flush_state, FlushState::Idle) {
-            if let Some(cmd) = self.pending_commands.pop_front() {
-                tracing::trace!("Sending {:?}", cmd);
-                let msg = serde_json::to_string(&cmd)?;
+            if let Some(msg) = self.pending_commands.pop_front() {
                 self.ws.start_send_unpin(msg.into())?;
                 self.flush_state = FlushState::Pending;
             }
