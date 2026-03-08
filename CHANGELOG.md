@@ -5,6 +5,24 @@ All notable changes to OneCrawl will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0-alpha.2] - 2025-07-22
+
+### Performance
+
+- **Architectural channel optimization**: Converted PageInner→Target channel from bounded `mpsc::channel(1)` to unbounded, eliminating `sender.clone()` (Arc increment) on every CDP command. CommandFuture and TargetMessageFuture now send eagerly in constructors, removing stored sender/message fields and shrinking future struct sizes.
+- **FnvHashMap migration**: Replaced 6 internal HashMap instances with FnvHashMap for faster hashing on small string keys (targets, sessions, frames, context_ids, requests, listeners).
+- **Move semantics in CDP event handling**: Eliminated redundant clones in 4 CDP event types by consuming events by value instead of cloning fields.
+- **Zero-waste FlushState**: FlushState::Pending no longer stores MethodCall, reducing memory per pending command.
+- **CommandFuture optimization**: Uses `std::mem::take` to move method instead of cloning, avoiding String allocation on every command response.
+- **Network path optimizations**: Serialize extra_headers by reference (avoiding HashMap clone), reduced triple `request_id.clone()` to single clone per network request.
+- **EventListeners polling**: Uses `retain_mut` instead of swap_remove+push loop for cleaner and faster listener eviction.
+- **Inline hints on 10 hot-path functions**: Added `#[inline]` to dispatch loop functions called per CDP message (submit_command, on_event, on_response, etc.).
+
+### Fixed
+
+- **E2E navigate timeout**: `goto()` no longer hangs on `about:blank` and `data:` URLs (special URL detection bypasses polling loop).
+- **CLI version assertion**: E2E tests use semver regex instead of hardcoded version string.
+
 ## [4.0.0-alpha.1] - 2026-03-08
 
 ### Breaking Changes
